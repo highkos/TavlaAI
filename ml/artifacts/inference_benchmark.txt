@@ -1,0 +1,38 @@
+Faz 4 v3 Bolum 4.6 - Cikarim olcumu
+ORT surumu: 1.23.2
+Model: F:\Projects\VijualStudioski\TavlaAI_Project\Backgammon.Inference.Tests\bin\Release\net10.0\Models\model_v1.onnx
+Makine: DESKTOP-2T0QNN5, 12 mantiksal cekirdek
+
+[CPUExecutionProvider, IntraOpThreads=1, InterOpThreads=1]
+bucket;usPerCall;positionsPerSecond
+1;13,79;72516
+8;20,03;399421
+32;61,68;518811
+128;176,72;724302
+512;727,05;704219
+2048;2820,78;726041
+
+[CUDAExecutionProvider]
+bucket;usPerCall;positionsPerSecond
+1;194,62;5138
+8;185,67;43088
+32;219,45;145819
+128;295,30;433457
+512;573,57;892652
+2048;1650,01;1241204
+
+[CPU vs CUDA cikti paritesi]
+bucket;maxAbsDeltaValue;maxAbsDeltaPriority
+1;5,588E-009;0,000E+000
+8;1,118E-008;1,490E-008
+32;1,863E-008;1,863E-009
+128;2,235E-008;9,313E-010
+512;2,980E-008;2,328E-010
+2048;2,980E-008;5,821E-011
+
+Karar kurali (Faz 4 v3 Bolum 4.6):
+- Self-play tek surec, kucuk/orta batch (<= 2048) ile calisir; CPU EP yeterlidir.
+- GPU yalnizca cok oyunculu toplu cikarim sunucusunda anlamli olur; kapsam disi (Bolum 10).
+- CUDA EP kurulu degilse GPU olcumu yapilmaz ve rapor bunu acikca belirtir.
+- Kucuk batch'lerde (<= 128) GPU, cekirdek baslatma gecikmesi (~170 us) nedeniyle
+  CPU'dan yavastir; GPU ancak buyuk batch'lerde one gecer (kesisme noktasi olculur).

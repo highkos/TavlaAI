@@ -1,0 +1,15 @@
+{
+  "model": "ml\\runs\\stage_d_l2\\onnx\\model_v15.onnx",
+  "outputVersion": 2,
+  "provider": "cpu",
+  "machine": "DESKTOP-2T0QNN5",
+  "logicalCores": 12,
+  "buckets": [
+    {"bucket": 1, "usPerCall": 28.752, "positionsPerSecond": 34780.18920422927},
+    {"bucket": 8, "usPerCall": 51.222359999999995, "positionsPerSecond": 156181.79248281414},
+    {"bucket": 32, "usPerCall": 146.09904, "positionsPerSecond": 219029.50217879598},
+    {"bucket": 128, "usPerCall": 538.476282051282, "positionsPerSecond": 237707.77704896175},
+    {"bucket": 512, "usPerCall": 2122.1307692307696, "positionsPerSecond": 241266.94142679527},
+    {"bucket": 2048, "usPerCall": 8750.133333333333, "positionsPerSecond": 234053.57632645598}
+  ]
+}

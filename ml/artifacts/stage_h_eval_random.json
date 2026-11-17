@@ -1,0 +1,10 @@
+{
+  "model": "ml\\runs\\stage_d_l2\\onnx\\model_v30.onnx",
+  "seed": 20260214,
+  "depthPly": 1,
+  "maxCandidatesRoot": 4,
+  "maxCandidatesInner": 4,
+  "reports": [
+    {"opponent": "RandomBot", "games": 200, "wins": 200, "losses": 0, "draws": 0, "winRate": 1, "meanPoints": 2.63, "standardError": 0.04091294839942075, "lowerConfidenceBound": 2.5498106211371354, "upperConfidenceBound": 2.7101893788628644}
+  ]
+}

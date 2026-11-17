@@ -1,0 +1,11 @@
+<Solution>
+  <Project Path="Backgammon.Core/Backgammon.Core.csproj" />
+  <Project Path="Backgammon.Inference/Backgammon.Inference.csproj" />
+  <Project Path="Backgammon.SelfPlay/Backgammon.SelfPlay.csproj" />
+  <Project Path="Backgammon.BearoffGen/Backgammon.BearoffGen.csproj" />
+  <Project Path="Backgammon.UI/Backgammon.UI.csproj" />
+  <Project Path="Backgammon.MatchBench/Backgammon.MatchBench.csproj" />
+  <Project Path="Backgammon.Tests/Backgammon.Tests.csproj" />
+  <Project Path="Backgammon.Inference.Tests/Backgammon.Inference.Tests.csproj" />
+  <Project Path="Backgammon.UI.Tests/Backgammon.UI.Tests.csproj" />
+</Solution>

@@ -1,0 +1,41 @@
+# --- .NET ---
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+*.trx
+*.coverage
+*.nupkg
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# --- Egitim kosulari (buyuk, yeniden uretilebilir) ---
+ml/runs/
+
+# --- Unity ---
+unity/Logs/
+unity/Temp/
+unity/obj/
+unity/Library/
+unity/Build/
+unity/Builds/
+unity/UserSettings/
+unity/*.csproj
+unity/*.sln
+
+# --- Gunlukler ---
+*.log
+core-tests.log
+
+# --- Isletim sistemi ---
+Thumbs.db
+desktop.ini
+.DS_Store

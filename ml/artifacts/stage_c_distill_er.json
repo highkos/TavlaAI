@@ -1,0 +1,1407 @@
+{
+ "model": "ml/runs/stage_c_distill_train/onnx/model_v2_trained.onnx",
+ "split": "val",
+ "plies": 2,
+ "referee": "eval",
+ "summary": {
+  "split": "val",
+  "count": 70,
+  "mean": 0.060229,
+  "median": 0.0005,
+  "max": 0.39,
+  "exactMatchRate": 0.5,
+  "standardError": 0.012013,
+  "standardDeviation": 0.10051
+ },
+ "positions": [
+  {
+   "name": "f6-001",
+   "turn": -1,
+   "dice": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "afterstateCount": 43,
+   "gnubgBestIndex": 31,
+   "gnubgBestEquity": -0.207,
+   "gnubgHintMove": "11/9 8/6*(3)",
+   "gnubgHintEquity": -0.207,
+   "modelAfterstateIndex": 32,
+   "modelEquity": -0.264,
+   "equityLoss": 0.057,
+   "modelValue": 3.607906,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-003",
+   "turn": 1,
+   "dice": [
+    1,
+    5
+   ],
+   "afterstateCount": 18,
+   "gnubgBestIndex": 0,
+   "gnubgBestEquity": 0.071,
+   "gnubgHintMove": "24/18*",
+   "gnubgHintEquity": 0.071,
+   "modelAfterstateIndex": 0,
+   "modelEquity": 0.071,
+   "equityLoss": 0.0,
+   "modelValue": 11.553757,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-005",
+   "turn": 1,
+   "dice": [
+    1,
+    4
+   ],
+   "afterstateCount": 23,
+   "gnubgBestIndex": 14,
+   "gnubgBestEquity": 0.848,
+   "gnubgHintMove": "8/4 6/5",
+   "gnubgHintEquity": 0.861,
+   "modelAfterstateIndex": 14,
+   "modelEquity": 0.848,
+   "equityLoss": 0.0,
+   "modelValue": 24.600498,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-007",
+   "turn": -1,
+   "dice": [
+    1,
+    2
+   ],
+   "afterstateCount": 10,
+   "gnubgBestIndex": 8,
+   "gnubgBestEquity": -0.469,
+   "gnubgHintMove": "20/18* 6/5",
+   "gnubgHintEquity": -0.471,
+   "modelAfterstateIndex": 1,
+   "modelEquity": -0.72,
+   "equityLoss": 0.251,
+   "modelValue": -6.617017,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-008",
+   "turn": 1,
+   "dice": [
+    1,
+    2
+   ],
+   "afterstateCount": 20,
+   "gnubgBestIndex": 3,
+   "gnubgBestEquity": 0.735,
+   "gnubgHintMove": "24/22* 4/3",
+   "gnubgHintEquity": 0.735,
+   "modelAfterstateIndex": 3,
+   "modelEquity": 0.735,
+   "equityLoss": 0.0,
+   "modelValue": 27.374744,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-009",
+   "turn": -1,
+   "dice": [
+    1,
+    4
+   ],
+   "afterstateCount": 10,
+   "gnubgBestIndex": 5,
+   "gnubgBestEquity": -0.494,
+   "gnubgHintMove": "24/20 6/5",
+   "gnubgHintEquity": -0.494,
+   "modelAfterstateIndex": 3,
+   "modelEquity": -0.627,
+   "equityLoss": 0.133,
+   "modelValue": -6.374312,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-013",
+   "turn": 1,
+   "dice": [
+    3,
+    6
+   ],
+   "afterstateCount": 14,
+   "gnubgBestIndex": 2,
+   "gnubgBestEquity": 0.009,
+   "gnubgHintMove": "24/18 13/10",
+   "gnubgHintEquity": 0.008,
+   "modelAfterstateIndex": 2,
+   "modelEquity": 0.009,
+   "equityLoss": 0.0,
+   "modelValue": 8.18932,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-014",
+   "turn": -1,
+   "dice": [
+    4,
+    5
+   ],
+   "afterstateCount": 11,
+   "gnubgBestIndex": 10,
+   "gnubgBestEquity": 0.832,
+   "gnubgHintMove": "19/14*/10*",
+   "gnubgHintEquity": 0.847,
+   "modelAfterstateIndex": 10,
+   "modelEquity": 0.832,
+   "equityLoss": 0.0,
+   "modelValue": 29.376278,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-017",
+   "turn": -1,
+   "dice": [
+    5,
+    6
+   ],
+   "afterstateCount": 4,
+   "gnubgBestIndex": 2,
+   "gnubgBestEquity": 0.205,
+   "gnubgHintMove": "20/14 13/8",
+   "gnubgHintEquity": 0.205,
+   "modelAfterstateIndex": 0,
+   "modelEquity": 0.195,
+   "equityLoss": 0.01,
+   "modelValue": 18.976742,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-018",
+   "turn": -1,
+   "dice": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "afterstateCount": 20,
+   "gnubgBestIndex": 19,
+   "gnubgBestEquity": 0.626,
+   "gnubgHintMove": "13/7 13/10(2)",
+   "gnubgHintEquity": 0.627,
+   "modelAfterstateIndex": 19,
+   "modelEquity": 0.626,
+   "equityLoss": 0.0,
+   "modelValue": 23.67683,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-019",
+   "turn": 1,
+   "dice": [
+    1,
+    5
+   ],
+   "afterstateCount": 39,
+   "gnubgBestIndex": 16,
+   "gnubgBestEquity": -0.292,
+   "gnubgHintMove": "19/18* 17/12*",
+   "gnubgHintEquity": -0.292,
+   "modelAfterstateIndex": 16,
+   "modelEquity": -0.292,
+   "equityLoss": 0.0,
+   "modelValue": -1.888247,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-022",
+   "turn": 1,
+   "dice": [
+    1,
+    5
+   ],
+   "afterstateCount": 33,
+   "gnubgBestIndex": 4,
+   "gnubgBestEquity": -1.227,
+   "gnubgHintMove": "22/17 7/6",
+   "gnubgHintEquity": -1.23,
+   "modelAfterstateIndex": 14,
+   "modelEquity": -1.232,
+   "equityLoss": 0.005,
+   "modelValue": -9.861049,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-031",
+   "turn": 1,
+   "dice": [
+    2,
+    3
+   ],
+   "afterstateCount": 13,
+   "gnubgBestIndex": 5,
+   "gnubgBestEquity": -0.283,
+   "gnubgHintMove": "7/4* 6/4",
+   "gnubgHintEquity": -0.311,
+   "modelAfterstateIndex": 5,
+   "modelEquity": -0.283,
+   "equityLoss": 0.0,
+   "modelValue": 0.786403,
+   "exactMatch": true,
+   "notes": [
+    "0-ply hint ile 2-ply eval farkli"
+   ]
+  },
+  {
+   "name": "f6-036",
+   "turn": 1,
+   "dice": [
+    1,
+    3
+   ],
+   "afterstateCount": 37,
+   "gnubgBestIndex": 36,
+   "gnubgBestEquity": 0.857,
+   "gnubgHintMove": "6/5*/2",
+   "gnubgHintEquity": 0.862,
+   "modelAfterstateIndex": 36,
+   "modelEquity": 0.857,
+   "equityLoss": 0.0,
+   "modelValue": 25.899605,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-043",
+   "turn": 1,
+   "dice": [
+    1,
+    3
+   ],
+   "afterstateCount": 18,
+   "gnubgBestIndex": 7,
+   "gnubgBestEquity": -1.742,
+   "gnubgHintMove": "13/12 9/6",
+   "gnubgHintEquity": -1.759,
+   "modelAfterstateIndex": 12,
+   "modelEquity": -1.802,
+   "equityLoss": 0.06,
+   "modelValue": -16.069832,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-045",
+   "turn": 1,
+   "dice": [
+    1,
+    5
+   ],
+   "afterstateCount": 36,
+   "gnubgBestIndex": 34,
+   "gnubgBestEquity": -1.093,
+   "gnubgHintMove": "11/6 10/9",
+   "gnubgHintEquity": -1.209,
+   "modelAfterstateIndex": 26,
+   "modelEquity": -1.328,
+   "equityLoss": 0.235,
+   "modelValue": -14.415782,
+   "exactMatch": false,
+   "notes": [
+    "0-ply hint ile 2-ply eval farkli"
+   ]
+  },
+  {
+   "name": "f6-046",
+   "turn": 1,
+   "dice": [
+    4,
+    4,
+    4,
+    4
+   ],
+   "afterstateCount": 89,
+   "gnubgBestIndex": 0,
+   "gnubgBestEquity": -1.007,
+   "gnubgHintMove": "14/10(4)",
+   "gnubgHintEquity": -1.008,
+   "modelAfterstateIndex": 60,
+   "modelEquity": -1.367,
+   "equityLoss": 0.36,
+   "modelValue": -15.582274,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-049",
+   "turn": 1,
+   "dice": [
+    5,
+    5,
+    5,
+    5
+   ],
+   "afterstateCount": 161,
+   "gnubgBestIndex": 1,
+   "gnubgBestEquity": -1.035,
+   "gnubgHintMove": "14/9(2) 13/8 12/7",
+   "gnubgHintEquity": -1.035,
+   "modelAfterstateIndex": 122,
+   "modelEquity": -1.263,
+   "equityLoss": 0.228,
+   "modelValue": -14.124648,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-052",
+   "turn": 1,
+   "dice": [
+    1,
+    5
+   ],
+   "afterstateCount": 44,
+   "gnubgBestIndex": 21,
+   "gnubgBestEquity": -1.171,
+   "gnubgHintMove": "13/12 11/6",
+   "gnubgHintEquity": -1.307,
+   "modelAfterstateIndex": 31,
+   "modelEquity": -1.471,
+   "equityLoss": 0.3,
+   "modelValue": -14.863622,
+   "exactMatch": false,
+   "notes": [
+    "0-ply hint ile 2-ply eval farkli"
+   ]
+  },
+  {
+   "name": "f6-054",
+   "turn": 1,
+   "dice": [
+    1,
+    4
+   ],
+   "afterstateCount": 57,
+   "gnubgBestIndex": 13,
+   "gnubgBestEquity": -1.822,
+   "gnubgHintMove": "14/13 7/3",
+   "gnubgHintEquity": -1.822,
+   "modelAfterstateIndex": 38,
+   "modelEquity": -1.945,
+   "equityLoss": 0.123,
+   "modelValue": -15.511439,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-059",
+   "turn": 1,
+   "dice": [
+    4,
+    6
+   ],
+   "afterstateCount": 17,
+   "gnubgBestIndex": 8,
+   "gnubgBestEquity": -1.009,
+   "gnubgHintMove": "11/5 10/6",
+   "gnubgHintEquity": -1.014,
+   "modelAfterstateIndex": 2,
+   "modelEquity": -1.021,
+   "equityLoss": 0.012,
+   "modelValue": -8.308618,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-060",
+   "turn": 1,
+   "dice": [
+    3,
+    4
+   ],
+   "afterstateCount": 58,
+   "gnubgBestIndex": 0,
+   "gnubgBestEquity": -1.613,
+   "gnubgHintMove": "9/5 7/4",
+   "gnubgHintEquity": -1.642,
+   "modelAfterstateIndex": 0,
+   "modelEquity": -1.613,
+   "equityLoss": 0.0,
+   "modelValue": -14.190106,
+   "exactMatch": true,
+   "notes": [
+    "0-ply hint ile 2-ply eval farkli"
+   ]
+  },
+  {
+   "name": "f6-061",
+   "turn": 1,
+   "dice": [
+    2,
+    4
+   ],
+   "afterstateCount": 25,
+   "gnubgBestIndex": 7,
+   "gnubgBestEquity": -1.025,
+   "gnubgHintMove": "10/6 7/5",
+   "gnubgHintEquity": -1.035,
+   "modelAfterstateIndex": 8,
+   "modelEquity": -1.059,
+   "equityLoss": 0.034,
+   "modelValue": -9.43612,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-062",
+   "turn": 1,
+   "dice": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "afterstateCount": 103,
+   "gnubgBestIndex": 16,
+   "gnubgBestEquity": -1.413,
+   "gnubgHintMove": "13/7 12/10",
+   "gnubgHintEquity": -1.449,
+   "modelAfterstateIndex": 89,
+   "modelEquity": -1.722,
+   "equityLoss": 0.309,
+   "modelValue": -16.895157,
+   "exactMatch": false,
+   "notes": [
+    "0-ply hint ile 2-ply eval farkli"
+   ]
+  },
+  {
+   "name": "f6-066",
+   "turn": 1,
+   "dice": [
+    4,
+    6
+   ],
+   "afterstateCount": 26,
+   "gnubgBestIndex": 6,
+   "gnubgBestEquity": -1.037,
+   "gnubgHintMove": "13/7 8/4",
+   "gnubgHintEquity": -1.044,
+   "modelAfterstateIndex": 12,
+   "modelEquity": -1.123,
+   "equityLoss": 0.086,
+   "modelValue": -10.286023,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-070",
+   "turn": 1,
+   "dice": [
+    1,
+    6
+   ],
+   "afterstateCount": 35,
+   "gnubgBestIndex": 2,
+   "gnubgBestEquity": -1.469,
+   "gnubgHintMove": "14/8 10/9",
+   "gnubgHintEquity": -1.469,
+   "modelAfterstateIndex": 17,
+   "modelEquity": -1.772,
+   "equityLoss": 0.303,
+   "modelValue": -16.542744,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-072",
+   "turn": 1,
+   "dice": [
+    1,
+    4
+   ],
+   "afterstateCount": 26,
+   "gnubgBestIndex": 1,
+   "gnubgBestEquity": -1.022,
+   "gnubgHintMove": "11/10 7/3",
+   "gnubgHintEquity": -1.029,
+   "modelAfterstateIndex": 1,
+   "modelEquity": -1.022,
+   "equityLoss": 0.0,
+   "modelValue": -13.441936,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-076",
+   "turn": 1,
+   "dice": [
+    4,
+    6
+   ],
+   "afterstateCount": 35,
+   "gnubgBestIndex": 9,
+   "gnubgBestEquity": -1.31,
+   "gnubgHintMove": "14/10 11/5",
+   "gnubgHintEquity": -1.583,
+   "modelAfterstateIndex": 10,
+   "modelEquity": -1.7,
+   "equityLoss": 0.39,
+   "modelValue": -15.379594,
+   "exactMatch": false,
+   "notes": [
+    "0-ply hint ile 2-ply eval farkli"
+   ]
+  },
+  {
+   "name": "f6-082",
+   "turn": 1,
+   "dice": [
+    4,
+    6
+   ],
+   "afterstateCount": 3,
+   "gnubgBestIndex": 2,
+   "gnubgBestEquity": 1.016,
+   "gnubgHintMove": "6/off 4/off",
+   "gnubgHintEquity": 1.018,
+   "modelAfterstateIndex": 2,
+   "modelEquity": 1.016,
+   "equityLoss": 0.0,
+   "modelValue": 27.460621,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-083",
+   "turn": 1,
+   "dice": [
+    3,
+    6
+   ],
+   "afterstateCount": 4,
+   "gnubgBestIndex": 3,
+   "gnubgBestEquity": 1.443,
+   "gnubgHintMove": "6/off 3/off",
+   "gnubgHintEquity": 1.443,
+   "modelAfterstateIndex": 1,
+   "modelEquity": 1.4,
+   "equityLoss": 0.043,
+   "modelValue": 38.517284,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-084",
+   "turn": 1,
+   "dice": [
+    3,
+    6
+   ],
+   "afterstateCount": 2,
+   "gnubgBestIndex": 0,
+   "gnubgBestEquity": 0.997,
+   "gnubgHintMove": "6/3 6/off",
+   "gnubgHintEquity": 0.998,
+   "modelAfterstateIndex": 0,
+   "modelEquity": 0.997,
+   "equityLoss": 0.0,
+   "modelValue": 29.412571,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-086",
+   "turn": 1,
+   "dice": [
+    1,
+    2
+   ],
+   "afterstateCount": 24,
+   "gnubgBestIndex": 23,
+   "gnubgBestEquity": 0.648,
+   "gnubgHintMove": "2/off 1/off",
+   "gnubgHintEquity": 0.648,
+   "modelAfterstateIndex": 23,
+   "modelEquity": 0.648,
+   "equityLoss": 0.0,
+   "modelValue": 20.890226,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-088",
+   "turn": 1,
+   "dice": [
+    5,
+    6
+   ],
+   "afterstateCount": 2,
+   "gnubgBestIndex": 1,
+   "gnubgBestEquity": 1.167,
+   "gnubgHintMove": "6/off 5/off",
+   "gnubgHintEquity": 1.167,
+   "modelAfterstateIndex": 1,
+   "modelEquity": 1.167,
+   "equityLoss": 0.0,
+   "modelValue": 32.245907,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-090",
+   "turn": 1,
+   "dice": [
+    3,
+    4
+   ],
+   "afterstateCount": 6,
+   "gnubgBestIndex": 5,
+   "gnubgBestEquity": 1.053,
+   "gnubgHintMove": "4/off 3/off",
+   "gnubgHintEquity": 1.055,
+   "modelAfterstateIndex": 2,
+   "modelEquity": 1.047,
+   "equityLoss": 0.006,
+   "modelValue": 29.137039,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-097",
+   "turn": 1,
+   "dice": [
+    2,
+    4
+   ],
+   "afterstateCount": 13,
+   "gnubgBestIndex": 5,
+   "gnubgBestEquity": 0.935,
+   "gnubgHintMove": "6/off",
+   "gnubgHintEquity": 0.935,
+   "modelAfterstateIndex": 12,
+   "modelEquity": 0.934,
+   "equityLoss": 0.001,
+   "modelValue": 26.438347,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-098",
+   "turn": 1,
+   "dice": [
+    5,
+    6
+   ],
+   "afterstateCount": 2,
+   "gnubgBestIndex": 0,
+   "gnubgBestEquity": 1.117,
+   "gnubgHintMove": "6/off 5/off",
+   "gnubgHintEquity": 1.117,
+   "modelAfterstateIndex": 0,
+   "modelEquity": 1.117,
+   "equityLoss": 0.0,
+   "modelValue": 33.538033,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-099",
+   "turn": 1,
+   "dice": [
+    1,
+    4
+   ],
+   "afterstateCount": 14,
+   "gnubgBestIndex": 13,
+   "gnubgBestEquity": 0.48,
+   "gnubgHintMove": "4/off 1/off",
+   "gnubgHintEquity": 0.48,
+   "modelAfterstateIndex": 13,
+   "modelEquity": 0.48,
+   "equityLoss": 0.0,
+   "modelValue": 15.491489,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-101",
+   "turn": 1,
+   "dice": [
+    1,
+    6
+   ],
+   "afterstateCount": 6,
+   "gnubgBestIndex": 4,
+   "gnubgBestEquity": 1.954,
+   "gnubgHintMove": "6/off 1/off",
+   "gnubgHintEquity": 1.954,
+   "modelAfterstateIndex": 4,
+   "modelEquity": 1.954,
+   "equityLoss": 0.0,
+   "modelValue": 49.598034,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-107",
+   "turn": 1,
+   "dice": [
+    5,
+    6
+   ],
+   "afterstateCount": 2,
+   "gnubgBestIndex": 1,
+   "gnubgBestEquity": 0.989,
+   "gnubgHintMove": "6/off 5/off",
+   "gnubgHintEquity": 0.989,
+   "modelAfterstateIndex": 0,
+   "modelEquity": 0.984,
+   "equityLoss": 0.005,
+   "modelValue": 28.594631,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-108",
+   "turn": 1,
+   "dice": [
+    2,
+    5
+   ],
+   "afterstateCount": 9,
+   "gnubgBestIndex": 8,
+   "gnubgBestEquity": 0.973,
+   "gnubgHintMove": "5/off 2/off",
+   "gnubgHintEquity": 0.973,
+   "modelAfterstateIndex": 8,
+   "modelEquity": 0.973,
+   "equityLoss": 0.0,
+   "modelValue": 28.169197,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-111",
+   "turn": 1,
+   "dice": [
+    1,
+    4
+   ],
+   "afterstateCount": 15,
+   "gnubgBestIndex": 14,
+   "gnubgBestEquity": 1.381,
+   "gnubgHintMove": "4/off 1/off",
+   "gnubgHintEquity": 1.772,
+   "modelAfterstateIndex": 14,
+   "modelEquity": 1.381,
+   "equityLoss": 0.0,
+   "modelValue": 32.178429,
+   "exactMatch": true,
+   "notes": [
+    "0-ply hint ile 2-ply eval farkli"
+   ]
+  },
+  {
+   "name": "f6-116",
+   "turn": -1,
+   "dice": [
+    2,
+    4
+   ],
+   "afterstateCount": 5,
+   "gnubgBestIndex": 4,
+   "gnubgBestEquity": -0.034,
+   "gnubgHintMove": "bar/21* 23/21",
+   "gnubgHintEquity": -0.032,
+   "modelAfterstateIndex": 4,
+   "modelEquity": -0.034,
+   "equityLoss": 0.0,
+   "modelValue": 2.553215,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-119",
+   "turn": 1,
+   "dice": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "afterstateCount": 41,
+   "gnubgBestIndex": 39,
+   "gnubgBestEquity": 0.807,
+   "gnubgHintMove": "7/1 3/1",
+   "gnubgHintEquity": 0.812,
+   "modelAfterstateIndex": 39,
+   "modelEquity": 0.807,
+   "equityLoss": 0.0,
+   "modelValue": 22.550779,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-120",
+   "turn": -1,
+   "dice": [
+    1,
+    6
+   ],
+   "afterstateCount": 4,
+   "gnubgBestIndex": 3,
+   "gnubgBestEquity": -0.03,
+   "gnubgHintMove": "bar/24 7/1*",
+   "gnubgHintEquity": -0.029,
+   "modelAfterstateIndex": 3,
+   "modelEquity": -0.03,
+   "equityLoss": 0.0,
+   "modelValue": -1.667504,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-121",
+   "turn": 1,
+   "dice": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "afterstateCount": 66,
+   "gnubgBestIndex": 3,
+   "gnubgBestEquity": 1.419,
+   "gnubgHintMove": "bar/21 17/15* 7/5*",
+   "gnubgHintEquity": 1.425,
+   "modelAfterstateIndex": 35,
+   "modelEquity": 1.366,
+   "equityLoss": 0.053,
+   "modelValue": 37.164364,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-124",
+   "turn": 1,
+   "dice": [
+    1,
+    2
+   ],
+   "afterstateCount": 5,
+   "gnubgBestIndex": 0,
+   "gnubgBestEquity": -0.309,
+   "gnubgHintMove": "bar/22",
+   "gnubgHintEquity": -0.309,
+   "modelAfterstateIndex": 0,
+   "modelEquity": -0.309,
+   "equityLoss": 0.0,
+   "modelValue": 2.324938,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-131",
+   "turn": 1,
+   "dice": [
+    5,
+    6
+   ],
+   "afterstateCount": 5,
+   "gnubgBestIndex": 0,
+   "gnubgBestEquity": -0.402,
+   "gnubgHintMove": "bar/20 24/18*",
+   "gnubgHintEquity": -0.466,
+   "modelAfterstateIndex": 0,
+   "modelEquity": -0.402,
+   "equityLoss": 0.0,
+   "modelValue": -6.077366,
+   "exactMatch": true,
+   "notes": [
+    "0-ply hint ile 2-ply eval farkli"
+   ]
+  },
+  {
+   "name": "f6-137",
+   "turn": -1,
+   "dice": [
+    4,
+    6
+   ],
+   "afterstateCount": 3,
+   "gnubgBestIndex": 0,
+   "gnubgBestEquity": -0.521,
+   "gnubgHintMove": "bar/21* 13/7",
+   "gnubgHintEquity": -0.52,
+   "modelAfterstateIndex": 1,
+   "modelEquity": -0.593,
+   "equityLoss": 0.072,
+   "modelValue": -5.397717,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-138",
+   "turn": -1,
+   "dice": [
+    1,
+    6
+   ],
+   "afterstateCount": 3,
+   "gnubgBestIndex": 1,
+   "gnubgBestEquity": -0.631,
+   "gnubgHintMove": "bar/24 15/9",
+   "gnubgHintEquity": -0.631,
+   "modelAfterstateIndex": 1,
+   "modelEquity": -0.631,
+   "equityLoss": 0.0,
+   "modelValue": -6.330921,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-139",
+   "turn": -1,
+   "dice": [
+    2,
+    5
+   ],
+   "afterstateCount": 8,
+   "gnubgBestIndex": 7,
+   "gnubgBestEquity": -0.49,
+   "gnubgHintMove": "bar/23*/18",
+   "gnubgHintEquity": -0.494,
+   "modelAfterstateIndex": 6,
+   "modelEquity": -0.52,
+   "equityLoss": 0.03,
+   "modelValue": -4.618364,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-144",
+   "turn": -1,
+   "dice": [
+    4,
+    5
+   ],
+   "afterstateCount": 5,
+   "gnubgBestIndex": 4,
+   "gnubgBestEquity": -0.311,
+   "gnubgHintMove": "bar/20 16/12*",
+   "gnubgHintEquity": -0.328,
+   "modelAfterstateIndex": 4,
+   "modelEquity": -0.311,
+   "equityLoss": 0.0,
+   "modelValue": -3.800922,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-146",
+   "turn": -1,
+   "dice": [
+    4,
+    5
+   ],
+   "afterstateCount": 5,
+   "gnubgBestIndex": 4,
+   "gnubgBestEquity": -0.964,
+   "gnubgHintMove": "bar/16",
+   "gnubgHintEquity": -0.964,
+   "modelAfterstateIndex": 2,
+   "modelEquity": -1.125,
+   "equityLoss": 0.161,
+   "modelValue": -11.866967,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-149",
+   "turn": 1,
+   "dice": [
+    3,
+    5
+   ],
+   "afterstateCount": 5,
+   "gnubgBestIndex": 3,
+   "gnubgBestEquity": 1.152,
+   "gnubgHintMove": "bar/22*/17",
+   "gnubgHintEquity": 1.088,
+   "modelAfterstateIndex": 3,
+   "modelEquity": 1.152,
+   "equityLoss": 0.0,
+   "modelValue": 29.300121,
+   "exactMatch": true,
+   "notes": [
+    "0-ply hint ile 2-ply eval farkli"
+   ]
+  },
+  {
+   "name": "f6-152",
+   "turn": -1,
+   "dice": [
+    1,
+    3
+   ],
+   "afterstateCount": 3,
+   "gnubgBestIndex": 2,
+   "gnubgBestEquity": -1.213,
+   "gnubgHintMove": "bar/24 10/7",
+   "gnubgHintEquity": -1.247,
+   "modelAfterstateIndex": 2,
+   "modelEquity": -1.213,
+   "equityLoss": 0.0,
+   "modelValue": -15.576295,
+   "exactMatch": true,
+   "notes": [
+    "0-ply hint ile 2-ply eval farkli"
+   ]
+  },
+  {
+   "name": "f6-154",
+   "turn": 1,
+   "dice": [
+    3,
+    5
+   ],
+   "afterstateCount": 5,
+   "gnubgBestIndex": 1,
+   "gnubgBestEquity": -0.041,
+   "gnubgHintMove": "bar/20 8/5",
+   "gnubgHintEquity": -0.294,
+   "modelAfterstateIndex": 1,
+   "modelEquity": -0.041,
+   "equityLoss": 0.0,
+   "modelValue": 3.538713,
+   "exactMatch": true,
+   "notes": [
+    "0-ply hint ile 2-ply eval farkli"
+   ]
+  },
+  {
+   "name": "f6-159",
+   "turn": 1,
+   "dice": [
+    4,
+    4,
+    4,
+    4
+   ],
+   "afterstateCount": 53,
+   "gnubgBestIndex": 32,
+   "gnubgBestEquity": -0.819,
+   "gnubgHintMove": "18/10 9/5(2)",
+   "gnubgHintEquity": -0.823,
+   "modelAfterstateIndex": 38,
+   "modelEquity": -0.888,
+   "equityLoss": 0.069,
+   "modelValue": -11.139556,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-163",
+   "turn": 1,
+   "dice": [
+    2,
+    6
+   ],
+   "afterstateCount": 29,
+   "gnubgBestIndex": 19,
+   "gnubgBestEquity": -0.814,
+   "gnubgHintMove": "16/8",
+   "gnubgHintEquity": -0.818,
+   "modelAfterstateIndex": 19,
+   "modelEquity": -0.814,
+   "equityLoss": 0.0,
+   "modelValue": -16.980618,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-165",
+   "turn": 1,
+   "dice": [
+    2,
+    4
+   ],
+   "afterstateCount": 21,
+   "gnubgBestIndex": 2,
+   "gnubgBestEquity": -0.647,
+   "gnubgHintMove": "18/14 13/11",
+   "gnubgHintEquity": -0.739,
+   "modelAfterstateIndex": 2,
+   "modelEquity": -0.647,
+   "equityLoss": 0.0,
+   "modelValue": -19.272598,
+   "exactMatch": true,
+   "notes": [
+    "0-ply hint ile 2-ply eval farkli"
+   ]
+  },
+  {
+   "name": "f6-168",
+   "turn": 1,
+   "dice": [
+    1,
+    3
+   ],
+   "afterstateCount": 25,
+   "gnubgBestIndex": 18,
+   "gnubgBestEquity": -1.364,
+   "gnubgHintMove": "18/15 16/15",
+   "gnubgHintEquity": -1.361,
+   "modelAfterstateIndex": 1,
+   "modelEquity": -1.377,
+   "equityLoss": 0.013,
+   "modelValue": -17.433483,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-172",
+   "turn": 1,
+   "dice": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "afterstateCount": 137,
+   "gnubgBestIndex": 120,
+   "gnubgBestEquity": -0.389,
+   "gnubgHintMove": "14/10 8/6(2)",
+   "gnubgHintEquity": -0.36,
+   "modelAfterstateIndex": 50,
+   "modelEquity": -0.595,
+   "equityLoss": 0.206,
+   "modelValue": -14.948852,
+   "exactMatch": false,
+   "notes": [
+    "0-ply hint ile 2-ply eval farkli"
+   ]
+  },
+  {
+   "name": "f6-175",
+   "turn": 1,
+   "dice": [
+    2,
+    4
+   ],
+   "afterstateCount": 47,
+   "gnubgBestIndex": 3,
+   "gnubgBestEquity": -0.667,
+   "gnubgHintMove": "18/12",
+   "gnubgHintEquity": -0.662,
+   "modelAfterstateIndex": 9,
+   "modelEquity": -0.837,
+   "equityLoss": 0.17,
+   "modelValue": -9.106681,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-176",
+   "turn": 1,
+   "dice": [
+    1,
+    3
+   ],
+   "afterstateCount": 13,
+   "gnubgBestIndex": 2,
+   "gnubgBestEquity": -1.151,
+   "gnubgHintMove": "18/15 3/2",
+   "gnubgHintEquity": -1.159,
+   "modelAfterstateIndex": 1,
+   "modelEquity": -1.345,
+   "equityLoss": 0.194,
+   "modelValue": -17.254665,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-178",
+   "turn": 1,
+   "dice": [
+    3,
+    4
+   ],
+   "afterstateCount": 10,
+   "gnubgBestIndex": 2,
+   "gnubgBestEquity": -0.932,
+   "gnubgHintMove": "18/11",
+   "gnubgHintEquity": -0.933,
+   "modelAfterstateIndex": 8,
+   "modelEquity": -0.951,
+   "equityLoss": 0.019,
+   "modelValue": -12.500232,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-182",
+   "turn": 1,
+   "dice": [
+    1,
+    6
+   ],
+   "afterstateCount": 12,
+   "gnubgBestIndex": 4,
+   "gnubgBestEquity": -0.241,
+   "gnubgHintMove": "18/17 8/2",
+   "gnubgHintEquity": -0.273,
+   "modelAfterstateIndex": 4,
+   "modelEquity": -0.241,
+   "equityLoss": 0.0,
+   "modelValue": -2.06152,
+   "exactMatch": true,
+   "notes": [
+    "0-ply hint ile 2-ply eval farkli"
+   ]
+  },
+  {
+   "name": "f6-185",
+   "turn": 1,
+   "dice": [
+    1,
+    2
+   ],
+   "afterstateCount": 23,
+   "gnubgBestIndex": 17,
+   "gnubgBestEquity": -1.613,
+   "gnubgHintMove": "8/7 8/6",
+   "gnubgHintEquity": -1.707,
+   "modelAfterstateIndex": 13,
+   "modelEquity": -1.652,
+   "equityLoss": 0.039,
+   "modelValue": -15.147183,
+   "exactMatch": false,
+   "notes": [
+    "0-ply hint ile 2-ply eval farkli"
+   ]
+  },
+  {
+   "name": "f6-186",
+   "turn": 1,
+   "dice": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "afterstateCount": 20,
+   "gnubgBestIndex": 7,
+   "gnubgBestEquity": -1.723,
+   "gnubgHintMove": "9/5(2)",
+   "gnubgHintEquity": -1.723,
+   "modelAfterstateIndex": 0,
+   "modelEquity": -1.792,
+   "equityLoss": 0.069,
+   "modelValue": -18.168461,
+   "exactMatch": false,
+   "notes": []
+  },
+  {
+   "name": "f6-190",
+   "turn": 1,
+   "dice": [
+    1,
+    4
+   ],
+   "afterstateCount": 36,
+   "gnubgBestIndex": 13,
+   "gnubgBestEquity": -1.72,
+   "gnubgHintMove": "16/15 10/6",
+   "gnubgHintEquity": -1.68,
+   "modelAfterstateIndex": 10,
+   "modelEquity": -1.833,
+   "equityLoss": 0.113,
+   "modelValue": -19.78521,
+   "exactMatch": false,
+   "notes": [
+    "0-ply hint ile 2-ply eval farkli"
+   ]
+  },
+  {
+   "name": "f6-194",
+   "turn": 1,
+   "dice": [
+    2,
+    3
+   ],
+   "afterstateCount": 19,
+   "gnubgBestIndex": 4,
+   "gnubgBestEquity": -1.155,
+   "gnubgHintMove": "18/16 11/8",
+   "gnubgHintEquity": -1.117,
+   "modelAfterstateIndex": 6,
+   "modelEquity": -1.212,
+   "equityLoss": 0.057,
+   "modelValue": -15.816642,
+   "exactMatch": false,
+   "notes": [
+    "0-ply hint ile 2-ply eval farkli"
+   ]
+  },
+  {
+   "name": "f6-196",
+   "turn": 1,
+   "dice": [
+    3,
+    4
+   ],
+   "afterstateCount": 16,
+   "gnubgBestIndex": 0,
+   "gnubgBestEquity": -0.19,
+   "gnubgHintMove": "18/11",
+   "gnubgHintEquity": -0.19,
+   "modelAfterstateIndex": 0,
+   "modelEquity": -0.19,
+   "equityLoss": 0.0,
+   "modelValue": 0.785689,
+   "exactMatch": true,
+   "notes": []
+  },
+  {
+   "name": "f6-199",
+   "turn": 1,
+   "dice": [
+    3,
+    6
+   ],
+   "afterstateCount": 16,
+   "gnubgBestIndex": 9,
+   "gnubgBestEquity": -0.857,
+   "gnubgHintMove": "13/4",
+   "gnubgHintEquity": -0.892,
+   "modelAfterstateIndex": 9,
+   "modelEquity": -0.857,
+   "equityLoss": 0.0,
+   "modelValue": -14.713588,
+   "exactMatch": true,
+   "notes": [
+    "0-ply hint ile 2-ply eval farkli"
+   ]
+  }
+ ],
+ "command": "eval",
+ "column": "2",
+ "prob": "equity"
+}

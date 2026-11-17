@@ -1,0 +1,1998 @@
+{
+ "schemaVersion": 1,
+ "refereePlies": 3,
+ "methodNote": "2-ply degerleri gnubg `eval` ile, 3-ply ve 4-ply degerleri gnubg `hint` ile olculur (F7-04). Iki protokol ayni pozisyonda birebir ayni sonucu vermez; 2/3 sinirindaki merdiven adimi elma-elmadir degildir.",
+ "count": 60,
+ "skippedCount": 0,
+ "skipped": [],
+ "elapsedSeconds": 642.6,
+ "secondsPerPosition": 10.71,
+ "rungs": [
+  {
+   "rung": 0,
+   "label": "gnubg 0-ply",
+   "source": "measured",
+   "plies": 0,
+   "n": 60,
+   "covered": 52,
+   "censored": 8,
+   "coverage": 0.8667,
+   "mean": 0.05215,
+   "meanLowerBound": 0.05215,
+   "sigma": 0.099485,
+   "standardError": 0.012843,
+   "ciLow": 0.026977,
+   "ciHigh": 0.077323,
+   "note": ""
+  },
+  {
+   "rung": 1,
+   "label": "gnubg 1-ply",
+   "source": "measured",
+   "plies": 1,
+   "n": 60,
+   "covered": 48,
+   "censored": 12,
+   "coverage": 0.8,
+   "mean": 0.053017,
+   "meanLowerBound": 0.053017,
+   "sigma": 0.1014,
+   "standardError": 0.013091,
+   "ciLow": 0.027359,
+   "ciHigh": 0.078675,
+   "note": ""
+  },
+  {
+   "rung": 2,
+   "label": "gnubg 2-ply",
+   "source": "measured",
+   "plies": 2,
+   "n": 60,
+   "covered": 55,
+   "censored": 5,
+   "coverage": 0.9167,
+   "mean": 0.052467,
+   "meanLowerBound": 0.052467,
+   "sigma": 0.102917,
+   "standardError": 0.013287,
+   "ciLow": 0.026425,
+   "ciHigh": 0.078508,
+   "note": ""
+  },
+  {
+   "rung": 3,
+   "label": "gnubg 3-ply (hint)",
+   "source": "self",
+   "plies": 3,
+   "n": 60,
+   "covered": 60,
+   "censored": 0,
+   "coverage": 1.0,
+   "mean": 0.0,
+   "meanLowerBound": 0.0,
+   "sigma": 0.0,
+   "standardError": 0.0,
+   "ciLow": 0.0,
+   "ciHigh": 0.0,
+   "note": "hakemin kendisi; kayip tanim geregi 0 - olcum degildir"
+  },
+  {
+   "rung": 4,
+   "label": "gnubg 4-ply (hint)",
+   "source": "unmeasured",
+   "plies": null,
+   "n": 0,
+   "covered": 0,
+   "censored": 0,
+   "coverage": 0.0,
+   "mean": 0.0,
+   "meanLowerBound": 0.0,
+   "sigma": 0.0,
+   "standardError": 0.0,
+   "ciLow": 0.0,
+   "ciHigh": 0.0,
+   "note": "4-ply 'hint' (filtre acik) f6-040 pozisyonunda 900 s zaman asimina carpti; belge 4.2.4'teki 62,57 s/pozisyon tahmini temsili degildir (F7-07). Uydurma sayi uretilmedi."
+  },
+  {
+   "rung": 5,
+   "label": "Dunya sampiyonu insan",
+   "source": "literature",
+   "plies": null,
+   "n": 0,
+   "covered": 0,
+   "censored": 0,
+   "coverage": 0.0,
+   "mean": 0.0025,
+   "meanLowerBound": 0.0025,
+   "sigma": 0.0,
+   "standardError": 0.0,
+   "ciLow": 0.0,
+   "ciHigh": 0.0,
+   "note": "Bu basamak bizim olcumumuz degildir; literatur degeridir ve 'literature' olarak etiketlenir (Bolum 4.4 durustluk kurali)."
+  },
+  {
+   "rung": 6,
+   "label": "gnubg 4-ply + buyuk ag",
+   "source": "literature",
+   "plies": null,
+   "n": 0,
+   "covered": 0,
+   "censored": 0,
+   "coverage": 0.0,
+   "mean": 0.003,
+   "meanLowerBound": 0.003,
+   "sigma": 0.0,
+   "standardError": 0.0,
+   "ciLow": 0.0,
+   "ciHigh": 0.0,
+   "note": "Bu basamak bizim olcumumuz degildir; literatur degeridir ve 'literature' olarak etiketlenir (Bolum 4.4 durustluk kurali)."
+  }
+ ],
+ "verdict": {
+  "usable": true,
+  "state": "measured",
+  "sentence": "Merdiven olculdu: 2-ply basamagi ER 0.0525, GA [0.0264; 0.0785], kapsama 91.7%. Sampiyon iddiasi modelin kendi ER'siyle verilir."
+ },
+ "positions": [
+  {
+   "name": "f6-000",
+   "phase": "contact",
+   "afterstateCount": 11,
+   "hintCount": 10,
+   "bestEquity": 0.259,
+   "bestMove": "13/5*(2)",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-006",
+   "phase": "contact",
+   "afterstateCount": 16,
+   "hintCount": 10,
+   "bestEquity": 1.038,
+   "bestMove": "15/9 7/4",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.12,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.12,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.12,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-010",
+   "phase": "contact",
+   "afterstateCount": 28,
+   "hintCount": 10,
+   "bestEquity": 0.943,
+   "bestMove": "11/8* 2/1*",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.013,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.013,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.013,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-012",
+   "phase": "contact",
+   "afterstateCount": 17,
+   "hintCount": 10,
+   "bestEquity": 1.035,
+   "bestMove": "6/3* 2/1",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-015",
+   "phase": "contact",
+   "afterstateCount": 68,
+   "hintCount": 10,
+   "bestEquity": 1.045,
+   "bestMove": "18/17 14/13 7/6*/5",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.01,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.095,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.095,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-016",
+   "phase": "contact",
+   "afterstateCount": 27,
+   "hintCount": 10,
+   "bestEquity": 1.11,
+   "bestMove": "16/12* 8/5",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-020",
+   "phase": "contact",
+   "afterstateCount": 30,
+   "hintCount": 10,
+   "bestEquity": -0.501,
+   "bestMove": "22/18* 17/14*",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.01,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.01,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.01,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-021",
+   "phase": "contact",
+   "afterstateCount": 22,
+   "hintCount": 10,
+   "bestEquity": -0.832,
+   "bestMove": "22/18* 3/2",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-025",
+   "phase": "contact",
+   "afterstateCount": 105,
+   "hintCount": 10,
+   "bestEquity": 0.705,
+   "bestMove": "8/2* 4/2",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.189,
+     "censored": true,
+     "lowerBound": 0.189
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-026",
+   "phase": "contact",
+   "afterstateCount": 38,
+   "hintCount": 10,
+   "bestEquity": 0.265,
+   "bestMove": "24/18* 6/5",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.001,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.001,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.001,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-027",
+   "phase": "contact",
+   "afterstateCount": 26,
+   "hintCount": 10,
+   "bestEquity": 0.481,
+   "bestMove": "24/22* 14/8*",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.015,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-030",
+   "phase": "contact",
+   "afterstateCount": 18,
+   "hintCount": 10,
+   "bestEquity": 1.237,
+   "bestMove": "21/18* 12/6",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-039",
+   "phase": "race",
+   "afterstateCount": 45,
+   "hintCount": 10,
+   "bestEquity": -1.481,
+   "bestMove": "13/7 12/8",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.071,
+     "censored": true,
+     "lowerBound": 0.071
+    },
+    "1": {
+     "loss": 0.071,
+     "censored": true,
+     "lowerBound": 0.071
+    },
+    "2": {
+     "loss": 0.013,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-040",
+   "phase": "race",
+   "afterstateCount": 43,
+   "hintCount": 10,
+   "bestEquity": -1.791,
+   "bestMove": "13/12 10/6",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.026,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.031,
+     "censored": true,
+     "lowerBound": 0.031
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-042",
+   "phase": "race",
+   "afterstateCount": 197,
+   "hintCount": 10,
+   "bestEquity": -1.338,
+   "bestMove": "10/6 8/6 7/5",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.031,
+     "censored": true,
+     "lowerBound": 0.031
+    },
+    "1": {
+     "loss": 0.031,
+     "censored": true,
+     "lowerBound": 0.031
+    },
+    "2": {
+     "loss": 0.031,
+     "censored": true,
+     "lowerBound": 0.031
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-050",
+   "phase": "race",
+   "afterstateCount": 44,
+   "hintCount": 10,
+   "bestEquity": -1.852,
+   "bestMove": "13/11 12/6",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.051,
+     "censored": true,
+     "lowerBound": 0.051
+    },
+    "1": {
+     "loss": 0.03,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.037,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-053",
+   "phase": "race",
+   "afterstateCount": 91,
+   "hintCount": 10,
+   "bestEquity": -1.976,
+   "bestMove": "14/12(2)",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.006,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.006,
+     "censored": true,
+     "lowerBound": 0.006
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-055",
+   "phase": "race",
+   "afterstateCount": 23,
+   "hintCount": 10,
+   "bestEquity": -1.014,
+   "bestMove": "12/7 9/8",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.045,
+     "censored": true,
+     "lowerBound": 0.045
+    },
+    "1": {
+     "loss": 0.039,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.045,
+     "censored": true,
+     "lowerBound": 0.045
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-067",
+   "phase": "race",
+   "afterstateCount": 42,
+   "hintCount": 10,
+   "bestEquity": -1.399,
+   "bestMove": "11/10 9/7",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.18,
+     "censored": true,
+     "lowerBound": 0.18
+    },
+    "1": {
+     "loss": 0.18,
+     "censored": true,
+     "lowerBound": 0.18
+    },
+    "2": {
+     "loss": 0.017,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-069",
+   "phase": "race",
+   "afterstateCount": 150,
+   "hintCount": 10,
+   "bestEquity": -1.142,
+   "bestMove": "13/11 12/10 7/5(2)",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.065,
+     "censored": true,
+     "lowerBound": 0.065
+    },
+    "1": {
+     "loss": 0.065,
+     "censored": true,
+     "lowerBound": 0.065
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-071",
+   "phase": "race",
+   "afterstateCount": 47,
+   "hintCount": 10,
+   "bestEquity": -1.264,
+   "bestMove": "11/7 9/4",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.103,
+     "censored": true,
+     "lowerBound": 0.103
+    },
+    "2": {
+     "loss": 0.031,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-073",
+   "phase": "race",
+   "afterstateCount": 35,
+   "hintCount": 10,
+   "bestEquity": -1.404,
+   "bestMove": "14/11 14/9",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.067,
+     "censored": true,
+     "lowerBound": 0.067
+    },
+    "1": {
+     "loss": 0.067,
+     "censored": true,
+     "lowerBound": 0.067
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-074",
+   "phase": "race",
+   "afterstateCount": 145,
+   "hintCount": 10,
+   "bestEquity": -1.399,
+   "bestMove": "13/8(3) 12/7",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.042,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.054,
+     "censored": true,
+     "lowerBound": 0.054
+    },
+    "2": {
+     "loss": 0.054,
+     "censored": true,
+     "lowerBound": 0.054
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-077",
+   "phase": "race",
+   "afterstateCount": 18,
+   "hintCount": 10,
+   "bestEquity": -1.935,
+   "bestMove": "10/5",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.007,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.015,
+     "censored": true,
+     "lowerBound": 0.015
+    },
+    "2": {
+     "loss": 0.007,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-079",
+   "phase": "bearoff",
+   "afterstateCount": 3,
+   "hintCount": 3,
+   "bestEquity": 1.846,
+   "bestMove": "6/2(2) 4/off(2)",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-085",
+   "phase": "bearoff",
+   "afterstateCount": 9,
+   "hintCount": 9,
+   "bestEquity": 1.766,
+   "bestMove": "4/off(4)",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-092",
+   "phase": "bearoff",
+   "afterstateCount": 8,
+   "hintCount": 8,
+   "bestEquity": 0.935,
+   "bestMove": "6/4 5/off",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-093",
+   "phase": "bearoff",
+   "afterstateCount": 6,
+   "hintCount": 6,
+   "bestEquity": 1.259,
+   "bestMove": "5/off 4/off",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-095",
+   "phase": "bearoff",
+   "afterstateCount": 15,
+   "hintCount": 10,
+   "bestEquity": 1.039,
+   "bestMove": "4/off 1/off",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-096",
+   "phase": "bearoff",
+   "afterstateCount": 41,
+   "hintCount": 10,
+   "bestEquity": 0.663,
+   "bestMove": "2/off(4)",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.003,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.003,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-100",
+   "phase": "bearoff",
+   "afterstateCount": 12,
+   "hintCount": 10,
+   "bestEquity": 1.011,
+   "bestMove": "4/off 3/off",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-102",
+   "phase": "bearoff",
+   "afterstateCount": 6,
+   "hintCount": 6,
+   "bestEquity": 0.443,
+   "bestMove": "6/off 1/off",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.01,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-103",
+   "phase": "bearoff",
+   "afterstateCount": 12,
+   "hintCount": 10,
+   "bestEquity": 1.206,
+   "bestMove": "4/off 3/off",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-106",
+   "phase": "bearoff",
+   "afterstateCount": 21,
+   "hintCount": 10,
+   "bestEquity": 0.97,
+   "bestMove": "5/4 2/off",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.001,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-112",
+   "phase": "bearoff",
+   "afterstateCount": 11,
+   "hintCount": 10,
+   "bestEquity": 0.784,
+   "bestMove": "4/off 3/off",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.003,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.002,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-118",
+   "phase": "bar",
+   "afterstateCount": 7,
+   "hintCount": 7,
+   "bestEquity": 0.619,
+   "bestMove": "bar/21* 6/3",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.034,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.034,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.034,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-122",
+   "phase": "bar",
+   "afterstateCount": 4,
+   "hintCount": 4,
+   "bestEquity": 0.062,
+   "bestMove": "bar/22*",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-125",
+   "phase": "bar",
+   "afterstateCount": 12,
+   "hintCount": 10,
+   "bestEquity": 1.127,
+   "bestMove": "bar/21* 16/13*",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.018,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.018,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.018,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-126",
+   "phase": "bar",
+   "afterstateCount": 4,
+   "hintCount": 4,
+   "bestEquity": -0.933,
+   "bestMove": "bar/21 12/10*",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-128",
+   "phase": "bar",
+   "afterstateCount": 62,
+   "hintCount": 10,
+   "bestEquity": 1.064,
+   "bestMove": "bar/19* 13/7* 8/2*(2)",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.182,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.182,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-129",
+   "phase": "bar",
+   "afterstateCount": 6,
+   "hintCount": 6,
+   "bestEquity": -1.026,
+   "bestMove": "bar/22 14/10",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.081,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.31,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.31,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-130",
+   "phase": "bar",
+   "afterstateCount": 23,
+   "hintCount": 10,
+   "bestEquity": -0.588,
+   "bestMove": "bar/13 22/16(2)",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.037,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.037,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.037,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-133",
+   "phase": "bar",
+   "afterstateCount": 11,
+   "hintCount": 10,
+   "bestEquity": -0.426,
+   "bestMove": "24/18 3/1",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.013,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.092,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.013,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-134",
+   "phase": "bar",
+   "afterstateCount": 20,
+   "hintCount": 10,
+   "bestEquity": -0.837,
+   "bestMove": "16/12 8/6",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.134,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.027,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.027,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-140",
+   "phase": "bar",
+   "afterstateCount": 5,
+   "hintCount": 5,
+   "bestEquity": -0.279,
+   "bestMove": "bar/21*",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-148",
+   "phase": "bar",
+   "afterstateCount": 6,
+   "hintCount": 6,
+   "bestEquity": -0.526,
+   "bestMove": "bar/22 21/17*",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-150",
+   "phase": "bar",
+   "afterstateCount": 10,
+   "hintCount": 10,
+   "bestEquity": 0.3,
+   "bestMove": "bar/24* 18/16",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.118,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.131,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.118,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-156",
+   "phase": "closed",
+   "afterstateCount": 14,
+   "hintCount": 10,
+   "bestEquity": -1.201,
+   "bestMove": "12/9 7/5",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.207,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.207,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-157",
+   "phase": "closed",
+   "afterstateCount": 17,
+   "hintCount": 10,
+   "bestEquity": -0.32,
+   "bestMove": "18/12 16/12",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-161",
+   "phase": "closed",
+   "afterstateCount": 17,
+   "hintCount": 10,
+   "bestEquity": -0.999,
+   "bestMove": "12/7 11/5",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.128,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-171",
+   "phase": "closed",
+   "afterstateCount": 128,
+   "hintCount": 10,
+   "bestEquity": -0.895,
+   "bestMove": "18/12 10/7(2)",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.006,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.014,
+     "censored": true,
+     "lowerBound": 0.014
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-173",
+   "phase": "closed",
+   "afterstateCount": 25,
+   "hintCount": 10,
+   "bestEquity": -1.942,
+   "bestMove": "15/9 7/6",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.005,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.005,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.005,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-174",
+   "phase": "closed",
+   "afterstateCount": 30,
+   "hintCount": 10,
+   "bestEquity": -0.779,
+   "bestMove": "18/14 15/10",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.281,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.281,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-177",
+   "phase": "closed",
+   "afterstateCount": 30,
+   "hintCount": 10,
+   "bestEquity": -0.672,
+   "bestMove": "16/10",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.132,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.464,
+     "censored": true,
+     "lowerBound": 0.464
+    },
+    "2": {
+     "loss": 0.464,
+     "censored": true,
+     "lowerBound": 0.464
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-181",
+   "phase": "closed",
+   "afterstateCount": 21,
+   "hintCount": 10,
+   "bestEquity": -0.837,
+   "bestMove": "13/6",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.335,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.222,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.222,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-183",
+   "phase": "closed",
+   "afterstateCount": 30,
+   "hintCount": 10,
+   "bestEquity": -1.034,
+   "bestMove": "15/13 8/7",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.002,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.084,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.084,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-188",
+   "phase": "closed",
+   "afterstateCount": 55,
+   "hintCount": 10,
+   "bestEquity": -0.837,
+   "bestMove": "17/14 12/11",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.577,
+     "censored": true,
+     "lowerBound": 0.577
+    },
+    "1": {
+     "loss": 0.427,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.422,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-191",
+   "phase": "closed",
+   "afterstateCount": 64,
+   "hintCount": 10,
+   "bestEquity": -1.007,
+   "bestMove": "17/12 15/10 11/6(2)",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.017,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-192",
+   "phase": "closed",
+   "afterstateCount": 37,
+   "hintCount": 10,
+   "bestEquity": -1.423,
+   "bestMove": "17/12",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.045,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.059,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.059,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  },
+  {
+   "name": "f6-195",
+   "phase": "closed",
+   "afterstateCount": 20,
+   "hintCount": 10,
+   "bestEquity": -0.781,
+   "bestMove": "11/10 11/6",
+   "mappingFailures": 0,
+   "rungs": {
+    "0": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "1": {
+     "loss": 0.323,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "2": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    },
+    "3": {
+     "loss": 0.0,
+     "censored": false,
+     "lowerBound": 0.0
+    }
+   }
+  }
+ ]
+}

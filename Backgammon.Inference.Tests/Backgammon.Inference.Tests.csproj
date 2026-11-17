@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.0" />
+    <PackageReference Include="NUnit" Version="4.3.2" />
+    <PackageReference Include="NUnit.Analyzers" Version="4.7.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Backgammon.Core\Backgammon.Core.csproj" />
+    <ProjectReference Include="..\Backgammon.Inference\Backgammon.Inference.csproj" />
+    <ProjectReference Include="..\Backgammon.SelfPlay\Backgammon.SelfPlay.csproj" />
+  </ItemGroup>
+
+  <!--
+    Faz 4 v3 Bolum 8 Test 16: Faz 3 v7 referans aramasi gercek ONNX modeliyle karsilastirilir.
+    Kaynak dosyalar paylasilir (kopyalanmaz); Backgammon.Tests derlemesine referans verilmez ki
+    test kesfi cogalmasin.
+  -->
+  <ItemGroup>
+    <Compile Include="..\Backgammon.Tests\VectorTestSupport.cs" Link="Shared\VectorTestSupport.cs" />
+    <Compile Include="..\Backgammon.Tests\Search\SearchTestSupport.cs" Link="Shared\SearchTestSupport.cs" />
+    <Compile Include="..\Backgammon.Tests\Search\ReferenceSearch.cs" Link="Shared\ReferenceSearch.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\ml\artifacts\model_v1.onnx" Link="Models\model_v1.onnx" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\ml\artifacts\model_v1.onnx.parity.json" Link="Models\model_v1.onnx.parity.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\ml\artifacts\golden_outputs.json" Link="Models\golden_outputs.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\ml\artifacts\model_v2.onnx" Link="Models\model_v2.onnx" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\ml\artifacts\model_bad_feature_version.onnx" Link="Models\model_bad_feature_version.onnx" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\ml\artifacts\model_bad_vector_size.onnx" Link="Models\model_bad_vector_size.onnx" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\ml\artifacts\model_output_version_1.onnx" Link="Models\model_output_version_1.onnx" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\ml\artifacts\model_bad_output_version.onnx" Link="Models\model_bad_output_version.onnx" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\ml\artifacts\model_output_version_2.onnx" Link="Models\model_output_version_2.onnx" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\ml\artifacts\model_output_version_2.onnx.parity.json" Link="Models\model_output_version_2.onnx.parity.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

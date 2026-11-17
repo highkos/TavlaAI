@@ -1,0 +1,13 @@
+{
+  "model": "ml\\runs\\stage_d_l2\\onnx\\model_v15.onnx",
+  "gamesPerCell": 400,
+  "depthPly": 0,
+  "cells": [
+    {"matchLength": 2, "matchAware": false, "games": 400, "wins": 398, "losses": 2, "draws": 0, "winRate": 0.995, "winRateStdError": 0.0035266839949164726, "meanMatchPoints": 2.255, "meanMatchPointsStdError": 0.03627294883301613, "cubeDoubles": 213, "cubePasses": 30},
+    {"matchLength": 2, "matchAware": true, "games": 400, "wins": 398, "losses": 2, "draws": 0, "winRate": 0.995, "winRateStdError": 0.0035266839949164726, "meanMatchPoints": 2.3025, "meanMatchPointsStdError": 0.035434777177004495, "cubeDoubles": 214, "cubePasses": 28},
+    {"matchLength": 4, "matchAware": false, "games": 400, "wins": 396, "losses": 4, "draws": 0, "winRate": 0.99, "winRateStdError": 0.004974937185533102, "meanMatchPoints": 2.2525, "meanMatchPointsStdError": 0.038249404142982835, "cubeDoubles": 482, "cubePasses": 32},
+    {"matchLength": 4, "matchAware": true, "games": 400, "wins": 396, "losses": 4, "draws": 0, "winRate": 0.99, "winRateStdError": 0.004974937185533102, "meanMatchPoints": 2.28, "meanMatchPointsStdError": 0.03866830866792724, "cubeDoubles": 485, "cubePasses": 32},
+    {"matchLength": 5, "matchAware": false, "games": 400, "wins": 398, "losses": 2, "draws": 0, "winRate": 0.995, "winRateStdError": 0.0035266839949164726, "meanMatchPoints": 2.36, "meanMatchPointsStdError": 0.033968878577007124, "cubeDoubles": 517, "cubePasses": 8},
+    {"matchLength": 5, "matchAware": true, "games": 400, "wins": 398, "losses": 2, "draws": 0, "winRate": 0.995, "winRateStdError": 0.0035266839949164726, "meanMatchPoints": 2.38, "meanMatchPointsStdError": 0.03379133966849312, "cubeDoubles": 520, "cubePasses": 8}
+  ]
+}

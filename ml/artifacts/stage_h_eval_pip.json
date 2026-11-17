@@ -1,0 +1,10 @@
+{
+  "model": "ml\\runs\\stage_d_l2\\onnx\\model_v30.onnx",
+  "seed": 20260214,
+  "depthPly": 1,
+  "maxCandidatesRoot": 4,
+  "maxCandidatesInner": 4,
+  "reports": [
+    {"opponent": "PipBot", "games": 200, "wins": 199, "losses": 1, "draws": 0, "winRate": 0.995, "meanPoints": 2.445, "standardError": 0.045222787425285564, "lowerConfidenceBound": 2.35636333664644, "upperConfidenceBound": 2.5336366633535596}
+  ]
+}

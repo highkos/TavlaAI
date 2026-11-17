@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	<TargetFramework>netstandard2.1</TargetFramework>
+	<LangVersion>9.0</LangVersion>
+	<Nullable>disable</Nullable>
+	<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	<ImplicitUsings>disable</ImplicitUsings>
+	<RootNamespace>Backgammon.Inference</RootNamespace>
+	<AssemblyName>Backgammon.Inference</AssemblyName>
+	<IsPackable>false</IsPackable>
+	<GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!--
+	Faz 4 v3 Bolum 4.6: varsayilan CPU paketidir. GPU olcumu icin derleme zamaninda
+	-p:OnnxRuntimePackage=Microsoft.ML.OnnxRuntime.Gpu verilir (bkz. ASSUMPTIONS.md F4-35).
+  -->
+  <PropertyGroup>
+	<OnnxRuntimePackage Condition="'$(OnnxRuntimePackage)' == ''">Microsoft.ML.OnnxRuntime</OnnxRuntimePackage>
+  </PropertyGroup>
+
+  <ItemGroup>
+	<PackageReference Include="$(OnnxRuntimePackage)" Version="1.23.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+	<ProjectReference Include="..\Backgammon.Core\Backgammon.Core.csproj" />
+  </ItemGroup>
+
+</Project>

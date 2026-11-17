@@ -1,0 +1,45 @@
+{
+  "model": "ml\\runs\\stage_d\\onnx\\model_v10.onnx",
+  "seed": 777,
+  "depthPly": 1,
+  "maxCandidatesRoot": 4,
+  "maxCandidatesInner": 4,
+  "reports": [
+    {
+      "opponent": "RandomBot",
+      "games": 200,
+      "wins": 161,
+      "losses": 39,
+      "draws": 0,
+      "winRate": 0.805,
+      "meanPoints": 1.58,
+      "standardError": 0.13078041744825428,
+      "lowerConfidenceBound": 1.3236703818014217,
+      "upperConfidenceBound": 1.8363296181985784
+    },
+    {
+      "opponent": "PipBot",
+      "games": 200,
+      "wins": 81,
+      "losses": 91,
+      "draws": 28,
+      "winRate": 0.405,
+      "meanPoints": -0.23,
+      "standardError": 0.14522725217351368,
+      "lowerConfidenceBound": -0.5146454142600868,
+      "upperConfidenceBound": 0.054645414260086816
+    },
+    {
+      "opponent": "Model:model_v5",
+      "games": 200,
+      "wins": 109,
+      "losses": 91,
+      "draws": 0,
+      "winRate": 0.545,
+      "meanPoints": 0.23,
+      "standardError": 0.14745921844878873,
+      "lowerConfidenceBound": -0.05902006815962588,
+      "upperConfidenceBound": 0.5190200681596259
+    }
+  ]
+}

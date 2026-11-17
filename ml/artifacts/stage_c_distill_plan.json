@@ -1,0 +1,12 @@
+{
+  "requested": 500000,
+  "volume": 500000,
+  "seconds": 254375.00000000003,
+  "hours": 70.65972222222223,
+  "capped_by": "volume",
+  "feasible": true,
+  "decisions_per_second": 1.9656019656019654,
+  "volume_cap": 500000,
+  "time_cap_hours": 72.0,
+  "depth": 3
+}

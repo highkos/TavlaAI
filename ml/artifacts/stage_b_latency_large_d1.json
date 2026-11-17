@@ -1,0 +1,19 @@
+{
+  "model": "ml\\runs\\stage_b_large\\onnx\\model_v1_trained.onnx",
+  "outputVersion": 2,
+  "provider": "cpu",
+  "depth": 1,
+  "positions": 30,
+  "maxRoot": 4,
+  "maxInner": 4,
+  "cacheBits": 20,
+  "ttCapacity": 1048576,
+  "evaluatorCalls": 2550,
+  "policyCalls": 2236,
+  "nodesVisited": 2550,
+  "p50Seconds": 0.0718438,
+  "p95Seconds": 0.2597772,
+  "meanSeconds": 0.08945238333333333,
+  "minSeconds": 0.0138373,
+  "maxSeconds": 0.3708016
+}

@@ -1,0 +1,153 @@
+{
+ "schemaVersion": 1,
+ "parityTolerance": 1e-06,
+ "cpuBucket": 128,
+ "gainThreshold": 0.15,
+ "p95Limit": 2.0,
+ "profiles": [
+  {
+   "profile": "medium",
+   "arch": "221-256-256-128",
+   "parameters": 156423,
+   "hidden": [
+    256,
+    256,
+    128
+   ],
+   "onnx": "F:\\Projects\\VijualStudioski\\TavlaAI_Project\\ml\\artifacts\\capacity\\model_medium.onnx",
+   "onnxBytes": 630284,
+   "parity": {
+    "profile": "medium",
+    "tolerance": 1e-06,
+    "maxAbsDeltaProbs": 5.960464477539063e-08,
+    "maxAbsDeltaPolicy": 2.9802322387695312e-08,
+    "ok": true,
+    "perBatch": [
+     {
+      "batch": 1,
+      "maxAbsDeltaProbs": 0.0,
+      "maxAbsDeltaPolicy": 7.450580596923828e-09
+     },
+     {
+      "batch": 2,
+      "maxAbsDeltaProbs": 2.9802322387695312e-08,
+      "maxAbsDeltaPolicy": 2.421438694000244e-08
+     },
+     {
+      "batch": 13,
+      "maxAbsDeltaProbs": 2.9802322387695312e-08,
+      "maxAbsDeltaPolicy": 1.4901161193847656e-08
+     },
+     {
+      "batch": 64,
+      "maxAbsDeltaProbs": 5.960464477539063e-08,
+      "maxAbsDeltaPolicy": 2.7939677238464355e-08
+     },
+     {
+      "batch": 128,
+      "maxAbsDeltaProbs": 5.960464477539063e-08,
+      "maxAbsDeltaPolicy": 2.9802322387695312e-08
+     }
+    ]
+   },
+   "throughput": {
+    "batch": 128,
+    "repeats": 5,
+    "threads": 0,
+    "medianSeconds": 0.0003684000112116337,
+    "positionsPerSecond": 347448.4150503139,
+    "minSeconds": 0.0002989999484270811,
+    "maxSeconds": 0.0003747998271137476
+   }
+  },
+  {
+   "profile": "large",
+   "arch": "221-512-512-512",
+   "parameters": 642567,
+   "hidden": [
+    512,
+    512,
+    512
+   ],
+   "onnx": "F:\\Projects\\VijualStudioski\\TavlaAI_Project\\ml\\artifacts\\capacity\\model_large.onnx",
+   "onnxBytes": 2574861,
+   "parity": {
+    "profile": "large",
+    "tolerance": 1e-06,
+    "maxAbsDeltaProbs": 5.960464477539063e-08,
+    "maxAbsDeltaPolicy": 3.3527612686157227e-08,
+    "ok": true,
+    "perBatch": [
+     {
+      "batch": 1,
+      "maxAbsDeltaProbs": 7.450580596923828e-09,
+      "maxAbsDeltaPolicy": 6.51925802230835e-09
+     },
+     {
+      "batch": 2,
+      "maxAbsDeltaProbs": 2.9802322387695312e-08,
+      "maxAbsDeltaPolicy": 5.122274160385132e-09
+     },
+     {
+      "batch": 13,
+      "maxAbsDeltaProbs": 2.9802322387695312e-08,
+      "maxAbsDeltaPolicy": 2.421438694000244e-08
+     },
+     {
+      "batch": 64,
+      "maxAbsDeltaProbs": 5.960464477539063e-08,
+      "maxAbsDeltaPolicy": 3.3527612686157227e-08
+     },
+     {
+      "batch": 128,
+      "maxAbsDeltaProbs": 5.960464477539063e-08,
+      "maxAbsDeltaPolicy": 3.166496753692627e-08
+     }
+    ]
+   },
+   "throughput": {
+    "batch": 128,
+    "repeats": 5,
+    "threads": 0,
+    "medianSeconds": 0.0009021998848766088,
+    "positionsPerSecond": 141875.4337543572,
+    "minSeconds": 0.0007555000483989716,
+    "maxSeconds": 0.0010499998461455107
+   }
+  }
+ ],
+ "decision": {
+  "erMedium": 0.064,
+  "seMedium": 0.0119,
+  "erLarge": 0.0664,
+  "seLarge": 0.012,
+  "difference": -0.0023999999999999994,
+  "relativeGain": -0.03749999999999999,
+  "gainThreshold": 0.15,
+  "noiseThreshold": 0.0025350000000000004,
+  "gainOk": false,
+  "p95Large": 13.6816,
+  "p95Limit": 2.0,
+  "latencyOk": false,
+  "selected": "medium",
+  "reason": "iki bacak da saglanmadi; medium kalir"
+ },
+ "dataQuality": {
+  "test97": "bkz. Backgammon.Inference.Tests/StageBDataQualityTests.cs",
+  "test98": "bkz. ml/critical.py + ml/tests/test_critical.py",
+  "criticalDistribution": {
+   "count": 864734,
+   "critical": 224477,
+   "criticalShare": 0.25959081058452654,
+   "degenerate": false,
+   "boost": 2.0,
+   "equityThreshold": 0.5,
+   "marginThreshold": 0.05,
+   "effectiveCount": 771296.058954013,
+   "effectiveShare": 0.8919460307493553,
+   "meanWeight": 1.1564249815550212e-06,
+   "maxWeight": 1.8361915184477571e-06
+  }
+ },
+ "pathNote": "B1/B2/B3 yol secimi **kullanici onayi** gerektirir (Bolum 5.1.6). Bu rapor yolu secmez; yalnizca `large`'in teknik olarak uygun olup olmadigini olcer. Yol secilmeden `large` ile egitim kosusu baslatilmaz."
+}

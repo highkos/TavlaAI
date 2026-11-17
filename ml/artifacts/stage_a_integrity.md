@@ -1,0 +1,331 @@
+# Olcum butunlugu -- dort bagimsiz prob (Faz 7 Bolum 4.3, Test 93)
+
+gnubg: `F:\Program Files (x86)\gnubg\gnubg-cli.exe`
+
+Genel sonuc: **GECTI**
+
+| Prob | Sonuc | Ayrinti |
+|---|---|---|
+| Tahta donusumu | gecti | ok |
+| Sutun secimi | gecti | ok |
+| Perspektif | gecti | ok |
+| Pip sayisi | gecti | ok |
+
+## Tahta donusumu
+
+```json
+{
+  "docBoardEquity": 1.0,
+  "docBoardExpected": 1.0,
+  "signFlippedEquity": 0.479,
+  "mirroredEquity": 0.479,
+  "startPositionId": "4HPwATDgc/ABMA",
+  "startPositionIdExpected": "4HPwATDgc/ABMA",
+  "startPips": [
+    167,
+    167
+  ],
+  "barPips": [
+    25,
+    25
+  ]
+}
+```
+
+## Sutun secimi
+
+```json
+{
+  "cases": [
+    {
+      "table": {
+        "static": 0.1,
+        "1": 0.2,
+        "2": 0.3
+      },
+      "plies": 0,
+      "expected": 0.1,
+      "got": 0.1,
+      "ok": true
+    },
+    {
+      "table": {
+        "static": 0.1,
+        "1": 0.2,
+        "2": 0.3
+      },
+      "plies": 1,
+      "expected": 0.2,
+      "got": 0.2,
+      "ok": true
+    },
+    {
+      "table": {
+        "static": 0.1,
+        "1": 0.2,
+        "2": 0.3
+      },
+      "plies": 2,
+      "expected": 0.3,
+      "got": 0.3,
+      "ok": true
+    },
+    {
+      "table": {
+        "static": 0.9,
+        "1": 0.2,
+        "2": 0.3
+      },
+      "plies": 2,
+      "expected": 0.3,
+      "got": 0.3,
+      "ok": true
+    },
+    {
+      "table": {
+        "static": 0.9,
+        "1": 0.2,
+        "2": 0.3
+      },
+      "plies": 0,
+      "expected": 0.9,
+      "got": 0.9,
+      "ok": true
+    },
+    {
+      "table": {
+        "static": 0.1,
+        "1": 0.2,
+        "2": 0.3
+      },
+      "plies": 3,
+      "expected": null,
+      "raised": "ValueError",
+      "ok": true
+    },
+    {
+      "table": {
+        "static": 0.1,
+        "1": 0.2,
+        "2": 0.3
+      },
+      "plies": 4,
+      "expected": null,
+      "raised": "ValueError",
+      "ok": true
+    },
+    {
+      "table": {
+        "static": 0.1,
+        "1": 0.2
+      },
+      "plies": 2,
+      "expected": null,
+      "raised": "ValueError",
+      "ok": true
+    },
+    {
+      "table": {
+        "static": 0.1
+      },
+      "plies": 1,
+      "expected": null,
+      "raised": "ValueError",
+      "ok": true
+    },
+    {
+      "table": {},
+      "plies": 0,
+      "expected": null,
+      "raised": "ValueError",
+      "ok": true
+    }
+  ],
+  "maxEvalPlies": 2
+}
+```
+
+## Perspektif
+
+```json
+{
+  "cases": [
+    {
+      "name": "start-symmetric",
+      "whitePerspective": 0.068,
+      "blackPerspective": 0.068,
+      "delta": 0.0,
+      "kind": "symmetric"
+    },
+    {
+      "name": "asymmetric-00",
+      "whitePerspective": -0.296,
+      "blackPerspective": 0.626,
+      "product": -0.185296,
+      "kind": "asymmetric"
+    },
+    {
+      "name": "asymmetric-01",
+      "whitePerspective": -0.266,
+      "blackPerspective": 0.493,
+      "product": -0.131138,
+      "kind": "asymmetric"
+    }
+  ]
+}
+```
+
+## Pip sayisi
+
+```json
+{
+  "cases": [
+    {
+      "index": 0,
+      "gnubg": [
+        278,
+        24
+      ],
+      "expected": [
+        278,
+        24
+      ],
+      "ok": true
+    },
+    {
+      "index": 1,
+      "gnubg": [
+        167,
+        167
+      ],
+      "expected": [
+        167,
+        167
+      ],
+      "ok": true
+    },
+    {
+      "index": 2,
+      "gnubg": [
+        167,
+        167
+      ],
+      "expected": [
+        167,
+        167
+      ],
+      "ok": true
+    },
+    {
+      "index": 3,
+      "gnubg": [
+        167,
+        167
+      ],
+      "expected": [
+        167,
+        167
+      ],
+      "ok": true
+    },
+    {
+      "index": 4,
+      "gnubg": [
+        167,
+        167
+      ],
+      "expected": [
+        167,
+        167
+      ],
+      "ok": true
+    },
+    {
+      "index": 5,
+      "gnubg": [
+        167,
+        167
+      ],
+      "expected": [
+        167,
+        167
+      ],
+      "ok": true
+    },
+    {
+      "index": 6,
+      "gnubg": [
+        157,
+        163
+      ],
+      "expected": [
+        157,
+        163
+      ],
+      "ok": true
+    },
+    {
+      "index": 7,
+      "gnubg": [
+        174,
+        197
+      ],
+      "expected": [
+        174,
+        197
+      ],
+      "ok": true
+    },
+    {
+      "index": 8,
+      "gnubg": [
+        169,
+        217
+      ],
+      "expected": [
+        169,
+        217
+      ],
+      "ok": true
+    },
+    {
+      "index": 9,
+      "gnubg": [
+        160,
+        205
+      ],
+      "expected": [
+        160,
+        205
+      ],
+      "ok": true
+    },
+    {
+      "index": 10,
+      "gnubg": [
+        154,
+        205
+      ],
+      "expected": [
+        154,
+        205
+      ],
+      "ok": true
+    },
+    {
+      "index": 11,
+      "gnubg": [
+        154,
+        198
+      ],
+      "expected": [
+        154,
+        198
+      ],
+      "ok": true
+    }
+  ],
+  "checked": 12
+}
+```
+

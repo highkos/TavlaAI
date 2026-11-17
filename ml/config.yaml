@@ -1,0 +1,74 @@
+# Faz 4 v3 Bolum 6.6 — baslangic hiperparametreleri.
+# DIKKAT: Bu degerler DOGRULANMAMIS yer tutuculardir (spesifikasyon Bolum 6.6).
+# Ilk calistirmanin sonuclari raporlanir; ayar onerileri ayri bir tablo olarak sunulur.
+
+run:
+  name: phase4_stage_c
+  out_dir: ml/runs/stage_c
+  seed: 20260214
+  device: cuda            # cuda | cpu
+  iterations: 20
+  eval_every: 5
+  log_every: 1
+
+selfplay:
+  project: Backgammon.SelfPlay/Backgammon.SelfPlay.csproj
+  configuration: Release
+  games: 500
+  threads: 1
+  depth: 1
+  max_candidates_root: 0
+  max_candidates_inner: 0
+  log_top_candidates: 12
+  exploration_plies: 10
+  selection_temperature: 0.05
+  policy_temperature: 1.0
+  max_plies: 500
+  gzip: true
+  games_per_shard: 0
+  pool_fraction: 0.0
+  max_batch: 2048
+  intra_op_threads: 1
+  cuda: false
+
+buffer:
+  max_games: 20000
+
+train:
+  steps_per_iteration: 200
+  value_batch: 4096
+  policy_batch: 256
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  clip_grad_norm: 1.0
+  c_policy: 1.0
+  tau_train: 0.05
+  # F6-08: varsayilan TD lambda 1,0 (saf Monte Carlo hedefi).
+  lam: 1.0
+  gamma: 1.0
+  value_loss: mse         # mse | huber
+  huber_delta: 1.0
+  value_target_mode: td_lambda   # td_lambda | search_distill
+  # Hedef entropisi log|E|'ye cok yakinsa (duzgun hedef) politika gradyani bilgi
+  # tasimaz ve deger fonksiyonunu bozar; bu esigin uzerindeki kararlar egitimden elenir.
+  # 1.0 = kapali. Bkz. ASSUMPTIONS F4-40.
+  policy_min_sharpness: 0.99
+
+model:
+  h1: 128
+  h2: 64
+
+league:
+  enabled: false
+  every: 5
+  n_eval: 400
+  pool_size: 10
+  entry_threshold: 0.0
+  eviction: oldest        # oldest | weakest
+  pool_dir: ml/runs/pool
+  # Havuz rakipli oyun orani (spec Bolum 6.5 yer tutucusu: 0.20).
+  # Havuz bossa 0 gibi davranir.
+  pool_fraction: 0.20
+
+eval:
+  random_games: 0          # > 0 ise her eval_every iterasyonda RandomBot'a karsi oynanir

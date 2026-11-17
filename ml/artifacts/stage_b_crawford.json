@@ -1,0 +1,12 @@
+{
+  "scenarios": [
+    {"name": "crawford-no-cube", "shouldDouble": false, "shouldTake": true, "isDeadCube": false, "expectedDouble": false, "expectedTake": true, "correct": true},
+    {"name": "crawford-no-cube-black", "shouldDouble": false, "shouldTake": true, "isDeadCube": false, "expectedDouble": false, "expectedTake": true, "correct": true},
+    {"name": "one-away-cannot-double", "shouldDouble": false, "shouldTake": true, "isDeadCube": false, "expectedDouble": false, "expectedTake": true, "correct": true},
+    {"name": "post-crawford-free-drop", "shouldDouble": true, "shouldTake": true, "isDeadCube": false, "expectedDouble": true, "expectedTake": true, "correct": true},
+    {"name": "normal-double-pass", "shouldDouble": true, "shouldTake": false, "isDeadCube": false, "expectedDouble": true, "expectedTake": false, "correct": true},
+    {"name": "dead-cube-no-double", "shouldDouble": false, "shouldTake": true, "isDeadCube": false, "expectedDouble": false, "expectedTake": true, "correct": true}
+  ],
+  "total": 6,
+  "correct": 6
+}

@@ -1,0 +1,50 @@
+{
+  "count": 400,
+  "calCount": 200,
+  "valCount": 200,
+  "affine": {
+    "slope": 0.6727151822987492,
+    "intercept": 0.14022325857625345
+  },
+  "before": {
+    "slope": 0.64474520409419,
+    "intercept": 0.12875328394358593,
+    "correlation": 0.902218205739142,
+    "mae": 0.2641382652188465,
+    "std_ratio": 1.3993407008070402,
+    "count": 200.0
+  },
+  "after": {
+    "slope": 0.9584222581256717,
+    "intercept": -0.005639808182806849,
+    "correlation": 0.902218205739142,
+    "mae": 0.1782013320773001,
+    "std_ratio": 0.9413577346414675,
+    "count": 200.0
+  },
+  "beforeGate": {
+    "gates": {
+      "slope": false,
+      "correlation": true,
+      "mae": false,
+      "std_ratio": true
+    },
+    "passed": false,
+    "failed": [
+      "mae",
+      "slope"
+    ]
+  },
+  "afterGate": {
+    "gates": {
+      "slope": true,
+      "correlation": true,
+      "mae": false,
+      "std_ratio": true
+    },
+    "passed": false,
+    "failed": [
+      "mae"
+    ]
+  }
+}

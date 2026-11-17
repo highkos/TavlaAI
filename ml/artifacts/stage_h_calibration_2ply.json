@@ -1,0 +1,19 @@
+{
+  "count": 400,
+  "skipped": 0,
+  "slope": 0.6742853359756819,
+  "intercept": 0.14563849428874567,
+  "correlation": 0.9016057823896512,
+  "mae": 0.2683332163227073,
+  "bias": -0.1644550451284182,
+  "our_std": 0.735035944673555,
+  "gnubg_std": 0.5497124891932145,
+  "std_ratio": 1.3371279698453469,
+  "calibrated_mae": 0.19424619060012854,
+  "gates": {
+    "slope": false,
+    "correlation": true,
+    "mae": false,
+    "std_ratio": true
+  }
+}

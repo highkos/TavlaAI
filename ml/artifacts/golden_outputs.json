@@ -1,0 +1,2010 @@
+{
+  "modelVersion": 1,
+  "featureVersion": 1,
+  "vectorSize": 221,
+  "tolerance": 1e-05,
+  "generatedBy": "gen_golden_outputs.py - Faz 4 v3",
+  "sourceGolden": "Backgammon.Tests/ReferenceData/vector_golden.json",
+  "records": [
+    {
+      "valueHex": "bd13e15e",
+      "policyLogitHex": "bd5e20dc"
+    },
+    {
+      "valueHex": "bd2fd68d",
+      "policyLogitHex": "bd38ca0c"
+    },
+    {
+      "valueHex": "bd5889c7",
+      "policyLogitHex": "bd4a87ea"
+    },
+    {
+      "valueHex": "bd4451aa",
+      "policyLogitHex": "bda22fe6"
+    },
+    {
+      "valueHex": "bcdb1f7b",
+      "policyLogitHex": "bd64100f"
+    },
+    {
+      "valueHex": "bd866b65",
+      "policyLogitHex": "bd56b9e5"
+    },
+    {
+      "valueHex": "bd019641",
+      "policyLogitHex": "bd87e1b8"
+    },
+    {
+      "valueHex": "bc945df4",
+      "policyLogitHex": "bd644f52"
+    },
+    {
+      "valueHex": "bcf0f43b",
+      "policyLogitHex": "bd2ff0e4"
+    },
+    {
+      "valueHex": "bd1b9b0a",
+      "policyLogitHex": "bd2eb20e"
+    },
+    {
+      "valueHex": "bd28ac34",
+      "policyLogitHex": "bd95f719"
+    },
+    {
+      "valueHex": "bd261727",
+      "policyLogitHex": "bd1e591c"
+    },
+    {
+      "valueHex": "bd229efd",
+      "policyLogitHex": "bd2a4225"
+    },
+    {
+      "valueHex": "bd18d585",
+      "policyLogitHex": "bd5a3ed4"
+    },
+    {
+      "valueHex": "bd318b1d",
+      "policyLogitHex": "bd8289a3"
+    },
+    {
+      "valueHex": "bd656f93",
+      "policyLogitHex": "bd41651c"
+    },
+    {
+      "valueHex": "bd62fc24",
+      "policyLogitHex": "bd65c03a"
+    },
+    {
+      "valueHex": "bd1a1868",
+      "policyLogitHex": "bd4b9480"
+    },
+    {
+      "valueHex": "bd6dd5fb",
+      "policyLogitHex": "bd61d276"
+    },
+    {
+      "valueHex": "bd347980",
+      "policyLogitHex": "bd73e8db"
+    },
+    {
+      "valueHex": "bcf08a90",
+      "policyLogitHex": "bd79b8e7"
+    },
+    {
+      "valueHex": "bc234af0",
+      "policyLogitHex": "bd936d40"
+    },
+    {
+      "valueHex": "bceacf83",
+      "policyLogitHex": "bd5d25f2"
+    },
+    {
+      "valueHex": "bd34d05a",
+      "policyLogitHex": "bd857196"
+    },
+    {
+      "valueHex": "bd1b4386",
+      "policyLogitHex": "bd820573"
+    },
+    {
+      "valueHex": "bd0b8d90",
+      "policyLogitHex": "bd3c6066"
+    },
+    {
+      "valueHex": "bce71c90",
+      "policyLogitHex": "bd7a3ea2"
+    },
+    {
+      "valueHex": "bcfc9327",
+      "policyLogitHex": "bd5431d1"
+    },
+    {
+      "valueHex": "bd30fd25",
+      "policyLogitHex": "bd64fd89"
+    },
+    {
+      "valueHex": "bd253b18",
+      "policyLogitHex": "bd791906"
+    },
+    {
+      "valueHex": "bd03fdee",
+      "policyLogitHex": "bd181855"
+    },
+    {
+      "valueHex": "bd766800",
+      "policyLogitHex": "bd4eb07c"
+    },
+    {
+      "valueHex": "bd4a399b",
+      "policyLogitHex": "bd75bcb1"
+    },
+    {
+      "valueHex": "bc8349bf",
+      "policyLogitHex": "bd651c34"
+    },
+    {
+      "valueHex": "bcf5b255",
+      "policyLogitHex": "bd5a4fd4"
+    },
+    {
+      "valueHex": "bd5b3547",
+      "policyLogitHex": "bd6907d6"
+    },
+    {
+      "valueHex": "bd1fe759",
+      "policyLogitHex": "bd7cfd7b"
+    },
+    {
+      "valueHex": "bd78011b",
+      "policyLogitHex": "bd3ea11c"
+    },
+    {
+      "valueHex": "bcea42ea",
+      "policyLogitHex": "bd6484f9"
+    },
+    {
+      "valueHex": "bd2c48e9",
+      "policyLogitHex": "bd69cf2a"
+    },
+    {
+      "valueHex": "bd72a11b",
+      "policyLogitHex": "bd83c858"
+    },
+    {
+      "valueHex": "bd81df87",
+      "policyLogitHex": "bd960bdd"
+    },
+    {
+      "valueHex": "bd589f3d",
+      "policyLogitHex": "bd537d42"
+    },
+    {
+      "valueHex": "bd8b443f",
+      "policyLogitHex": "bd7ade0f"
+    },
+    {
+      "valueHex": "bd7e20ec",
+      "policyLogitHex": "bd43212f"
+    },
+    {
+      "valueHex": "bd09de7b",
+      "policyLogitHex": "bd749294"
+    },
+    {
+      "valueHex": "bbcca12e",
+      "policyLogitHex": "bd862448"
+    },
+    {
+      "valueHex": "bd89baf0",
+      "policyLogitHex": "bd4b5d68"
+    },
+    {
+      "valueHex": "bd81d46a",
+      "policyLogitHex": "bd6c745e"
+    },
+    {
+      "valueHex": "bd1aa137",
+      "policyLogitHex": "bd55d8d4"
+    },
+    {
+      "valueHex": "bcb4fcda",
+      "policyLogitHex": "bd4802c2"
+    },
+    {
+      "valueHex": "bd051c53",
+      "policyLogitHex": "bd5b5ffe"
+    },
+    {
+      "valueHex": "bd49c157",
+      "policyLogitHex": "bd4dd9b8"
+    },
+    {
+      "valueHex": "bcdfb13e",
+      "policyLogitHex": "bd63c85e"
+    },
+    {
+      "valueHex": "bd4db484",
+      "policyLogitHex": "bd04e7b1"
+    },
+    {
+      "valueHex": "bcf1c594",
+      "policyLogitHex": "bd2e3792"
+    },
+    {
+      "valueHex": "bd2a58d2",
+      "policyLogitHex": "bd43a5fc"
+    },
+    {
+      "valueHex": "bc8cf369",
+      "policyLogitHex": "bd88f956"
+    },
+    {
+      "valueHex": "bd2e21cf",
+      "policyLogitHex": "bd781ea8"
+    },
+    {
+      "valueHex": "bc918ba5",
+      "policyLogitHex": "bd17b9e8"
+    },
+    {
+      "valueHex": "bbf92082",
+      "policyLogitHex": "bd60bd84"
+    },
+    {
+      "valueHex": "bd3495b7",
+      "policyLogitHex": "bd741bc7"
+    },
+    {
+      "valueHex": "bd5afc57",
+      "policyLogitHex": "bd4aa210"
+    },
+    {
+      "valueHex": "bd236772",
+      "policyLogitHex": "bd3bd5c8"
+    },
+    {
+      "valueHex": "bd408df7",
+      "policyLogitHex": "bd3a9d5c"
+    },
+    {
+      "valueHex": "bd61b953",
+      "policyLogitHex": "bd505f3c"
+    },
+    {
+      "valueHex": "bd02b29d",
+      "policyLogitHex": "bd7c643e"
+    },
+    {
+      "valueHex": "bd325c48",
+      "policyLogitHex": "bda54731"
+    },
+    {
+      "valueHex": "bcb72491",
+      "policyLogitHex": "bd8f5323"
+    },
+    {
+      "valueHex": "bd30dd84",
+      "policyLogitHex": "bd5929f2"
+    },
+    {
+      "valueHex": "bd5339c0",
+      "policyLogitHex": "bd6c721e"
+    },
+    {
+      "valueHex": "bcfe7c62",
+      "policyLogitHex": "bd4fe8a6"
+    },
+    {
+      "valueHex": "bd14ceca",
+      "policyLogitHex": "bd7a31c7"
+    },
+    {
+      "valueHex": "bcab0a6b",
+      "policyLogitHex": "bd54a738"
+    },
+    {
+      "valueHex": "bd0b5586",
+      "policyLogitHex": "bd627cab"
+    },
+    {
+      "valueHex": "bd855ae6",
+      "policyLogitHex": "bd53ca52"
+    },
+    {
+      "valueHex": "bd48b7ac",
+      "policyLogitHex": "bd023c15"
+    },
+    {
+      "valueHex": "bd39cd54",
+      "policyLogitHex": "bd520dc6"
+    },
+    {
+      "valueHex": "bd102982",
+      "policyLogitHex": "bd81b690"
+    },
+    {
+      "valueHex": "bcbbd4e5",
+      "policyLogitHex": "bd87078e"
+    },
+    {
+      "valueHex": "bd2b62f9",
+      "policyLogitHex": "bd450e4c"
+    },
+    {
+      "valueHex": "bcf16fca",
+      "policyLogitHex": "bd66e0f3"
+    },
+    {
+      "valueHex": "bd4b68fd",
+      "policyLogitHex": "bd4ecf5c"
+    },
+    {
+      "valueHex": "bd33adba",
+      "policyLogitHex": "bd44792a"
+    },
+    {
+      "valueHex": "bcb601f5",
+      "policyLogitHex": "bd90c558"
+    },
+    {
+      "valueHex": "bd4344e4",
+      "policyLogitHex": "bd553016"
+    },
+    {
+      "valueHex": "bd32cc28",
+      "policyLogitHex": "bd84f87e"
+    },
+    {
+      "valueHex": "bd812d75",
+      "policyLogitHex": "bd3b0a9a"
+    },
+    {
+      "valueHex": "bc69cbeb",
+      "policyLogitHex": "bd7287a4"
+    },
+    {
+      "valueHex": "bd02e8f7",
+      "policyLogitHex": "bd684114"
+    },
+    {
+      "valueHex": "bd2bf600",
+      "policyLogitHex": "bd46d14d"
+    },
+    {
+      "valueHex": "bd302bae",
+      "policyLogitHex": "bd40e662"
+    },
+    {
+      "valueHex": "bd630c0e",
+      "policyLogitHex": "bd445050"
+    },
+    {
+      "valueHex": "bd2d815c",
+      "policyLogitHex": "bd40a7be"
+    },
+    {
+      "valueHex": "bcf904c8",
+      "policyLogitHex": "bd176966"
+    },
+    {
+      "valueHex": "bd6bbc7e",
+      "policyLogitHex": "bd7b97c3"
+    },
+    {
+      "valueHex": "bcda35d1",
+      "policyLogitHex": "bd73be41"
+    },
+    {
+      "valueHex": "bd1d65cd",
+      "policyLogitHex": "bd7ec4f0"
+    },
+    {
+      "valueHex": "bd501d61",
+      "policyLogitHex": "bd6b6180"
+    },
+    {
+      "valueHex": "bced64a1",
+      "policyLogitHex": "bd7b422b"
+    },
+    {
+      "valueHex": "bd3d4b4a",
+      "policyLogitHex": "bd4d6c8f"
+    },
+    {
+      "valueHex": "bd521f18",
+      "policyLogitHex": "bcf42d3b"
+    },
+    {
+      "valueHex": "bd51d57c",
+      "policyLogitHex": "bd157896"
+    },
+    {
+      "valueHex": "bd051145",
+      "policyLogitHex": "bd794394"
+    },
+    {
+      "valueHex": "bd0f0118",
+      "policyLogitHex": "bd586798"
+    },
+    {
+      "valueHex": "bd4342a0",
+      "policyLogitHex": "bd8a62c2"
+    },
+    {
+      "valueHex": "bd8bfecd",
+      "policyLogitHex": "bd5a3d40"
+    },
+    {
+      "valueHex": "bc9ddc9d",
+      "policyLogitHex": "bd99bba6"
+    },
+    {
+      "valueHex": "bd1d31f5",
+      "policyLogitHex": "bd628722"
+    },
+    {
+      "valueHex": "bcae7982",
+      "policyLogitHex": "bd37780f"
+    },
+    {
+      "valueHex": "bd2b7901",
+      "policyLogitHex": "bd380781"
+    },
+    {
+      "valueHex": "bd3b3f43",
+      "policyLogitHex": "bd518b5a"
+    },
+    {
+      "valueHex": "bd350076",
+      "policyLogitHex": "bd75f059"
+    },
+    {
+      "valueHex": "bd195767",
+      "policyLogitHex": "bd8043f6"
+    },
+    {
+      "valueHex": "bd4f3574",
+      "policyLogitHex": "bd731299"
+    },
+    {
+      "valueHex": "bd133bd5",
+      "policyLogitHex": "bd76cb1c"
+    },
+    {
+      "valueHex": "bd8237f8",
+      "policyLogitHex": "bd42477e"
+    },
+    {
+      "valueHex": "bd1811fc",
+      "policyLogitHex": "bd73be54"
+    },
+    {
+      "valueHex": "bd00ed21",
+      "policyLogitHex": "bd629c54"
+    },
+    {
+      "valueHex": "bd1f33ec",
+      "policyLogitHex": "bd7970c9"
+    },
+    {
+      "valueHex": "bd49a760",
+      "policyLogitHex": "bd3b5f2c"
+    },
+    {
+      "valueHex": "bc82f87a",
+      "policyLogitHex": "bd88d9fa"
+    },
+    {
+      "valueHex": "bd383751",
+      "policyLogitHex": "bd8154a8"
+    },
+    {
+      "valueHex": "bd492df4",
+      "policyLogitHex": "bd64bbf8"
+    },
+    {
+      "valueHex": "bceb55cf",
+      "policyLogitHex": "bd637a81"
+    },
+    {
+      "valueHex": "bd0fde27",
+      "policyLogitHex": "bd3e7bed"
+    },
+    {
+      "valueHex": "bd2e9e70",
+      "policyLogitHex": "bd8f9576"
+    },
+    {
+      "valueHex": "bce3cfd5",
+      "policyLogitHex": "bd1c559e"
+    },
+    {
+      "valueHex": "bd195507",
+      "policyLogitHex": "bd7d669a"
+    },
+    {
+      "valueHex": "bd2f0443",
+      "policyLogitHex": "bd5e9604"
+    },
+    {
+      "valueHex": "bd539b72",
+      "policyLogitHex": "bd633d54"
+    },
+    {
+      "valueHex": "bcb7e59c",
+      "policyLogitHex": "bd7beaab"
+    },
+    {
+      "valueHex": "bd342b9a",
+      "policyLogitHex": "bd454b43"
+    },
+    {
+      "valueHex": "bd41c1aa",
+      "policyLogitHex": "bd7ff1d7"
+    },
+    {
+      "valueHex": "bd216941",
+      "policyLogitHex": "bd7e29a0"
+    },
+    {
+      "valueHex": "bd80d7e9",
+      "policyLogitHex": "bd40dce8"
+    },
+    {
+      "valueHex": "bcc10b20",
+      "policyLogitHex": "bcdd6f22"
+    },
+    {
+      "valueHex": "bd22f836",
+      "policyLogitHex": "bd553edc"
+    },
+    {
+      "valueHex": "bd14bbd6",
+      "policyLogitHex": "bd8b4c0c"
+    },
+    {
+      "valueHex": "bd6cd8ba",
+      "policyLogitHex": "bd61e052"
+    },
+    {
+      "valueHex": "bcdc8de1",
+      "policyLogitHex": "bd4397be"
+    },
+    {
+      "valueHex": "bd1381b7",
+      "policyLogitHex": "bd6e9b6b"
+    },
+    {
+      "valueHex": "bd280046",
+      "policyLogitHex": "bd0fd6e9"
+    },
+    {
+      "valueHex": "bd3a03d2",
+      "policyLogitHex": "bd606041"
+    },
+    {
+      "valueHex": "bd826eb1",
+      "policyLogitHex": "bd45d4da"
+    },
+    {
+      "valueHex": "bcf99580",
+      "policyLogitHex": "bd6a4ad0"
+    },
+    {
+      "valueHex": "bc89c3da",
+      "policyLogitHex": "bd8f6b96"
+    },
+    {
+      "valueHex": "bcacff4f",
+      "policyLogitHex": "bd2f0d31"
+    },
+    {
+      "valueHex": "bccfbaa3",
+      "policyLogitHex": "bd5efba0"
+    },
+    {
+      "valueHex": "bd57c04a",
+      "policyLogitHex": "bd47728c"
+    },
+    {
+      "valueHex": "bd4fe9fb",
+      "policyLogitHex": "bd60e51c"
+    },
+    {
+      "valueHex": "bd21b7ca",
+      "policyLogitHex": "bd8ea10a"
+    },
+    {
+      "valueHex": "bd143739",
+      "policyLogitHex": "bd9b11d2"
+    },
+    {
+      "valueHex": "bd1a51d3",
+      "policyLogitHex": "bd530bca"
+    },
+    {
+      "valueHex": "bca0aabf",
+      "policyLogitHex": "bd735bcd"
+    },
+    {
+      "valueHex": "bd1424f7",
+      "policyLogitHex": "bd76a9b8"
+    },
+    {
+      "valueHex": "bcac4bd8",
+      "policyLogitHex": "bd72cecc"
+    },
+    {
+      "valueHex": "bd4dc092",
+      "policyLogitHex": "bd5fad71"
+    },
+    {
+      "valueHex": "bd4d4d99",
+      "policyLogitHex": "bd37b472"
+    },
+    {
+      "valueHex": "bd1fb756",
+      "policyLogitHex": "bd1401bd"
+    },
+    {
+      "valueHex": "bd3b6c89",
+      "policyLogitHex": "bd770bb7"
+    },
+    {
+      "valueHex": "bd02e379",
+      "policyLogitHex": "bd5234ca"
+    },
+    {
+      "valueHex": "bd1a8d54",
+      "policyLogitHex": "bd5eb4f8"
+    },
+    {
+      "valueHex": "bd134081",
+      "policyLogitHex": "bd872330"
+    },
+    {
+      "valueHex": "bd347669",
+      "policyLogitHex": "bda22378"
+    },
+    {
+      "valueHex": "bd733f77",
+      "policyLogitHex": "bd310082"
+    },
+    {
+      "valueHex": "bd42178e",
+      "policyLogitHex": "bd3a5c70"
+    },
+    {
+      "valueHex": "bd38be0c",
+      "policyLogitHex": "bd6a0cc2"
+    },
+    {
+      "valueHex": "bd5119cd",
+      "policyLogitHex": "bd8ca579"
+    },
+    {
+      "valueHex": "bc97ee84",
+      "policyLogitHex": "bd79e288"
+    },
+    {
+      "valueHex": "bd2d6151",
+      "policyLogitHex": "bd810031"
+    },
+    {
+      "valueHex": "bd015c19",
+      "policyLogitHex": "bd532dee"
+    },
+    {
+      "valueHex": "bd4026d8",
+      "policyLogitHex": "bd436fac"
+    },
+    {
+      "valueHex": "bcd47d93",
+      "policyLogitHex": "bd71f8c9"
+    },
+    {
+      "valueHex": "bd9d9058",
+      "policyLogitHex": "bd6d7d7a"
+    },
+    {
+      "valueHex": "bd1fbcb3",
+      "policyLogitHex": "bd478ae7"
+    },
+    {
+      "valueHex": "bd460fca",
+      "policyLogitHex": "bda15ef6"
+    },
+    {
+      "valueHex": "bd4de653",
+      "policyLogitHex": "bd5d90e2"
+    },
+    {
+      "valueHex": "bceaa9c1",
+      "policyLogitHex": "bd900c70"
+    },
+    {
+      "valueHex": "bd0e1a7b",
+      "policyLogitHex": "bd66676f"
+    },
+    {
+      "valueHex": "bd2ae042",
+      "policyLogitHex": "bd4d492a"
+    },
+    {
+      "valueHex": "bd41a124",
+      "policyLogitHex": "bd84f5ae"
+    },
+    {
+      "valueHex": "bcb8c432",
+      "policyLogitHex": "bd6979f2"
+    },
+    {
+      "valueHex": "bd0f420a",
+      "policyLogitHex": "bd69e78a"
+    },
+    {
+      "valueHex": "bd2872c9",
+      "policyLogitHex": "bd63d39e"
+    },
+    {
+      "valueHex": "bd5f52eb",
+      "policyLogitHex": "bd5afad0"
+    },
+    {
+      "valueHex": "bca647c6",
+      "policyLogitHex": "bd546b0f"
+    },
+    {
+      "valueHex": "bd62085f",
+      "policyLogitHex": "bd4c2c6c"
+    },
+    {
+      "valueHex": "bccbac3c",
+      "policyLogitHex": "bd8434e3"
+    },
+    {
+      "valueHex": "bd1d3742",
+      "policyLogitHex": "bd425f88"
+    },
+    {
+      "valueHex": "bd644a97",
+      "policyLogitHex": "bd68af87"
+    },
+    {
+      "valueHex": "bc8d3ce4",
+      "policyLogitHex": "bd3daaec"
+    },
+    {
+      "valueHex": "bd189e77",
+      "policyLogitHex": "bd1f4671"
+    },
+    {
+      "valueHex": "bd673cd0",
+      "policyLogitHex": "bd5ca321"
+    },
+    {
+      "valueHex": "bcf6e1a3",
+      "policyLogitHex": "bd5f71bc"
+    },
+    {
+      "valueHex": "bd13ceff",
+      "policyLogitHex": "bd6aeb17"
+    },
+    {
+      "valueHex": "bd465240",
+      "policyLogitHex": "bd877602"
+    },
+    {
+      "valueHex": "bc93c512",
+      "policyLogitHex": "bd1a9e96"
+    },
+    {
+      "valueHex": "bda55089",
+      "policyLogitHex": "bd2b8c10"
+    },
+    {
+      "valueHex": "bd10d4a6",
+      "policyLogitHex": "bd4cb9ad"
+    },
+    {
+      "valueHex": "bcf6c50e",
+      "policyLogitHex": "bd7b86ec"
+    },
+    {
+      "valueHex": "bcfdba9a",
+      "policyLogitHex": "bd56546a"
+    },
+    {
+      "valueHex": "bd56e93e",
+      "policyLogitHex": "bd4ac8d3"
+    },
+    {
+      "valueHex": "bceb7e6a",
+      "policyLogitHex": "bd87923e"
+    },
+    {
+      "valueHex": "bd1b1ea3",
+      "policyLogitHex": "bd63570d"
+    },
+    {
+      "valueHex": "bd25d52b",
+      "policyLogitHex": "bd5d0b94"
+    },
+    {
+      "valueHex": "bd646aaf",
+      "policyLogitHex": "bd6eed8c"
+    },
+    {
+      "valueHex": "bd7c6268",
+      "policyLogitHex": "bd8d53af"
+    },
+    {
+      "valueHex": "bd0d5503",
+      "policyLogitHex": "bd9aa980"
+    },
+    {
+      "valueHex": "bd2a00e8",
+      "policyLogitHex": "bd641aee"
+    },
+    {
+      "valueHex": "bd68d9a2",
+      "policyLogitHex": "bd126798"
+    },
+    {
+      "valueHex": "bd4a9da0",
+      "policyLogitHex": "bd787aa3"
+    },
+    {
+      "valueHex": "bd4632d8",
+      "policyLogitHex": "bd68e7dc"
+    },
+    {
+      "valueHex": "bce656c4",
+      "policyLogitHex": "bd58b0a3"
+    },
+    {
+      "valueHex": "bd295d98",
+      "policyLogitHex": "bd73d876"
+    },
+    {
+      "valueHex": "bd564a41",
+      "policyLogitHex": "bd5710ce"
+    },
+    {
+      "valueHex": "bd009a5f",
+      "policyLogitHex": "bd354c76"
+    },
+    {
+      "valueHex": "bd0bfaed",
+      "policyLogitHex": "bd8047a4"
+    },
+    {
+      "valueHex": "bd19dc43",
+      "policyLogitHex": "bd43cdf5"
+    },
+    {
+      "valueHex": "bd333667",
+      "policyLogitHex": "bd73665b"
+    },
+    {
+      "valueHex": "bcd84bc7",
+      "policyLogitHex": "bd746eba"
+    },
+    {
+      "valueHex": "bcf8e92f",
+      "policyLogitHex": "bd3d0178"
+    },
+    {
+      "valueHex": "bd804521",
+      "policyLogitHex": "bd83cd6e"
+    },
+    {
+      "valueHex": "bc6410aa",
+      "policyLogitHex": "bd32b2fe"
+    },
+    {
+      "valueHex": "bd2d2436",
+      "policyLogitHex": "bd8dfe8c"
+    },
+    {
+      "valueHex": "bd2be096",
+      "policyLogitHex": "bd8a4366"
+    },
+    {
+      "valueHex": "bd4f26ec",
+      "policyLogitHex": "bd6d7590"
+    },
+    {
+      "valueHex": "bd11aa10",
+      "policyLogitHex": "bd82fd36"
+    },
+    {
+      "valueHex": "bd12236c",
+      "policyLogitHex": "bd78dae7"
+    },
+    {
+      "valueHex": "bd30bd95",
+      "policyLogitHex": "bd38eef3"
+    },
+    {
+      "valueHex": "bd215a99",
+      "policyLogitHex": "bd0ccdf6"
+    },
+    {
+      "valueHex": "bce963f5",
+      "policyLogitHex": "bd7bda63"
+    },
+    {
+      "valueHex": "bd3f29e5",
+      "policyLogitHex": "bd59cfbc"
+    },
+    {
+      "valueHex": "bd2b0782",
+      "policyLogitHex": "bd7c8efa"
+    },
+    {
+      "valueHex": "bd6b72b8",
+      "policyLogitHex": "bd68097c"
+    },
+    {
+      "valueHex": "bd601c44",
+      "policyLogitHex": "bd58251c"
+    },
+    {
+      "valueHex": "bd586485",
+      "policyLogitHex": "bd5137f6"
+    },
+    {
+      "valueHex": "bd691fc6",
+      "policyLogitHex": "bd4dd769"
+    },
+    {
+      "valueHex": "bd0d00b6",
+      "policyLogitHex": "bd615613"
+    },
+    {
+      "valueHex": "bd4202bd",
+      "policyLogitHex": "bd3b5be0"
+    },
+    {
+      "valueHex": "bd843e4e",
+      "policyLogitHex": "bd68ca2a"
+    },
+    {
+      "valueHex": "bd164bdb",
+      "policyLogitHex": "bd82a018"
+    },
+    {
+      "valueHex": "bd51373c",
+      "policyLogitHex": "bd6ac167"
+    },
+    {
+      "valueHex": "bcc992a7",
+      "policyLogitHex": "bd4e09a3"
+    },
+    {
+      "valueHex": "bcf722f7",
+      "policyLogitHex": "bd3de6d0"
+    },
+    {
+      "valueHex": "bcea69d7",
+      "policyLogitHex": "bd55eb04"
+    },
+    {
+      "valueHex": "bd16b0a0",
+      "policyLogitHex": "bd804b9e"
+    },
+    {
+      "valueHex": "bc5fc260",
+      "policyLogitHex": "bd638ca8"
+    },
+    {
+      "valueHex": "bd0fdba2",
+      "policyLogitHex": "bd54bec2"
+    },
+    {
+      "valueHex": "bd6ae8a2",
+      "policyLogitHex": "bd80b44a"
+    },
+    {
+      "valueHex": "bd1f5033",
+      "policyLogitHex": "bd5931f2"
+    },
+    {
+      "valueHex": "bd8567b3",
+      "policyLogitHex": "bd7dcaca"
+    },
+    {
+      "valueHex": "bcdcac12",
+      "policyLogitHex": "bd85c530"
+    },
+    {
+      "valueHex": "bd6f0171",
+      "policyLogitHex": "bd882588"
+    },
+    {
+      "valueHex": "bd151121",
+      "policyLogitHex": "bd5b4e72"
+    },
+    {
+      "valueHex": "bca95595",
+      "policyLogitHex": "bd9bfa64"
+    },
+    {
+      "valueHex": "bd4f2026",
+      "policyLogitHex": "bd50ce9b"
+    },
+    {
+      "valueHex": "bd21b911",
+      "policyLogitHex": "bd603e52"
+    },
+    {
+      "valueHex": "bd2df18a",
+      "policyLogitHex": "bd30e52a"
+    },
+    {
+      "valueHex": "bd27427f",
+      "policyLogitHex": "bd7f59f7"
+    },
+    {
+      "valueHex": "bd1cecde",
+      "policyLogitHex": "bd4c9a4a"
+    },
+    {
+      "valueHex": "bcbde732",
+      "policyLogitHex": "bd8bdf38"
+    },
+    {
+      "valueHex": "bcd945e2",
+      "policyLogitHex": "bd680816"
+    },
+    {
+      "valueHex": "bd1c93dc",
+      "policyLogitHex": "bd28f945"
+    },
+    {
+      "valueHex": "bd1edbf0",
+      "policyLogitHex": "bd85e172"
+    },
+    {
+      "valueHex": "bd364b4f",
+      "policyLogitHex": "bd3685ee"
+    },
+    {
+      "valueHex": "bd4b23cc",
+      "policyLogitHex": "bd58b2e0"
+    },
+    {
+      "valueHex": "bd1f8a04",
+      "policyLogitHex": "bd7928c8"
+    },
+    {
+      "valueHex": "bd2f5368",
+      "policyLogitHex": "bd57d67c"
+    },
+    {
+      "valueHex": "bc6a5fd9",
+      "policyLogitHex": "bd158abb"
+    },
+    {
+      "valueHex": "bd2ab491",
+      "policyLogitHex": "bd795e86"
+    },
+    {
+      "valueHex": "bd32d5ec",
+      "policyLogitHex": "bd6d3734"
+    },
+    {
+      "valueHex": "bd309e15",
+      "policyLogitHex": "bd626c18"
+    },
+    {
+      "valueHex": "bd111485",
+      "policyLogitHex": "bd5fa77e"
+    },
+    {
+      "valueHex": "bd52a816",
+      "policyLogitHex": "bd8f611e"
+    },
+    {
+      "valueHex": "bd45b225",
+      "policyLogitHex": "bd5c2302"
+    },
+    {
+      "valueHex": "bccef732",
+      "policyLogitHex": "bd6c5e8c"
+    },
+    {
+      "valueHex": "bd26799e",
+      "policyLogitHex": "bd84b9c6"
+    },
+    {
+      "valueHex": "bcd47e2d",
+      "policyLogitHex": "bd8e61fa"
+    },
+    {
+      "valueHex": "bd08e98d",
+      "policyLogitHex": "bd8e316e"
+    },
+    {
+      "valueHex": "bcfb7575",
+      "policyLogitHex": "bd5e6355"
+    },
+    {
+      "valueHex": "bd005278",
+      "policyLogitHex": "bd85c9fe"
+    },
+    {
+      "valueHex": "bce860b3",
+      "policyLogitHex": "bd8f720a"
+    },
+    {
+      "valueHex": "bd27e407",
+      "policyLogitHex": "bd5977d9"
+    },
+    {
+      "valueHex": "bcd3c83a",
+      "policyLogitHex": "bd5d1eaa"
+    },
+    {
+      "valueHex": "bd28b25d",
+      "policyLogitHex": "bd453461"
+    },
+    {
+      "valueHex": "bd09e70e",
+      "policyLogitHex": "bd163053"
+    },
+    {
+      "valueHex": "bcfe48c4",
+      "policyLogitHex": "bd4fe57c"
+    },
+    {
+      "valueHex": "bd059896",
+      "policyLogitHex": "bd60a8e2"
+    },
+    {
+      "valueHex": "bd5bbf8f",
+      "policyLogitHex": "bd78a05d"
+    },
+    {
+      "valueHex": "bd44ea7c",
+      "policyLogitHex": "bd4fa2ef"
+    },
+    {
+      "valueHex": "bd4491ba",
+      "policyLogitHex": "bd4a3aaf"
+    },
+    {
+      "valueHex": "bd249339",
+      "policyLogitHex": "bd3555f5"
+    },
+    {
+      "valueHex": "bd6866c6",
+      "policyLogitHex": "bd532717"
+    },
+    {
+      "valueHex": "bd249ac9",
+      "policyLogitHex": "bd61e1d0"
+    },
+    {
+      "valueHex": "bd39e371",
+      "policyLogitHex": "bd78ac43"
+    },
+    {
+      "valueHex": "bd07f617",
+      "policyLogitHex": "bd597f2e"
+    },
+    {
+      "valueHex": "bcb604e8",
+      "policyLogitHex": "bd6be6fa"
+    },
+    {
+      "valueHex": "bd2250c8",
+      "policyLogitHex": "bd33237d"
+    },
+    {
+      "valueHex": "bc83f785",
+      "policyLogitHex": "bd3dcfee"
+    },
+    {
+      "valueHex": "bd5a0ed8",
+      "policyLogitHex": "bd6dedd4"
+    },
+    {
+      "valueHex": "bd43b4bc",
+      "policyLogitHex": "bd17220b"
+    },
+    {
+      "valueHex": "bd31f338",
+      "policyLogitHex": "bd6cf6ec"
+    },
+    {
+      "valueHex": "bd3a1b20",
+      "policyLogitHex": "bd67d57a"
+    },
+    {
+      "valueHex": "bd43b5f3",
+      "policyLogitHex": "bd5bc4c5"
+    },
+    {
+      "valueHex": "bd1646f1",
+      "policyLogitHex": "bd6fd882"
+    },
+    {
+      "valueHex": "bcd1868e",
+      "policyLogitHex": "bdb5fab7"
+    },
+    {
+      "valueHex": "bd886e9c",
+      "policyLogitHex": "bd6dd805"
+    },
+    {
+      "valueHex": "bd0c3c8a",
+      "policyLogitHex": "bd833328"
+    },
+    {
+      "valueHex": "bd46d829",
+      "policyLogitHex": "bd9b276a"
+    },
+    {
+      "valueHex": "bd1076f0",
+      "policyLogitHex": "bd58c6bc"
+    },
+    {
+      "valueHex": "bd57cee1",
+      "policyLogitHex": "bd634d02"
+    },
+    {
+      "valueHex": "bd54e3d7",
+      "policyLogitHex": "bd933a9b"
+    },
+    {
+      "valueHex": "bd449954",
+      "policyLogitHex": "bd56f936"
+    },
+    {
+      "valueHex": "bd9e1a74",
+      "policyLogitHex": "bd7190f3"
+    },
+    {
+      "valueHex": "bc44b137",
+      "policyLogitHex": "bd89278a"
+    },
+    {
+      "valueHex": "bd179235",
+      "policyLogitHex": "bd59b6e4"
+    },
+    {
+      "valueHex": "bd2a000f",
+      "policyLogitHex": "bd1ec1c6"
+    },
+    {
+      "valueHex": "bd1446b7",
+      "policyLogitHex": "bd2cca62"
+    },
+    {
+      "valueHex": "bce3aaca",
+      "policyLogitHex": "bd82dc9d"
+    },
+    {
+      "valueHex": "bd436299",
+      "policyLogitHex": "bd6b9750"
+    },
+    {
+      "valueHex": "bd448135",
+      "policyLogitHex": "bd58c374"
+    },
+    {
+      "valueHex": "bd189af3",
+      "policyLogitHex": "bd6d506f"
+    },
+    {
+      "valueHex": "bce0959e",
+      "policyLogitHex": "bd5a89be"
+    },
+    {
+      "valueHex": "bd5ea9c6",
+      "policyLogitHex": "bd4f82c4"
+    },
+    {
+      "valueHex": "bd8098e8",
+      "policyLogitHex": "bd56183a"
+    },
+    {
+      "valueHex": "bd4a48d0",
+      "policyLogitHex": "bd3839cb"
+    },
+    {
+      "valueHex": "bce806ba",
+      "policyLogitHex": "bd4dc2b8"
+    },
+    {
+      "valueHex": "bd22bb4c",
+      "policyLogitHex": "bd8c256b"
+    },
+    {
+      "valueHex": "bca361e7",
+      "policyLogitHex": "bd7f1952"
+    },
+    {
+      "valueHex": "bd23ea97",
+      "policyLogitHex": "bd6477ea"
+    },
+    {
+      "valueHex": "bd1f3bbf",
+      "policyLogitHex": "bd7224da"
+    },
+    {
+      "valueHex": "bd1ecdc2",
+      "policyLogitHex": "bd8ddcd1"
+    },
+    {
+      "valueHex": "bd11173c",
+      "policyLogitHex": "bd89a1a7"
+    },
+    {
+      "valueHex": "bc8ca890",
+      "policyLogitHex": "bd97a904"
+    },
+    {
+      "valueHex": "bd613172",
+      "policyLogitHex": "bd7c66d4"
+    },
+    {
+      "valueHex": "bd338c22",
+      "policyLogitHex": "bd47eec5"
+    },
+    {
+      "valueHex": "bd34f623",
+      "policyLogitHex": "bd72ef15"
+    },
+    {
+      "valueHex": "bd62c22f",
+      "policyLogitHex": "bcf94e49"
+    },
+    {
+      "valueHex": "bd4f450d",
+      "policyLogitHex": "bd62a9ac"
+    },
+    {
+      "valueHex": "bcdc89b5",
+      "policyLogitHex": "bd359a06"
+    },
+    {
+      "valueHex": "bd934ef4",
+      "policyLogitHex": "bd9fbe7f"
+    },
+    {
+      "valueHex": "bd32c235",
+      "policyLogitHex": "bd277c30"
+    },
+    {
+      "valueHex": "bd5a1813",
+      "policyLogitHex": "bd6ba538"
+    },
+    {
+      "valueHex": "bd3c31a2",
+      "policyLogitHex": "bd88f65c"
+    },
+    {
+      "valueHex": "bd307594",
+      "policyLogitHex": "bd6fb0a2"
+    },
+    {
+      "valueHex": "bcf1fe95",
+      "policyLogitHex": "bd63cf28"
+    },
+    {
+      "valueHex": "bd664b1e",
+      "policyLogitHex": "bd6d615b"
+    },
+    {
+      "valueHex": "bc9291d0",
+      "policyLogitHex": "bd30e124"
+    },
+    {
+      "valueHex": "bd3f624f",
+      "policyLogitHex": "bd5edb0a"
+    },
+    {
+      "valueHex": "bd153e27",
+      "policyLogitHex": "bd4d4e10"
+    },
+    {
+      "valueHex": "bd8d6af2",
+      "policyLogitHex": "bd26339f"
+    },
+    {
+      "valueHex": "bd0e70db",
+      "policyLogitHex": "bd620af1"
+    },
+    {
+      "valueHex": "bd674dd3",
+      "policyLogitHex": "bd5565de"
+    },
+    {
+      "valueHex": "bd26415d",
+      "policyLogitHex": "bd6056dd"
+    },
+    {
+      "valueHex": "bcea169e",
+      "policyLogitHex": "bd8cea2d"
+    },
+    {
+      "valueHex": "bd417bd6",
+      "policyLogitHex": "bd8d0ad8"
+    },
+    {
+      "valueHex": "bb99883f",
+      "policyLogitHex": "bd5ea7c4"
+    },
+    {
+      "valueHex": "bd093105",
+      "policyLogitHex": "bd40074c"
+    },
+    {
+      "valueHex": "bd2c74a8",
+      "policyLogitHex": "bd6e2b42"
+    },
+    {
+      "valueHex": "bd6245bb",
+      "policyLogitHex": "bd786ac9"
+    },
+    {
+      "valueHex": "bd06a1e4",
+      "policyLogitHex": "bd3d2334"
+    },
+    {
+      "valueHex": "bd5ffd6f",
+      "policyLogitHex": "bd7848bb"
+    },
+    {
+      "valueHex": "bc15b367",
+      "policyLogitHex": "bd444fb2"
+    },
+    {
+      "valueHex": "bd33ea88",
+      "policyLogitHex": "bd7f9418"
+    },
+    {
+      "valueHex": "bd8dc2c5",
+      "policyLogitHex": "bd4d7df5"
+    },
+    {
+      "valueHex": "bd07f5ec",
+      "policyLogitHex": "bd22edaa"
+    },
+    {
+      "valueHex": "bd36be36",
+      "policyLogitHex": "bd31fbfe"
+    },
+    {
+      "valueHex": "bd112904",
+      "policyLogitHex": "bd5c4e1e"
+    },
+    {
+      "valueHex": "bd1a2ee2",
+      "policyLogitHex": "bd91e180"
+    },
+    {
+      "valueHex": "bd118a07",
+      "policyLogitHex": "bd5cea26"
+    },
+    {
+      "valueHex": "bd0a994d",
+      "policyLogitHex": "bd801f0c"
+    },
+    {
+      "valueHex": "bd2e131e",
+      "policyLogitHex": "bd67b4f3"
+    },
+    {
+      "valueHex": "bd22ffd8",
+      "policyLogitHex": "bd762e60"
+    },
+    {
+      "valueHex": "bd0c507e",
+      "policyLogitHex": "bd3cf414"
+    },
+    {
+      "valueHex": "bd1707f9",
+      "policyLogitHex": "bd395758"
+    },
+    {
+      "valueHex": "bd3c9e18",
+      "policyLogitHex": "bd658437"
+    },
+    {
+      "valueHex": "bcc37b5c",
+      "policyLogitHex": "bd74f940"
+    },
+    {
+      "valueHex": "bcecebe0",
+      "policyLogitHex": "bd42d44b"
+    },
+    {
+      "valueHex": "bd33977b",
+      "policyLogitHex": "bd69c8b6"
+    },
+    {
+      "valueHex": "bd2a5b56",
+      "policyLogitHex": "bd3a4bc1"
+    },
+    {
+      "valueHex": "bd644d3a",
+      "policyLogitHex": "bd8c4800"
+    },
+    {
+      "valueHex": "bd01c7e9",
+      "policyLogitHex": "bd61a4da"
+    },
+    {
+      "valueHex": "bd38e908",
+      "policyLogitHex": "bd3a1294"
+    },
+    {
+      "valueHex": "bd2e2850",
+      "policyLogitHex": "bd138ac6"
+    },
+    {
+      "valueHex": "bd44a7b1",
+      "policyLogitHex": "bd6a3bdc"
+    },
+    {
+      "valueHex": "bd13a1c0",
+      "policyLogitHex": "bd621d95"
+    },
+    {
+      "valueHex": "bd4b58e9",
+      "policyLogitHex": "bd4d7868"
+    },
+    {
+      "valueHex": "bd4dd337",
+      "policyLogitHex": "bd7a7438"
+    },
+    {
+      "valueHex": "bd1bc20e",
+      "policyLogitHex": "bd50f35a"
+    },
+    {
+      "valueHex": "bd76722e",
+      "policyLogitHex": "bd6f0696"
+    },
+    {
+      "valueHex": "bd0872e4",
+      "policyLogitHex": "bd47afd4"
+    },
+    {
+      "valueHex": "bd555848",
+      "policyLogitHex": "bcf98f52"
+    },
+    {
+      "valueHex": "bd08f81e",
+      "policyLogitHex": "bd566014"
+    },
+    {
+      "valueHex": "bd4f04a5",
+      "policyLogitHex": "bd0cb75f"
+    },
+    {
+      "valueHex": "bcecc2ad",
+      "policyLogitHex": "bd79a536"
+    },
+    {
+      "valueHex": "bcbc19ba",
+      "policyLogitHex": "bd7e1a45"
+    },
+    {
+      "valueHex": "bcd7d864",
+      "policyLogitHex": "bd1c82c2"
+    },
+    {
+      "valueHex": "bd3322cd",
+      "policyLogitHex": "bd55ac34"
+    },
+    {
+      "valueHex": "bd428f59",
+      "policyLogitHex": "bd13ca5b"
+    },
+    {
+      "valueHex": "bd232ae2",
+      "policyLogitHex": "bd8cb892"
+    },
+    {
+      "valueHex": "bd40323d",
+      "policyLogitHex": "bd8d938e"
+    },
+    {
+      "valueHex": "bcf3d33b",
+      "policyLogitHex": "bd8345be"
+    },
+    {
+      "valueHex": "bd12b886",
+      "policyLogitHex": "bd90b69a"
+    },
+    {
+      "valueHex": "bd2efa29",
+      "policyLogitHex": "bd8b1918"
+    },
+    {
+      "valueHex": "bd58f5c6",
+      "policyLogitHex": "bd620e80"
+    },
+    {
+      "valueHex": "bd006a98",
+      "policyLogitHex": "bd59544a"
+    },
+    {
+      "valueHex": "bd18b266",
+      "policyLogitHex": "bd890f8a"
+    },
+    {
+      "valueHex": "bd63b0c5",
+      "policyLogitHex": "bd2da08f"
+    },
+    {
+      "valueHex": "bcd4ccae",
+      "policyLogitHex": "bd346042"
+    },
+    {
+      "valueHex": "bd05e113",
+      "policyLogitHex": "bd9749d6"
+    },
+    {
+      "valueHex": "bc2c4e22",
+      "policyLogitHex": "bd615414"
+    },
+    {
+      "valueHex": "bd022a34",
+      "policyLogitHex": "bd480d01"
+    },
+    {
+      "valueHex": "bd4368f0",
+      "policyLogitHex": "bd51fe33"
+    },
+    {
+      "valueHex": "bd22bad9",
+      "policyLogitHex": "bd70d569"
+    },
+    {
+      "valueHex": "bd5993b7",
+      "policyLogitHex": "bd77b94f"
+    },
+    {
+      "valueHex": "bcd90b6b",
+      "policyLogitHex": "bd68215a"
+    },
+    {
+      "valueHex": "bcf2c33b",
+      "policyLogitHex": "bd3597ec"
+    },
+    {
+      "valueHex": "bd05a484",
+      "policyLogitHex": "bd5c5a60"
+    },
+    {
+      "valueHex": "bcdf8316",
+      "policyLogitHex": "bd820aee"
+    },
+    {
+      "valueHex": "bd742451",
+      "policyLogitHex": "bcf8d8b3"
+    },
+    {
+      "valueHex": "bd3d8198",
+      "policyLogitHex": "bd8905a5"
+    },
+    {
+      "valueHex": "bd12a92a",
+      "policyLogitHex": "bd275dcc"
+    },
+    {
+      "valueHex": "bd169dd2",
+      "policyLogitHex": "bd1e989a"
+    },
+    {
+      "valueHex": "bd17dc7f",
+      "policyLogitHex": "bd5453e2"
+    },
+    {
+      "valueHex": "bd2cc9d6",
+      "policyLogitHex": "bd3b8ee1"
+    },
+    {
+      "valueHex": "bd2993e4",
+      "policyLogitHex": "bd9fd4a0"
+    },
+    {
+      "valueHex": "bd056926",
+      "policyLogitHex": "bd7f8e59"
+    },
+    {
+      "valueHex": "bd195b02",
+      "policyLogitHex": "bd98c6da"
+    },
+    {
+      "valueHex": "bc88ae84",
+      "policyLogitHex": "bd737e17"
+    },
+    {
+      "valueHex": "bcb50d49",
+      "policyLogitHex": "bd5454f4"
+    },
+    {
+      "valueHex": "bcb79d4d",
+      "policyLogitHex": "bd36ab3e"
+    },
+    {
+      "valueHex": "bd4e21af",
+      "policyLogitHex": "bcd6286e"
+    },
+    {
+      "valueHex": "bd8a59a0",
+      "policyLogitHex": "bce4ae34"
+    },
+    {
+      "valueHex": "bd07beaf",
+      "policyLogitHex": "bd70ad11"
+    },
+    {
+      "valueHex": "bd10adf3",
+      "policyLogitHex": "bd6cb9a3"
+    },
+    {
+      "valueHex": "bd2d9ada",
+      "policyLogitHex": "bd6de092"
+    },
+    {
+      "valueHex": "bd3622e8",
+      "policyLogitHex": "bd790832"
+    },
+    {
+      "valueHex": "bc805828",
+      "policyLogitHex": "bd566ac7"
+    },
+    {
+      "valueHex": "bd06266b",
+      "policyLogitHex": "bd8002b4"
+    },
+    {
+      "valueHex": "bd57c6b8",
+      "policyLogitHex": "bd50432e"
+    },
+    {
+      "valueHex": "bd32464b",
+      "policyLogitHex": "bd4cfce6"
+    },
+    {
+      "valueHex": "bd5497e9",
+      "policyLogitHex": "bd816739"
+    },
+    {
+      "valueHex": "bd203fe1",
+      "policyLogitHex": "bd5dd3b7"
+    },
+    {
+      "valueHex": "bcf609b8",
+      "policyLogitHex": "bd8eeb4c"
+    },
+    {
+      "valueHex": "bd38331a",
+      "policyLogitHex": "bd8cbd92"
+    },
+    {
+      "valueHex": "bcf94435",
+      "policyLogitHex": "bd31772b"
+    },
+    {
+      "valueHex": "bcb4879c",
+      "policyLogitHex": "bd77d1a5"
+    },
+    {
+      "valueHex": "bd8f80dd",
+      "policyLogitHex": "bd642d8c"
+    },
+    {
+      "valueHex": "bd8c355d",
+      "policyLogitHex": "bd35df04"
+    },
+    {
+      "valueHex": "bd8d1269",
+      "policyLogitHex": "bd0b95fe"
+    },
+    {
+      "valueHex": "bcb48a83",
+      "policyLogitHex": "bd618abe"
+    },
+    {
+      "valueHex": "bd04532d",
+      "policyLogitHex": "bd5210e0"
+    },
+    {
+      "valueHex": "bd2b88e4",
+      "policyLogitHex": "bd71a260"
+    },
+    {
+      "valueHex": "bd77cd67",
+      "policyLogitHex": "bd163ece"
+    },
+    {
+      "valueHex": "bd2e442b",
+      "policyLogitHex": "bd41aa28"
+    },
+    {
+      "valueHex": "bd20bd70",
+      "policyLogitHex": "bd63df94"
+    },
+    {
+      "valueHex": "bcefe66d",
+      "policyLogitHex": "bd54f8ca"
+    },
+    {
+      "valueHex": "bd23e4df",
+      "policyLogitHex": "bd5b96f2"
+    },
+    {
+      "valueHex": "bce907fb",
+      "policyLogitHex": "bd5e93d4"
+    },
+    {
+      "valueHex": "bce0b3c9",
+      "policyLogitHex": "bd74addb"
+    },
+    {
+      "valueHex": "bd05ed3f",
+      "policyLogitHex": "bd86ca78"
+    },
+    {
+      "valueHex": "bcfe1582",
+      "policyLogitHex": "bd2d94de"
+    },
+    {
+      "valueHex": "bcaee9ed",
+      "policyLogitHex": "bda82342"
+    },
+    {
+      "valueHex": "bd69c6cf",
+      "policyLogitHex": "bd44435c"
+    },
+    {
+      "valueHex": "bd1a2f93",
+      "policyLogitHex": "bd2b200b"
+    },
+    {
+      "valueHex": "bd28c26b",
+      "policyLogitHex": "bd44bb3e"
+    },
+    {
+      "valueHex": "bd941612",
+      "policyLogitHex": "bd271a22"
+    },
+    {
+      "valueHex": "bd5a1cf9",
+      "policyLogitHex": "bd831fef"
+    },
+    {
+      "valueHex": "bcfdb1b4",
+      "policyLogitHex": "bd698eef"
+    },
+    {
+      "valueHex": "bd01f6a8",
+      "policyLogitHex": "bd5cd3d4"
+    },
+    {
+      "valueHex": "bd636927",
+      "policyLogitHex": "bd2433fe"
+    },
+    {
+      "valueHex": "bd367697",
+      "policyLogitHex": "bd79ef51"
+    },
+    {
+      "valueHex": "bd423358",
+      "policyLogitHex": "bd4ccf60"
+    },
+    {
+      "valueHex": "bd1f0b2d",
+      "policyLogitHex": "bd31902e"
+    },
+    {
+      "valueHex": "bd1527fa",
+      "policyLogitHex": "bd576a86"
+    },
+    {
+      "valueHex": "bd2e1d82",
+      "policyLogitHex": "bd75ef50"
+    },
+    {
+      "valueHex": "bd5645dd",
+      "policyLogitHex": "bd306dd6"
+    },
+    {
+      "valueHex": "bd28552a",
+      "policyLogitHex": "bd6611c8"
+    },
+    {
+      "valueHex": "bd2b781c",
+      "policyLogitHex": "bd0a7473"
+    },
+    {
+      "valueHex": "bcb32ccd",
+      "policyLogitHex": "bd96d128"
+    },
+    {
+      "valueHex": "bd323cd1",
+      "policyLogitHex": "bd2470bb"
+    },
+    {
+      "valueHex": "bd46cfb0",
+      "policyLogitHex": "bd8492a6"
+    },
+    {
+      "valueHex": "bd645f8a",
+      "policyLogitHex": "bd6c2d65"
+    },
+    {
+      "valueHex": "bd1bcca5",
+      "policyLogitHex": "bd500ca0"
+    },
+    {
+      "valueHex": "bd608200",
+      "policyLogitHex": "bd232618"
+    },
+    {
+      "valueHex": "bd2fa29e",
+      "policyLogitHex": "bd8ce80e"
+    },
+    {
+      "valueHex": "bce644e2",
+      "policyLogitHex": "bd78db8f"
+    },
+    {
+      "valueHex": "bd36a0f8",
+      "policyLogitHex": "bd370b7e"
+    },
+    {
+      "valueHex": "bd38b09a",
+      "policyLogitHex": "bd65c3e4"
+    },
+    {
+      "valueHex": "bcd123b0",
+      "policyLogitHex": "bd69bba0"
+    },
+    {
+      "valueHex": "bd247eca",
+      "policyLogitHex": "bcd74862"
+    },
+    {
+      "valueHex": "bce395d9",
+      "policyLogitHex": "bd83e12a"
+    },
+    {
+      "valueHex": "bd2a2255",
+      "policyLogitHex": "bd70d83b"
+    },
+    {
+      "valueHex": "bd3f306a",
+      "policyLogitHex": "bd678804"
+    },
+    {
+      "valueHex": "bd2ac607",
+      "policyLogitHex": "bcb886b1"
+    },
+    {
+      "valueHex": "bd314388",
+      "policyLogitHex": "bd64d9ca"
+    },
+    {
+      "valueHex": "bd2b5151",
+      "policyLogitHex": "bd7e7f6f"
+    },
+    {
+      "valueHex": "bd33abd6",
+      "policyLogitHex": "bd88033c"
+    },
+    {
+      "valueHex": "bcdb8396",
+      "policyLogitHex": "bd26fc23"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "stage": "A",
+      "model": "ml/runs/stage_d_l2/onnx/model_v30.onnx",
+      "n": 200,
+      "sigma": 0.109072,
+      "sigmaCiLow": 0.092153,
+      "sigmaCiHigh": 0.124178,
+      "mean": 0.07397,
+      "ciLow": 0.0595,
+      "ciHigh": 0.089225,
+      "skewness": 1.7405,
+      "tailShare": 0.2716,
+      "measuredAt": "2026-11-17T02:06:31.884754+00:00"
+    }
+  ]
+}

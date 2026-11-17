@@ -1,0 +1,15 @@
+{
+  "model": "ml\\runs\\stage_d_l2\\onnx\\model_v15.onnx",
+  "outputVersion": 2,
+  "provider": "cuda",
+  "machine": "DESKTOP-2T0QNN5",
+  "logicalCores": 12,
+  "buckets": [
+    {"bucket": 1, "usPerCall": 262.929395, "positionsPerSecond": 3803.3024036738075},
+    {"bucket": 8, "usPerCall": 268.47064, "positionsPerSecond": 29798.416690927545},
+    {"bucket": 32, "usPerCall": 318.33808, "positionsPerSecond": 100522.06132549395},
+    {"bucket": 128, "usPerCall": 418.1775641025641, "positionsPerSecond": 306090.07031426043},
+    {"bucket": 512, "usPerCall": 810.8384615384615, "positionsPerSecond": 631445.1327685491},
+    {"bucket": 2048, "usPerCall": 2339.0222222222224, "positionsPerSecond": 875579.5394086797}
+  ]
+}

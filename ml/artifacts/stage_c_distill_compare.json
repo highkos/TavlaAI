@@ -1,0 +1,14 @@
+{
+  "erControl": 0.088343,
+  "seControl": 0.015333,
+  "erDistill": 0.060229,
+  "seDistill": 0.012013,
+  "gain": 0.31823687219134517,
+  "se": 0.18025677500880755,
+  "low": -0.035066406825917606,
+  "high": 0.6715401512086079,
+  "gainMin": 0.25,
+  "passed": false,
+  "strictPassed": false,
+  "reason": "basarisiz: kazanc 0.3182 >= esik 0.25 ama alt sinir -0.0351 <= 0 (iyilesme sifirdan ayrilmiyor)"
+}

@@ -1,0 +1,158 @@
+{
+  "gameCount": 983,
+  "steps": 300,
+  "calGames": 100,
+  "valGames": 100,
+  "seed": 20261114,
+  "d1": [
+    {
+      "label": "D1-125",
+      "games": 125,
+      "lambda": 1.0,
+      "head": "six",
+      "trainSamples": 20916,
+      "valSamples": 11814,
+      "valueLoss": 1.90570068359375,
+      "calLoss": 2.832366466522217,
+      "metrics": {
+        "slope": 0.6208475909065009,
+        "intercept": -0.16068745139737473,
+        "correlation": 0.566156898890613,
+        "mae": 1.232711351884822,
+        "std_ratio": 0.911909633190275,
+        "count": 11814.0
+      },
+      "calibrated": false,
+      "seconds": 3.55
+    },
+    {
+      "label": "D1-250",
+      "games": 250,
+      "lambda": 1.0,
+      "head": "six",
+      "trainSamples": 36083,
+      "valSamples": 9482,
+      "valueLoss": 1.3425050973892212,
+      "calLoss": 1.232269287109375,
+      "metrics": {
+        "slope": 0.9189721487427569,
+        "intercept": -0.15779584338480007,
+        "correlation": 0.7648379648864677,
+        "mae": 0.8487309700082173,
+        "std_ratio": 0.8322754568055629,
+        "count": 9482.0
+      },
+      "calibrated": false,
+      "seconds": 0.99
+    },
+    {
+      "label": "D1-500",
+      "games": 500,
+      "lambda": 1.0,
+      "head": "six",
+      "trainSamples": 60620,
+      "valSamples": 9623,
+      "valueLoss": 1.1069936752319336,
+      "calLoss": 1.3068428039550781,
+      "metrics": {
+        "slope": 0.9850621532994867,
+        "intercept": 0.05208081809961283,
+        "correlation": 0.8166466220194023,
+        "mae": 0.8051866630788505,
+        "std_ratio": 0.8290305533351647,
+        "count": 9623.0
+      },
+      "calibrated": false,
+      "seconds": 1.05
+    }
+  ],
+  "d2": [
+    {
+      "label": "D2-lam1",
+      "games": 783,
+      "lambda": 1.0,
+      "head": "scalar",
+      "trainSamples": 87628,
+      "valSamples": 9813,
+      "valueLoss": 1.7086095809936523,
+      "calLoss": 1.7086095809936523,
+      "metrics": {
+        "slope": 1.0423731995414713,
+        "intercept": 0.016399763199919978,
+        "correlation": 0.7756567427063452,
+        "mae": 0.9734314628704015,
+        "std_ratio": 0.744125753662458,
+        "count": 9813.0
+      },
+      "calibrated": false,
+      "seconds": 1.05
+    },
+    {
+      "label": "D2-lam0.7",
+      "games": 783,
+      "lambda": 0.7,
+      "head": "scalar",
+      "trainSamples": 87628,
+      "valSamples": 9813,
+      "valueLoss": 1.699684500694275,
+      "calLoss": 1.699684500694275,
+      "metrics": {
+        "slope": 1.049034498178561,
+        "intercept": -0.03429695247777621,
+        "correlation": 0.7773407719947559,
+        "mae": 0.9707003277761587,
+        "std_ratio": 0.7410059186275122,
+        "count": 9813.0
+      },
+      "calibrated": false,
+      "seconds": 1.16
+    }
+  ],
+  "d3": [
+    {
+      "label": "D3-scalar",
+      "games": 783,
+      "lambda": 1.0,
+      "head": "scalar",
+      "trainSamples": 87628,
+      "valSamples": 9813,
+      "valueLoss": 1.7086095809936523,
+      "calLoss": 1.7086095809936523,
+      "metrics": {
+        "slope": 1.0423732122088205,
+        "intercept": 0.016399668119134476,
+        "correlation": 0.7756567502056066,
+        "mae": 0.9734313889980761,
+        "std_ratio": 0.7441257518139462,
+        "count": 9813.0
+      },
+      "calibrated": false,
+      "seconds": 1.16
+    },
+    {
+      "label": "D3-six",
+      "games": 783,
+      "lambda": 1.0,
+      "head": "six",
+      "trainSamples": 87628,
+      "valSamples": 9813,
+      "valueLoss": 1.195307731628418,
+      "calLoss": 1.7048598527908325,
+      "metrics": {
+        "slope": 1.0243296409250364,
+        "intercept": -0.02867408329850889,
+        "correlation": 0.7758847716327413,
+        "mae": 0.9361643127175843,
+        "std_ratio": 0.7574561358314954,
+        "count": 9813.0
+      },
+      "calibrated": false,
+      "seconds": 1.26
+    }
+  ],
+  "flags": {
+    "d1": true,
+    "d2": false,
+    "d3": true
+  }
+}

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	<OutputType>Exe</OutputType>
+	<TargetFramework>net10.0</TargetFramework>
+	<Nullable>disable</Nullable>
+	<ImplicitUsings>disable</ImplicitUsings>
+	<RootNamespace>Backgammon.MatchBench</RootNamespace>
+	<AssemblyName>Backgammon.MatchBench</AssemblyName>
+	<LangVersion>9.0</LangVersion>
+	<InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+	<ProjectReference Include="..\Backgammon.Core\Backgammon.Core.csproj" />
+	<ProjectReference Include="..\Backgammon.Inference\Backgammon.Inference.csproj" />
+  </ItemGroup>
+
+</Project>

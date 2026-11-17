@@ -1,0 +1,2628 @@
+# TavlaAI — Faz 1–4 Uçtan Uca Rapor
+
+Bu belge, TavlaAI projesinin **dört fazının tamamını** tek bir yerde, uçtan uca anlatır:
+her fazın amacı, teslim edilenler, kritik tasarım kararları, kabul kriterleri, **ölçülmüş**
+sonuçlar ve bilinen sınırlar.
+
+| Belge | İçerik |
+|---|---|
+| **`PHASES.md`** (bu dosya) | Faz 1–4 uçtan uca anlatım, kabul kriterleri, ölçüm özetleri |
+| `ARCHITECTURE.md` | Tasarım ayrıntısı (§1–§42) |
+| `ASSUMPTIONS.md` | Belirsizlik/karar günlüğü (B/C/D/E, F2, F3, F4-01…F4-54) |
+| `SHARD_FORMAT.md` | Self-play shard ikili biçimi v1 |
+| `ml/artifacts/stage_c_report.md` | Aşama C kabul raporu (smoke eğitimi) |
+| `ml/artifacts/stage_d_report.md` | Aşama D kabul raporu (lig, eval, ayar tablosu, gnubg ER) |
+
+> **Okuma notu:** Bu belgedeki tüm sayılar gerçek koşulardan alınmıştır. Hiçbir ölçüm
+> uydurulmamıştır; ölçülemeyen kalemler açıkça "ölçülmedi" olarak işaretlenmiştir.
+
+---
+
+## 0. Yönetici özeti
+
+| Faz | Konu | Durum | Ana ölçüm |
+|---|---|---|---|
+| 1 | Backgammon motoru (kurallar, küp, maç, hash, fuzz) | ✅ Tamam | `GenerateAllLegalMoves` ~480 000 çağrı/sn, 0 bayt/çağrı |
+| 2 | 221 elemanlı durum vektörü | ✅ Tamam | `Vectorize` ~3 650 000 çağrı/sn, 500×221 altın eşleşme |
+| 3 | Politika yönlendirmeli expectiminimax arama | ✅ Tamam | Referans eşitliği max \|Δ\| = 0, determinizm birebir |
+| 4 | ONNX köprüsü, self-play, eğitim laboratuvarı, lig, değerlendirme | ✅ Tamam | `RandomBot` %80,50 · `PipBot` %40,50 · gnubg ER 0,1941 |
+
+**Toplam test durumu:** 418 test, 0 başarısız (bkz. §6).
+
+**Dürüst değerlendirme:** Faz 4'ün eğitilmiş ağı (`model_v10.onnx`) `RandomBot`'u açık ara
+yener, `PipBot` karşısında hafif negatiftir ve gnubg'ye göre hamle kalitesi (ER 0,1941)
+**basit `PipBot` sezgiselinden (ER 0,1283) daha kötüdür**. Bu beklenen bir sonuçtur: 10
+iterasyon × 100 oyunluk referans koşusu bir **altyapı doğrulamasıdır**, güç hedefi değildir
+(bkz. §5.9 ve §7).
+
+---
+
+## 1. Ortak ilkeler (dört fazda da korunan)
+
+1. **Unity-bağımsız motor.** `Backgammon.Core` hiçbir `UnityEngine.*` tipine referans vermez
+   (`noEngineReferences: true`). Aynı ikili Unity içinde, CLI'da ve sunucuda çalışır.
+2. **Sıfır allocation hot path.** Yasal hamle üretimi, afterstate üretimi, vektörleştirme ve
+   ONNX çıkarımı çağrı başına **0 bayt** tahsis eder (ölçülmüş).
+3. **Determinizm.** Aynı girdi → aynı çıktı. `Dictionary`/`HashSet`/`object.GetHashCode()`
+   hot path'te kullanılmaz; tüm RNG'ler tohumludur (`Xoshiro256StarStar`).
+4. **Katman bağımlılığı tek yönlü.** `Core` → `Inference` → `SelfPlay`; `ml/` yalnızca ONNX
+   ve shard dosyaları üzerinden konuşur. `Core`, ONNX/PyTorch bilmez.
+5. **Uydurma değer yok.** Ölçülemeyen her kalem raporda "ölçülmedi" olarak işaretlenir;
+   eşikler ilk ölçümden **sonra** belirlenir.
+6. **Bağımsız doğrulama.** Her kritik bileşen, farklı dilde/algortimada yazılmış ikinci bir
+   uygulamayla karşılaştırılır (Python referans üreteci, `vector_golden.json`, gnubg).
+
+---
+
+## 2. Faz 1 — Backgammon motoru
+
+**Spesifikasyon:** Tavla Motoru Spesifikasyonu Faz 1 v4 (ek dosya, depoda değil)
+
+### 2.1 Amaç
+
+Tam kural motoru: yasal hamle üretimi, vurma/toplama, bar, küp (double/take/pass), Crawford,
+Jacoby, mars/backgammon, Zobrist hash, faz makinesi. Ağ yok, değerlendirme yok — yalnızca
+kurallar ve hızlı durum geçişleri.
+
+### 2.2 Teslim edilenler
+
+| Dosya | Sorumluluk |
+|---|---|
+| `BackgammonState.cs` | Tek gerçek kaynak: `sbyte[26]` board, zar, `borneOff`, `turn`, küp, maç, `phase`, `hash` |
+| `MoveStep.cs` / `MoveSequence.cs` | Değer tipleri (`MaxSteps = 4`) |
+| `MoveList.cs` | Önceden ayrılmış çıktı buffer'ı (kapasite 2048) |
+| `AfterStateList.cs` | SoA: `Boards`, `WhiteBorneOff`, `BlackBorneOff`, `Hash`, `Sequences`, `IsTerminal`, `ResultType`, `ResultPoints` |
+| `LegalMoveGenerator.cs` | Tek geçişli DFS + hash tekilleştirme |
+| `BackgammonEngine.cs` | `ApplyStep`/`UndoStep`, `ApplyMove`/`UndoMove`, `SetDice`, `EndTurn`, `PassTurn`, `LoadAfterState`, `IsGameOver`, `StartNextGame`, `MirrorTo`, `CopyFrom`, `ComputeZobristHash` |
+| `Zobrist.cs` | Düz `ulong[]` tablolar, SplitMix64, sabit tohum |
+| `Xoshiro256StarStar.cs` / `CryptoRandom.cs` | Deterministik / kriptografik RNG |
+| `StatePool.cs` | `BackgammonState` geri dönüşümü (thread-safe değil) |
+| `EngineSettings.cs`, `Enums.cs`, `GameResult.cs` | Yapılandırma ve sonuç tipleri |
+| `tools/reference_gen.py` | Bağımsız Python referans üreteci |
+
+### 2.3 Kritik tasarım kararları
+
+* **`sbyte[26]` board.** `[0]` = Beyaz bar (≥0), `[1..24]` = haneler, `[25]` = Siyah bar (≤0).
+  Bir hanede en fazla 15 taş → `[-15, +15]` `sbyte`'a sığar. 26 bayt tek cache satırı.
+* **Kopyalamasız DFS.** `ApplyStep` → özyineleme → `UndoStep`. State hiç kopyalanmaz.
+* **Tek geçişli üretim.** En uzun diziler `[ThreadStatic]` buffer'da toplanır; daha derin bir
+  dizi bulunursa buffer sıfırlanır. Buffer taşarsa (65 536 kayıt) davranış birebir aynı kalan
+  iki geçişli yola düşülür (E-02).
+* **Nesil sayaçlı tekilleştirme tablosu.** Her çağrıda `Array.Clear` yok; `_gen` artırılır.
+* **`ResultPoints` mars çarpanıdır (1/2/3), `cubeValue` hariç.** Küp çarpımı çağıranın işi.
+  Bu değişmez Faz 3'ün `Points / cubeValue` kuralını da tutarlı kılar (D-01).
+* **`cubePassed` hash'e girmez.** Pozisyonun parçası değil, akış bilgisidir (D-03).
+* **`IsBearOffMode` her `GenerateSteps` çağrısında yeniden hesaplanır** — toplama modu bir
+  hamle içinde açılıp kapanabilir (C-05).
+* **`Debug.Assert` yerine fırlatan yardımcı.** `[Conditional("DEBUG")]` `DebugAssert`;
+  ihlalde `InvalidOperationException`. Release'te çağrı tamamen kaldırılır (B-09).
+
+### 2.4 Kabul kriterleri
+
+| Gereksinim | Durum | Kanıt |
+|---|---|---|
+| `SetDice`: RNG'siz, `phase = Moving`, dublede 4 zar, sıralı | ✅ | `EngineFlowTests` |
+| `AfterStateList` (SoA) tüm alanlar + `Swap` + `AddPass` | ✅ | `AfterStateListTests` |
+| `GenerateAfterStates` = `GenerateAllLegalMoves` (aynı küme **ve** sıra) | ✅ | `AfterStateListTests` |
+| Afterstate hash'i `turn` + küp içerir, zar içermez | ✅ | `ZobristTests` |
+| `IsGameOver` Jacoby uyumlu, `Points` `cubeValue` hariç | ✅ | `CubeAndMatchTests` |
+| `state.hash == ComputeZobristHash(state)` her mutasyondan sonra | ✅ | `SanityCheck` madde 7 |
+| Bağımsız referans ile 57 pozisyon / 927 sonuç pozisyonu | ✅ | `ReferenceComparisonTests` |
+| Fuzz: 1 000 000 oyun, 0 hata | ✅ | `Fuzz_OneMillionGames` (`[Explicit]`) |
+| Steady-state 0 bayt/çağrı | ✅ | `PerformanceTests` |
+| ≥ 300 000 çağrı/sn (hamle üretimi) | ✅ | ~480 000 |
+
+### 2.5 Ölçülen performans (Release, tek çekirdek)
+
+| Ölçüm | Hedef | Ölçülen |
+|---|---|---|
+| `GenerateAllLegalMoves` (orta oyun, 21 hamle) | ≥ 300 000 çağrı/sn | **~480 000 çağrı/sn** (≈ 2,1 µs) |
+| `GenerateAfterStates` (orta oyun, 21 afterstate) | ≥ 300 000 çağrı/sn | **~340 000 çağrı/sn** (≈ 2,9 µs) |
+| Rastgele oyun hızı | ≥ 5 000 oyun/sn/çekirdek → **revize 1 000** | **~1 700 oyun/sn/çekirdek** |
+| Rastgele oyun hızı (12 thread) | — | **~9 200 oyun/sn** toplam |
+| Steady-state allocation | 0 bayt | **0 bayt** / 50 000 çağrı |
+
+**Hedef revizyonu (E-03):** 5 000 oyun/sn ≈ 2 µs/tur demektir; tek başına yasal hamle üretimi
+~2 µs sürdüğü için mevcut mimaride ulaşılabilir değildir. Regresyon koruması 1 000
+oyun/sn/çekirdek olarak sabitlendi; ölçülen değer raporlanıyor.
+
+### 2.6 Fuzz (tam ölçek koşusu)
+
+`TAVLA_FUZZ_GAMES=1000000` ile: **1 000 000 oyun, 96 761 627 tur, 208 317 127 adım,
+1 803 177 934 afterstate**, en uzun oyun 478 tur, süre 1 sa 2 dk, **0 hata**. Her turda
+`GenerateAllLegalMoves`/`GenerateAfterStates` sayı-sıra eşitliği, afterstate hash tekilliği,
+`ApplyMove`→`UndoMove` özdeşliği ve `SanityCheck` doğrulandı.
+
+### 2.7 Bilinen sınırlar
+
+* **gnubg referans verisi (E-01).** Bölüm 8 madde 5 gnubg çıktısından referans veri ister.
+  Faz 1 sırasında gnubg kurulu değildi; bunun yerine **bağımsız Python uygulaması**
+  (`tools/reference_gen.py`) ile 57 pozisyon üretildi. Bu, uygulama hatası sınıfını yakalar
+  ama gnubg ile karşılaştırmanın yerini tam tutmaz. **Faz 4'te gnubg kuruldu** ve gerçek
+  gnubg ER ölçümü yapıldı (bkz. §5.8) — ancak bu, hamle üretimi referansı değil, **hamle
+  kalitesi** ölçümüdür.
+* **`AfterStateList.DefaultCapacity = 2048`.** 4 zarlı pozisyonlarda teorik üst sınır
+  ölçülmedi; kapasite aşılırsa `InvalidOperationException` atar (sessiz taşma yok).
+
+---
+
+## 3. Faz 2 — Durum vektörleştirici (221 nöron)
+
+**Spesifikasyon:** Tavla Durum Vektörü Spesifikasyonu Faz 2 v4 (ek dosya, depoda değil)
+
+### 3.1 Amaç
+
+`BackgammonState`'i sinir ağının girdisi olan **221 elemanlı `float32` vektöre** çevirmek —
+sıfır allocation, bit-düzeyinde deterministik, C# ve Python'da **birebir aynı**.
+
+### 3.2 Vektör haritası
+
+| Aralık | İçerik |
+|---|---|
+| `0..95` | Aktif oyuncunun 24 hanesi × 4 nöron |
+| `96..191` | Rakibin 24 hanesi × 4 nöron |
+| `192` / `193` | Aktif / rakip bar (`n / 2`) |
+| `194` / `195` | Aktif / rakip toplanan (`n / 15`) |
+| `196` | Küp sahibi × perspektif |
+| `197` | Küp değeri: `min(log2(v) / 6, 1)`, `v ≤ 1` ise 0 |
+| `198` | Money game bayrağı |
+| `199` | Crawford bayrağı |
+| `200` / `201` | Aktif / rakip pip (`pip / 167`) |
+| `202` / `203` | Aktif / rakip kaçmış taş (`n / 15`) |
+| `204` | Temas bayrağı |
+| `205..212` | Aktif oyuncunun "kalan puan" one-hot (8 kova) |
+| `213..220` | Rakibin "kalan puan" one-hot (8 kova) |
+
+**Hane bloğu (4 nöron):** `[n == 1, n >= 2, n >= 3, n > 3 ? (n-3)/2 : 0]`.
+
+### 3.3 Teslim edilenler
+
+| Dosya | Sorumluluk |
+|---|---|
+| `VectorLayout.cs` | Tüm offset'ler ve `VectorSize = 221` (tek doğruluk kaynağı) |
+| `VectorizerScalars.cs` | `readonly struct`: `CubeValue`, `CubeOwner`, `MatchLength`, `WhiteScore`, `BlackScore`, `IsCrawfordGame` |
+| `BackgammonVectorizer.cs` | `Vectorize`, `VectorizeBatch`, yardımcı fonksiyonlar |
+| `Backgammon.Tests/ReferenceData/vector_golden.json` | 500 kayıt × 221 nöron altın veri |
+| `tools/vector_verify.py` | Bağımsız Python/numpy `float32` doğrulayıcı |
+
+### 3.4 Kritik tasarım kararları
+
+* **`VectorizerScalars` yalnızca board'da olmayan bilgiyi taşır** (F2-01). `borneOff` çifti
+  bilinçli olarak dışarıda — hem ayrı parametre hem struct alanı tekrar olurdu.
+* **`VectorizeBatch` terminal kayıt reddeder** (`ArgumentException`). Arama, terminal
+  adayları listenin başına taşımak **zorundadır** (Faz 3'te kod düzeyinde zorlanır).
+* **`FeatureVersion` artırılmadan vektör düzeni değiştirilemez**; altın dosya da yeniden
+  üretilmelidir.
+* **`escapedCount` tuzağı.** Rakibin tahtada taşı yoksa `_oppMinJ` **`_INF`** döndürmelidir;
+  `None` döndürmek Python portunda 25/500 uyuşmazlığa yol açtı (F4-54'te belgelendi).
+
+### 3.5 Kabul kriterleri
+
+| Gereksinim | Durum | Kanıt |
+|---|---|---|
+| 221 nöron, offset'ler `VectorLayout` ile birebir | ✅ | `VectorizerTests` |
+| C# ↔ Python bit-düzeyi eşitlik (500 × 221) | ✅ | `CrossLanguageGolden_FileMatches` + `tools/vector_verify.py` |
+| Terminal/maç-bitişi reddi | ✅ | `VectorizerTests` |
+| Steady-state 0 bayt/çağrı (3 API) | ✅ | `PerformanceTests` |
+| ≥ 2 000 000 `Vectorize`/sn | ✅ | ~3 650 000 |
+
+### 3.6 Ölçülen performans (Release, tek çekirdek)
+
+| Ölçüm | Hedef | Ölçülen |
+|---|---|---|
+| `Vectorize` (state) | ≥ 2 000 000 çağrı/sn | **~3 650 000 çağrı/sn** (≈ 0,27 µs) |
+| `VectorizeBatch` | raporla | **~3 100 000 kayıt/sn** |
+| Steady-state allocation | 0 bayt | **0 bayt** / 10 000 çağrı (3 API) |
+
+Çağrı başına iş yükü çok küçük olduğu için `PerformanceTests` iki testte **en iyi 3 turun**
+hızını ölçer (`MeasureBestOf`, F2-20).
+
+### 3.7 Bilinen sınırlar
+
+* Vektör **money game / küpsüz / Jacoby kapalı** varsayımıyla tasarlandı; küp ve maç bilgisi
+  yalnızca 4 skaler nöronla temsil edilir. Küp kararları (double/take) için ayrı bir ağ
+  gerekir — kapsam dışı (F4-01).
+* "Kalan puan" one-hot 8 kovada doyuma ulaşır (`away >= 8` aynı kovaya düşer).
+
+---
+
+## 4. Faz 3 — Politika yönlendirmeli expectiminimax arama
+
+**Spesifikasyon:** Faz 3 v7 (ek dosya, depoda değil)
+
+### 4.1 Amaç
+
+Faz 1 motoru ve Faz 2 vektörü üzerine, **değerlendirici-agnostik** bir arama motoru: kök
+aday üretimi, politika sıralaması, alfa-beta + Star1 budaması, eval cache, kök politika
+hedefi (Faz 4 eğitimi için). Ağ yok — yalnızca arayüzler.
+
+### 4.2 Teslim edilenler
+
+`Backgammon.Core/Search/` altında, Faz 1 ve Faz 2'ye **hiç dokunmadan**:
+
+| Dosya | Sorumluluk |
+|---|---|
+| `IEvaluators.cs` | `IPositionEvaluator`, `IPolicyEvaluator`, `IPolicyValueEvaluator`, `ICombinedBatchEvaluator`, `ICubeEvaluator`/`NullCubeEvaluator`, `ICubePolicyEvaluator`/`NullCubePolicyEvaluator` |
+| `RollSet.cs` | 21'lik normal zar kümesi (ağırlık 36) + 15'lik açılış kümesi; `RemainingWeightAfter` |
+| `SearchSettings.cs` | `DepthPly`, aday kısıtları, budama/cache/politika anahtarları, `PolicyTemperature` |
+| `SearchResult.cs` | `RootCandidate` (salt-okunur struct) + `ref struct SearchResult` |
+| `SearchWorkspace.cs` | Ply başına önceden ayrılmış tamponlar + doğrudan eşlemeli eval cache |
+| `BackgammonSearch.cs` | `Search`, `AnalyzePreRoll`, `SearchNode`, `ChanceNode` |
+
+### 4.3 Kritik tasarım kararları
+
+* **Değer sözleşmesi.** Küpsüz para equity'si, `[L, U] = [-3, +3]`, **hamleyi yapanın**
+  gözünden; çocuk değeri `-v` olarak döner (negamax).
+* **Kırpma sahipliği.** Değerlendirici **kırpmaz** (yalnızca `IsFinite`); kırpma **aramanın**
+  işidir (`ClampInPlace`). Bu, `ReferenceSearch` ile gerçek aramanın aynı sayıda kırpma
+  uygulamasını garanti eder (F3-03).
+* **Ply semantiği.** `depthPly` = **chance (zar) katmanı** sayısı. `0` = afterstate'ler
+  doğrudan değerlendirilir; `1` = her aday için rakibin 21 zarı üzerinden ağırlıklı ortalama.
+  `node = 2·(DepthPly − d)`, `MaxSupportedPly = 4` → `MaxNodes = 10`.
+* **`SearchResult` `ref struct`'tır** (F3-01): span alanları taşır, sıfır allocation korunur,
+  ama bir alanda saklanamaz. Faz 4 sonucu hemen tüketmelidir.
+* **`ICombinedBatchEvaluator` `IPositionEvaluator`'dan türetilmez** (F3-02). Çağrı noktaları
+  sabittir: kökte `EvaluateAndScoreBatch` (yalnızca `MaxCandidatesRoot > 0`), yapraklarda
+  `EvaluateBatch`, iç max düğümlerinde `ScoreBatch`. Tip kontrolü arama başında **bir kez**.
+* **Terminal bölümleme zorunlu.** `PartitionNonTerminal` kararlı `Swap` ile
+  terminal-olmayanları başa taşır; `VectorizeBatch` terminal kayıt görünce istisna atar.
+* **`Kind` semantiği.** `0` = terminal, `1` = arandı, `2` = kısıt nedeniyle aranmadı
+  (`best` karşılaştırmasına girmez, politika hedefi 0).
+* **Cache anahtarı** = afterstate Zobrist hash'i `^ depth` (+ ayar imzası). Yalnızca **kesin**
+  `Q` yazılır; budanmış sınır değerleri asla. Politika `Version`'ı cache'i temizlemez.
+* **`BeginSearch()` vs `Reset()`.** `BeginSearch` istatistikleri ve kök tamponlarını sıfırlar,
+  cache'i **korur**. `Reset()` cache'i **kesinlikle** temizler (model yeniden yükleme sonrası
+  zorunlu — Test 17).
+
+### 4.4 Budama
+
+**Alfa-beta (fail-soft).** Her aday `(max(best, α), β)` penceresiyle aranır; `best >= β` olunca
+döngü kırılır. Kökte erken kesme yapılmaz (`RootCandidates` tüm adaylar için dolu kalmalı).
+`ExactRootScores = true` iken kökte her aday `(L, U)` ile aranır — politika hedefi için
+**kesin** `Q` gerekir.
+
+**Star1 (chance düğümü budaması).** `q_r ∈ [L, U]` olduğu için kalan zarların katkısı
+`[R·L, R·U]` aralığındadır:
+
+```
+A = (36α − S − R·U) / w        B = (36β − S − R·L) / w
+A >= U  →  (S + (w+R)·U) / 36
+B <= L  →  (S + (w+R)·L) / 36
+α_c = −min(B, U)               β_c = −max(A, L)
+q <= A  →  (S + w·q + R·U) / 36
+q >= B  →  (S + w·q + R·L) / 36
+```
+
+### 4.5 Kabul kriterleri (Faz 3 v7 testleri)
+
+| Test | Kriter | Sonuç |
+|---|---|---|
+| 1 | `ReferenceSearch` ile referans eşitliği (6 pozisyon × derinlik 0/1) | **max \|Δ\| = 0** |
+| 4 | `RollSet` ağırlıkları (21 zar, toplam 36) | ✅ |
+| 8 | Determinizm (tekrarlı arama, farklı thread, farklı workspace) | birebir aynı |
+| 8e | Politika `Version`'ı cache'i temizlemez | ✅ |
+| 10 | Arama sırasında 0 bayt allocation | ✅ |
+| 12 | `EvaluateAndScoreBatch` = ayrı çağrılar | birebir aynı |
+| 13a | Pas durumunda `RootPolicyTarget` boş | ✅ |
+| 16 | `ICombinedBatchEvaluator` kökte (`MaxCandidatesRoot = 4`) | politika hedefi toplamı 1 |
+| 16f | `ICombinedBatchEvaluator` `IPositionEvaluator`'dan türetilmez | ✅ |
+| 17 | `SetModel` → `Version` artışı → `Reset()` cache temizliği | ✅ |
+
+### 4.6 Bilinen sınırlar
+
+* **Küp kararı yok.** `ICubeEvaluator`/`ICubePolicyEvaluator` arayüzleri tanımlı ama
+  `NullCubeEvaluator` dışında uygulama yok — küp oyunu kapsam dışı (F4-01).
+* **`MaxSupportedPly = 4`.** Daha derin arama `SearchWorkspace` tamponlarını aşar.
+* **`AfterStateList.DefaultCapacity = 2048`** (F3-06). 4 zarlı pozisyonlarda teorik üst sınır
+  ölçülmedi; aşılırsa istisna atar.
+
+---
+
+## 5. Faz 4 — Sinir ağı, ONNX köprüsü, self-play ve eğitim laboratuvarı
+
+**Spesifikasyon:** Faz 4 v3 (ek dosya, depoda değil)
+
+### 5.1 Amaç
+
+Faz 3 aramasını gerçek bir sinir ağıyla beslemek, kendi kendine oyun verisi üretmek, eğitmek,
+lig/model havuzuyla ilerlemeyi ölçmek ve hamle kalitesini gnubg'ye karşı doğrulamak.
+
+### 5.2 Katman haritası
+
+```
+ml/  (Python, PyTorch)
+  model.py  export_onnx.py  shards.py  td_lambda.py  losses.py
+  replay.py  train.py  league.py  eval_bench.py  settings_bench.py  gnubg_er.py
+		│  model_vN.onnx + metadata + parity.json
+		▼
+Backgammon.Inference  (netstandard2.1, ORT 1.23.2)
+  OnnxEvaluatorOptions  OnnxModelHandle  OnnxPolicyValueEvaluator
+		│  IPositionEvaluator + IPolicyEvaluator + ICombinedBatchEvaluator
+		▼
+Backgammon.Core  (Faz 1–3)
+  BackgammonSearch  SearchWorkspace  BackgammonVectorizer
+		│
+		▼
+Backgammon.SelfPlay  (net10.0 Exe)
+  ShardFormat  ShardModel  ShardWriter  ShardReader  EvalBench  Program
+		│  *.bgsp / *.bgsp.gz
+		▼
+ml/shards.py  →  replay.py  →  train.py
+```
+
+### 5.3 Ağ mimarisi ve ONNX sözleşmesi
+
+* Gövde: `Linear(221,128) → GELU → Linear(128,64) → GELU`.
+* `value_head = Linear(64,1)` — **bias sıfır, lineer** (kırpma yok).
+* `policy_head = Linear(64,1)` — aday başına **tek logit**; **ağ içinde softmax yok**.
+* Girdi `features` `[B,221]` float32; çıktılar `value` `[B,1]`, `policy_logit` `[B,1]`.
+* **Batch ekseni üç tensörde de dinamik olmak zorundadır.** `opset_version = 15`.
+* Metadata: `feature_version`, `vector_size`, `model_version`, `arch`, `trained_by`.
+
+**Grup softmax iki yerde uygulanır ve aynı sonucu vermelidir:**
+`OnnxPolicyValueEvaluator.ScoreBatch` (C#) ve `ml/losses.py` (Python).
+`ml/tests/test_tau_crosscheck.py` bunu aynı `Q`/`τ` üzerinde karşılaştırır.
+
+### 5.4 Kova (bucket) mekanizması
+
+* Kovalar `1, 2, 4, 8, …, MaxBatch` (`MaxBatch = 2048`).
+* Girdi tamponu kovaya göre **sıfırla doldurulur**; ORT'a kova boyutu bildirilir; yalnızca
+  ilk `count` satır kullanılır. Satırlar bağımsız olduğu için sıfır dolgu çıktıyı etkilemez.
+* `OrtValue.CreateTensorValueFromMemory` + `OrtIoBinding`; binding'ler ve tamponlar
+  **kurucuda bir kez** ayrılır.
+* **Ölçüm: tüm kovalarda 0 bayt/çağrı.** Varsayılan `session.Run(NamedOnnxValue)` yolu
+  1 401–1 472 bayt/çağrı tahsis eder.
+* Sabit maliyet ~12 µs; 2048 kovada ~1,83 ms (≈ 547 çağrı/s).
+
+**CUDA tuzağı (F4-35).** `OrtIoBinding.BindInput`, girdi CPU belleğindeyken ve oturum CUDA
+iken **CPU→cihaz kopyasını bind anında** yapar; `SynchronizeBoundInputs()` bunu tekrarlamaz.
+Bu yüzden yapıcıda bir kez bağlanan girdi, sonradan doldurulduğunda cihaz **sıfır** görür
+(belirti: çıktı tam olarak `model(0)` değerine eşit). Çözüm: CUDA oturumlarında girdi her
+çağrıda `ClearBoundInputs()` + `BindInput()` ile yeniden bağlanır. CPU EP'de atlanır.
+
+### 5.5 CPU vs CUDA (gerçek GPU ölçümü)
+
+Makine: `DESKTOP-2T0QNN5`, 12 mantıksal çekirdek, **NVIDIA GeForce GTX 1650 (4 GB, sürücü
+580.88)**, ORT 1.23.2, `IntraOpThreads = 1`, `InterOpThreads = 1`, `use_tf32 = 0`.
+
+| Kova | CPU µs | CPU poz/s | CUDA µs | CUDA poz/s | Kazanan |
+|---|---|---|---|---|---|
+| 1 | 13,79 | 72 516 | 194,62 | 5 138 | CPU (14×) |
+| 8 | 20,03 | 399 421 | 185,67 | 43 088 | CPU (9×) |
+| 32 | 61,68 | 518 811 | 219,45 | 145 819 | CPU (3,6×) |
+| 128 | 176,72 | 724 302 | 295,30 | 433 457 | CPU (1,7×) |
+| 512 | 727,05 | 704 219 | 573,57 | 892 652 | **CUDA (1,3×)** |
+| 2048 | 2 820,78 | 726 041 | 1 650,01 | 1 241 204 | **CUDA (1,7×)** |
+
+**Kesişme noktası kova 128 ile 512 arasındadır.** CUDA EP'nin sabit çekirdek başlatma
+gecikmesi ~180 µs olduğundan küçük batch'lerde CPU belirgin şekilde öndedir.
+
+**CPU↔CUDA çıktı paritesi** (tolerans 1e-4): tüm kovalarda `max abs Δvalue ≤ 2,98E-008`,
+`max abs Δpriority ≤ 1,49E-008`.
+
+**Karar kuralı:** self-play tek süreçte küçük/orta batch (≤ 2048, tipik olarak ≤ 128) ile
+çalışır → **CPU EP yeterlidir ve daha hızlıdır**; `OnnxEvaluatorOptions.UseCuda = false`
+doğru varsayılandır. GPU yalnızca çok oyunculu toplu çıkarım sunucusunda anlamlı olur
+(kapsam dışı).
+
+### 5.6 Shard biçimi (v1)
+
+Ayrıntı: `SHARD_FORMAT.md`.
+
+* 32 baytlık başlık: `"BGSP"`, `formatVersion = 1`, `featureVersion`, `vectorSize = 221`,
+  `modelVersion`, `logTopCandidates`, `flags`, `reserved`.
+* Oyun kaydı: `gameId`, `learnerSide`, `flags` (bit0 = aborted), `cubeValue`, `decisionCount`,
+  kararlar, `winner`, `resultType`, `resultPoints`.
+* Karar kaydı: `mover`, `flags` (bit0 `IsPass`, bit1 `IsLearner`, bit2 `ChosenIsTerminal`),
+  `candidateTotal`, `loggedCount`, `searchValue`, `chosenVector[221]`, `Q[loggedCount]`,
+  `policyTargetCs[loggedCount]`, `candVectors[loggedCount][221]`.
+* Yalnızca `Kind == 1` adaylar loglanır, `Q`'ya göre azalan, en fazla `logTopCandidates`.
+* Küçük-endian; `*.bgsp` veya gzip'li `*.bgsp.gz`.
+
+**Çapraz dil doğrulaması:** C# `Shard_CrossLanguageFixture` → `ml/artifacts/csharp_shard.bgsp`
+→ Python `test_reads_csharp_written_shard` + `test_csharp_policy_targets_match_python_softmax`.
+
+### 5.7 Eğitim hedefleri
+
+**TD(λ) değer hedefi** (yalnızca `IsLearner = 1` kararlar):
+
+```
+y[T-2] = -z
+y[t]   = -((1-λ)·V̂[t+1] + λ·y[t+1])      t = T-3 … 0
+```
+
+İşaret: her karar o anki oyuncunun bakış açısından değerlendirilir, bu yüzden bir sonraki
+durumun değeri negatiflenir. `DEFAULT_LAMBDA = 0.7`.
+
+**Politika hedefi** (loglanan `Kind == 1` adaylar kümesi `E` üzerinde):
+
+```
+π_k = softmax_{k∈E}(Q_k / τ_train)
+L_policy = -Σ_{k∈E} π_k · log p_k
+```
+
+`|E| < 2` olan kararlar atlanır; terminal ve `Kind == 2` adaylar dışlanır. `τ_train = 0.05`.
+
+**Toplam kayıp:** `L = L_value + c_policy · L_policy`, `c_policy = 1.0`. Değer kaybı Huber
+(varsayılan) veya MSE olabilir.
+
+**Hedef keskinliği kapısı (F4-40).** `train.policy_min_sharpness` (varsayılan 0,99): hedef
+entropisi `log|E|`'ye bu eşikten daha yakın kararlar **eğitimden** elenir. Raporlama tüm
+uygun kararlar üzerinden yapılır. Gerekçe §5.9'da.
+
+### 5.8 Self-play sürücüsü
+
+| Dosya | Sorumluluk |
+|---|---|
+| `SelfPlayConfig.cs` | JSON yapılandırma + `Validate()` + `ToSearchSettings()` + `ToEvaluatorOptions()` |
+| `SelfPlayAgent.cs` | Bir iş parçacığının `OnnxPolicyValueEvaluator` + `SearchWorkspace` + `SearchSettings` demeti |
+| `SelfPlayRunner.cs` | Oyun döngüsü, hamle seçimi, karar başına vektörleştirme, aday loglama |
+| `CommandLine.cs` | `--config` + `--ad=deger` çevrimdışı geçersiz kılmalar, `--help` |
+| `Program.cs` | Model yükleme, iş parçacığı havuzu, shard yazımı, rapor |
+| `EvalBench.cs` | `RandomBot`/`PipBot`/`Model` rakiplerine karşı `argmax` değerlendirmesi |
+| `ShardFormat.cs`, `ShardModel.cs`, `ShardWriter.cs`, `ShardReader.cs` | v1 ikili biçim |
+
+`OnnxModelHandle` **tüm** ajanlar arasında paylaşılır (tek `InferenceSession`); her ajan kendi
+`OrtIoBinding`/tampon demetine sahiptir, böylece eşzamanlı `EvaluateBatch` güvenlidir.
+
+**Oyun döngüsü:**
+
+```
+NewGame -> RollOpening
+loop:
+	Search(state, settings, workspace, evaluator)   // ExactRootScores = true
+	Decide(...)                                     // softmax örnekleme veya argmax
+	ApplyMove(state, chosen.Sequence)  |  PassTurn(state)
+	IsGameOver(state, out result) -> break
+	EndTurn(state, engineSettings)
+	RollDice(state, rng)
+	if ply >= MaxPlies -> flags |= Aborted; break
+```
+
+`Decide`: `ply < ExplorationPlies` ise `softmax(Q / selectionTemperature)` (yalnızca
+`Kind ∈ {0,1}`), sonrasında `argmax(Q)`. Değerlendirme/lig maçlarında her zaman `argmax`.
+
+**Determinizm:** `--threads N` ile oyunlar `i % N` kuralıyla dağıtılır; iş parçacığı `t`
+RNG'si `Seed + t * 0x9E3779B97F4A7C15` ile tohumlanır. **Yalnızca `N = 1` birebir
+tekrarlanabilir.**
+
+### 5.9 Python eğitim laboratuvarı
+
+| Dosya | Sorumluluk |
+|---|---|
+| `model.py` | `Backbone` (221→128→64, GELU) + `value_head` + `policy_head` |
+| `export_onnx.py` | ONNX dışa aktarma (opset 15, dinamik batch) + PyTorch↔ORT parite kontrolü |
+| `shards.py` | v1 shard okuyucu/yazıcı (C# ile aynı şema) |
+| `td_lambda.py` | TD(λ) geriye dönük özyineleme |
+| `losses.py` | Grup softmax çapraz entropi, MSE/Huber, toplam kayıp |
+| `replay.py` | Replay buffer, değer/politika örnekleri, hedef keskinliği filtresi |
+| `train.py` | Senkron eğitim döngüsü |
+| `league.py` | Lig / model havuzu |
+| `eval_bench.py` | Taban oyuncu raporları + yakınsama grafiği |
+| `settings_bench.py` | Faz 3 arama ayarı ölçüm tablosu |
+| `gnubg_er.py` | GNU Backgammon ER ölçümü |
+| `config.yaml` | Tüm hiperparametreler |
+
+**İterasyon akışı:**
+
+```
+for it in 1..iterations:
+	(1) export(model) -> onnx/model_v{N}.onnx
+	(2) Backgammon.SelfPlay --model ... --games G --depth D --out shards/it{it}
+	(3) buffer.add_shard_dir(shards/it{it})          # son buffer_games oyun
+	(4) value_samples  = build_value_samples(model, buffer, lam)   # mevcut agla
+		policy_samples = build_policy_samples(buffer, tau_train)
+	(5) train_steps(S adim, AdamW, clip_grad_norm)
+	(6) olcum: sabit MC probe, buffer kayiplari, H/log|E|, gradyan normu
+```
+
+> **Not (F4-54):** `train.py` ONNX modelini iterasyonun **başında** (satır 590), checkpoint'i
+> **sonunda** (satır 733) yazar. Yani `model_vN.onnx` ile `ckpt_vN.pt` bir iterasyon farklıdır.
+> Bu bir hata değildir; `model_v1.onnx.parity.json` 5/5 doğrular.
+
+**Ölçüm kümeleri:**
+
+* **Sabit MC probe** — 1. iterasyonda `λ = 1.0` ile üretilir; hedefler `±z` olduğu için
+  **ağdan bağımsızdır**. "Değer kaybı 0. adıma göre düşer" kriteri bu kümeyle ölçülür.
+* **Sabit TD probe** — 1. iterasyonda `λ = 0.7` ile üretilir (sabit ama ağa bağımlı).
+* **Buffer** — her iterasyonda güncel hedeflerle yeniden hesaplanır; politika kaybı düzgün
+  baz `log|E|` ile karşılaştırılır.
+
+### 5.10 Lig (model havuzu)
+
+| Dosya | Sorumluluk |
+|---|---|
+| `ml/league.py` | `League`, `PoolEntry`, `EvalResult`, `run_eval`, `should_enter_pool`, `evaluate_for_entry` |
+| `ml/runs/pool_d/pool.json` | Havuz indeksi (üye listesi + politika) |
+| `ml/runs/pool_d/v{N}.onnx` | Dondurulmuş model artefaktları |
+
+`League` alanları: `pool_dir`, `max_size` (10), `eviction` (`oldest` | `weakest`), `entries`.
+Her `PoolEntry`: `name`, `onnx_path`, `model_version`, `iteration`, `strength`, `strength_se`;
+`lower_confidence_bound = strength − 1,96·strength_se`.
+
+**Akış:** oyunların %80'i kendi kopyasına karşı (iki taraf da `IsLearner`), %20'si donmuş
+havuz modeline karşı (`learnerSide = ±1`, rastgele renk). Havuz rakibinin kararları
+`IsLearner = 0` ile loglanır; kayıp hesaplanmaz, yalnızca TD önyüklemesi için kullanılır.
+Her `K` iterasyonda sabit tohumlu `argmax` ile `N_eval = 400` oyun oynanır; giriş eşiği =
+güven aralığının alt sınırı `> 0`.
+
+**Ölçülen maliyet:**
+
+| Derinlik | 400 oyunluk lig değerlendirmesi |
+|---|---|
+| 0 | ~7 s |
+| 1 | ~690 s |
+
+### 5.11 `eval_bench` — taban oyuncu raporları
+
+| Tür | Uygulama | Not |
+|---|---|---|
+| `RandomBot` | `EvalBench.PlayRandom` — rastgele yasal hamle | hızlı, zayıf |
+| `PipBot` | `EvalBench.PlayPip` — `rakipPip − kendiPip` maksimizasyonu | vurma eğilimli, oyunlar uzun |
+| `Model` | `EvalBench.PlayModel` — başka bir ONNX modeli, `argmax` | önceki checkpoint / havuz üyesi |
+
+**Protokol:** sabit seed; oyun `g` için `seed + g·0x9E3779B97F4A7C15`; renkler `g % 2` ile
+değişir; öğrenen her zaman `argmax`. Sonuç: oyun başına ortalama puan ± standart hata ve
+%95 güven aralığı.
+
+### 5.12 gnubg ER ölçüm hattı
+
+`ml/gnubg_er.py`, referans pozisyonlarda modelin hamle kalitesini **GNU Backgammon 1.08.003**
+ile ölçer. Çıktı: pozisyon başına equity kaybı (ER) + özet (markdown/JSON).
+
+**Alt süreç protokolü** (`gnubg-cli.exe -t`, komutlar stdin'e **bayt olarak**):
+
+* `set board` için oyun içinde olmak gerekir — **her** tahta yüklemesinden önce `new game`.
+  Aksi hâlde gnubg tahtayı **sessizce reddeder** ve önceki tahta kalır.
+* `set cube use off` `new game`'den **önce** gelmelidir.
+* `set evaluation chequerplay evaluation plies N` yalnızca `eval`'i etkiler; **`hint` her
+  zaman 0-ply çalışır** (plies 0/1/2/3 aynı sonucu verir).
+* `set evaluation chequerplay evaluation cubeful off` → cubeless equity.
+* `eval` equity'si **sıradaki oyuncunun** bakış açısındandır; afterstate'i `turn = -turn` ile
+  yükleyip sonucu negatife çevirmek gerekir.
+* `show pipcount` sıradaki oyuncuyu **önce** yazar; ayrıştırıcı isimle eşleştirir
+  (`MONSTER` = X = Siyah, `gnubg` = O = Beyaz).
+* Çoklu `eval` çıktısı `The pip counts are:` satırından bölünür (`Position ID:` satırı
+  `set board` tarafından da yankılandığı için kullanılamaz).
+* Sayılar **ondalık virgül** ile yazılır (`+0,160`).
+
+**Tahta dönüşümü.** gnubg'de X = Siyah (24→1 oynar, evi 1–6), O = Beyaz'dır:
+
+```python
+simple[0] = -board[25]          # Siyah bar
+simple[i] = -board[i]           # i = 1..24
+simple[25] = board[0]           # Beyaz bar
+```
+
+Doğrulama: başlangıç pozisyonu `4HPwATDgc/ABMA` position ID'sini ve 167/167 pip verir.
+
+**ER tanımı:**
+
+1. Modelin `afterStates` listesi 221 elemanlı vektöre çevrilir (Python portu
+   `vector_golden.json`'a karşı **500/500** doğrulanmıştır) ve ONNX modeline verilir.
+2. **Tüm** afterstate'ler tek gnubg sürecinde 2-ply cubeless `eval` ile değerlendirilir.
+3. `E_best = max(equity)`, `E_model` = modelin seçtiği afterstate'in equity'si,
+   `ER = E_best − E_model`.
+
+`E_best` ve `E_model` aynı değerlendiriciden geldiği için ER tutarlıdır. gnubg'nin `hint`
+sıralaması yalnızca bilgi amaçlı saklanır.
+
+**Hamle seçimi (`--criterion`):**
+
+| Değer | Anlamı |
+|---|---|
+| `policy` (varsayılan) | Politika başı argmax — C# `ArgMaxCandidate` ile aynı |
+| `value` | Değer kafası argmax |
+| `pip` | `rakipPip − kendiPip` argmax (`PipBot` tabanı) |
+
+**Kullanılabilir vakalar.** `reference_positions.json` içindeki 57 vakanın **50'si** kullanılır
+(15/15 taş + boş olmayan `afterStates`); 7 el yapımı vaka gnubg tarafından geçersiz sayılır.
+Toplam **920 afterstate**. Her tahta yüklemesinden sonra `show pipcount` ile Python'un pip
+sayımı karşılaştırılır; uyuşmazsa vaka atılır.
+
+**Sonuç (Aşama D, `model_v10.onnx`):**
+
+| Ölçüm | `policy` | `pip` tabanı |
+|---|---|---|
+| Ortalama ER | 0,1941 | **0,1283** |
+| Medyan ER | 0,1410 | **0,0740** |
+| Maksimum ER | **0,5600** | 0,9660 |
+| gnubg ile aynı hamle | %32,0 | **%42,0** |
+
+gnubg yoksa betik **uydurma değer üretmez**; çıkış kodu 2 ile temiz hata verir.
+
+### 5.13 Aşama C — smoke eğitimi (kabul)
+
+`python ml/train.py --out ml/runs/stage_c_accept --iterations 10 --games 100 --steps 200
+--depth 0 --device cuda --eval-random 200 --seed 20260214 --lam 1.0`
+
+10 iterasyon × 100 oyun = **1000 oyun**, iterasyon başına 200 eğitim adımı (toplam 2000).
+
+| Ölçüm | Değer |
+|---|---|
+| Toplam süre | 308 s |
+| Oyun başına self-play süresi (depth 0) | ~0,25 s |
+| Değer örnekleri (son iterasyon) | 98 658 |
+| Politika kararları (son iterasyon) | 83 835 (eğitime giren: 63 405) |
+| Gradyan normu (son iterasyon ort. / maks.) | 2,42 / 4,62 — **sonlu** |
+| NaN / Inf | **yok** |
+
+| Kabul kriteri | Sonuç |
+|---|---|
+| 1000 oyunluk smoke tamamlandı | **EVET** |
+| Kayıplar ve gradyanlar sonlu | **EVET** |
+| Değer kaybı 0. adıma göre düşer | **EVET** — 1,9153 → 1,5629 (**−18,4 %**) |
+| Politika kaybı düzgün bazın (`log\|E\|`) altına iner | **EVET** — 1,8513 < 2,1264 |
+| Hedef entropisi / `log\|E\|` oranı raporlanır | **EVET** — 0,9984 → **0,3934** |
+| `RandomBot`'a karşı kazanma oranı raporlanır | **EVET** — **%64,25** (400 oyun, ±%2,4) |
+
+**`RandomBot` karşılaştırması (400 oyun, seed 424242, depth 0, argmax):**
+
+| Model | λ | c_policy | Kazanma | Oyun başına puan |
+|---|---|---|---|---|
+| Eğitilmemiş ağ (`model_v1`) | — | — | %53,00 | +0,165 ± 0,102 |
+| 10 iterasyon, kapı 0,99 | 0,7 | 1,0 | %40,25 | −0,435 ± 0,100 |
+| 5 iterasyon, kapı yok | 0,7 | 0,0 | %57,50 | +0,345 ± 0,115 |
+| **10 iterasyon, kapı 0,99** | **1,0** | **1,0** | **%64,25** | **+0,678 ± 0,092** |
+
+**Aşama C bulguları (ölçülmüş, tahmin değil):**
+
+1. **`λ = 0,7` + `γ = 1` uzun oyunlarda hedefleri sıfıra çökertiyor.** ~100 kararlık bir
+   oyunda `0,7^20 ≈ 8e-4`; ilk ~80 kararın hedefi ~0. Ağ "her şeye 0 tahmin et" çözümüne
+   yakınsıyor. Ölçüm: `λ = 0,7` ile değer kaybı 2,9373 → 2,8811 (**−1,9 %**), `λ = 1,0` ile
+   1,9153 → 1,5629 (**−18,4 %**). `RandomBot` kazanma: %40,25 vs %64,25.
+2. **Düzgüne yakın politika hedefleri değer fonksiyonunu bozuyor.** Eğitilmemiş ağın `Q`
+   değerleri ~±0,04 aralığında olduğu için `softmax(Q / 0,05)` neredeyse düzgün çıkıyor
+   (`H/log|E| = 0,998`). Politika gradyanı bilgi taşımıyor ama `c_policy = 1,0` ile büyüklüğü
+   değer gradyanından ~20 kat fazla. Ölçüm (`λ = 0,7`, 5 iterasyon): `c_policy = 1,0` → %21,5;
+   `c_policy = 0` → %58,0. **Uygulanan koruma:** `policy_min_sharpness = 0,99` (F4-40).
+3. **Shard boyutu tahmini yanlıştı.** Spesifikasyonun ~11 KB/karar tahmini
+   `logTopCandidates = 12` ve 221 float vektör (884 B/aday) ile uyumlu değil; gerçek değer
+   **~1,0 KB/karar** (depth 0, gzip yok) ve **~0,14 KB/karar** (depth 1, gzip).
+
+### 5.14 Aşama D — referans koşusu (kabul)
+
+| Alan | Değer |
+|---|---|
+| Dizin | `ml/runs/stage_d` |
+| Ayarlar | 10 iterasyon × 100 oyun, `S = 200`, `DepthPly = 1`, `MaxCandidates 4/4`, `λ = 1.0`, CPU |
+| Seed | 20260214 |
+| Süre | 1316 s (self-play 890 s) |
+| Değer kaybı | 4,6620 → 2,5475 |
+| Buffer politika kaybı | 1,3638 → 1,1916 (düzgün baz 1,3394) |
+| Hedef entropisi / `log\|E\|` | 0,9969 → 0,3716 |
+| Gradyan normu | 1,82 / 8,67 → 2,64 / 7,00 |
+| Havuz | `v5` (taban), `v10` (+0,40 ± 0,1385 ile girdi) |
+
+**Değerlendirme** (`model_v10.onnx`, seed 777, depth 1, 4/4, 200 oyun/rakip):
+
+| Rakip | Kazanma | Ortalama puan | %95 GA |
+|---|---|---|---|
+| `RandomBot` | **%80,50** | +1,5800 ± 0,1308 | [+1,3237, +1,8363] |
+| `PipBot` | %40,50 | −0,2300 ± 0,1452 | [−0,5146, +0,0546] |
+| `Model:model_v5` | %54,50 | +0,2300 ± 0,1475 | [−0,0590, +0,5190] |
+
+`PipBot` karşısında 28 oyun `max_plies` nedeniyle berabere bitti (uzun oyun eğilimi, F4-45).
+
+### 5.15 Faz 3 arama ayarı ölçüm tablosu
+
+`ml/settings_bench.py` altı kombinasyonu ölçer (`model_stage_c.onnx`, seed 1, `PipBot`):
+
+| Ayar | Depth | Root/Inner | Oyun/s | s/oyun | B/oyun | Oyun | PipBot kazanma | Ortalama puan | %95 GA |
+|---|---|---|---|---|---|---|---|---|---|
+| depth 0, kısıtsız | 0 | 0 / 0 | 62,37 | 0,016 | 1 131 815 | 100 | %13,00 | −1,0000 ± 0,1639 | [−1,3213, −0,6787] |
+| depth 0, kısıtlı | 0 | 4 / 4 | 87,32 | 0,011 | 293 877 | 100 | %9,00 | −1,0000 ± 0,1484 | [−1,2908, −0,7092] |
+| depth 1, kısıtsız | 1 | 0 / 0 | 0,59 | 1,695 | 1 637 306 | 20 | %30,00 | −0,2500 ± 0,4284 | [−1,0897, +0,5897] |
+| depth 1, kısıtlı | 1 | 4 / 4 | 2,17 | 0,461 | 304 375 | 20 | %45,00 | +0,0000 ± 0,4588 | [−0,8993, +0,8993] |
+| depth 2, kısıtsız | 2 | 0 / 0 | zaman aşımı | > 600 | — | 0 | — | — | — |
+| depth 2, kısıtlı | 2 | 4 / 4 | 0,02 | 50,0 | 481 997 | 2 | %0,00 | −1,5000 ± 1,5000 | [−4,4400, +4,4400] |
+
+**Yorum:** aday kısıtlaması (4/4) depth 0'da **1,4× hızlandırır** ve shard'ı **3,9×
+küçültür**; depth 1'de **3,7× hızlandırır** ve kazanma oranını %30 → %45'e çıkarır. Depth 2
+kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başına 50 s sürer.
+
+### 5.16 Faz 4 kabul kriterleri
+
+| # | Kriter | Durum | Kanıt |
+|---|---|---|---|
+| 1 | ONNX ihraç + PyTorch↔ORT parite | ✅ | `model_v1.onnx.parity.json` (5/5) |
+| 2 | Dinamik batch ekseni (üç tensörde) | ✅ | `OrtParityTests` |
+| 3 | Kova mekanizması, 0 bayt/çağrı | ✅ | `ConcurrencyAndAllocationTests` |
+| 4 | CPU↔CUDA paritesi ≤ 1e-4 | ✅ | `InferenceBenchmark` (max 2,98E-008) |
+| 5 | Değerlendirici sözleşmesi (kırpma, offset, terminal) | ✅ | `EvaluatorContractTests` |
+| 6 | Faz 3 v7 entegrasyonu (Test 1/8/12/16/17) | ✅ | `Phase3IntegrationTests` |
+| 7 | Shard v1 çapraz dil (C# ↔ Python) | ✅ | `ShardCrossLanguageTests` |
+| 8 | Self-play sürücüsü, tek iş parçacığı determinizmi | ✅ | `SelfPlayDriverTests` |
+| 9 | TD(λ) + politika hedefleri | ✅ | `ml/tests/test_td_lambda.py`, `test_losses.py` |
+| 10 | 1000 oyunluk smoke, sonlu kayıp/gradyan | ✅ | `stage_c_report.md` |
+| 11 | Değer kaybı düşüşü (sabit MC probe) | ✅ | −18,4 % |
+| 12 | Politika kaybı < düzgün baz | ✅ | 1,8513 < 2,1264 |
+| 13 | Hedef entropisi raporlanır | ✅ | 0,9984 → 0,3934 |
+| 14 | `RandomBot` kazanma oranı raporlanır | ✅ | %64,25 (Aşama C), %80,50 (Aşama D) |
+| 15 | Lig / model havuzu | ✅ | `ml/league.py`, `pool.json` |
+| 16 | `eval_bench` üç rakip türü | ✅ | `EvalBenchTests` |
+| 17 | Faz 3 arama ayarı ölçüm tablosu | ✅ | `settings_table.md` |
+| 18 | **gnubg ER ölçümü** | ✅ | `stage_d_er.md` (ER 0,1941) |
+| 19 | Yakınsama grafiği | ✅ | `ml/artifacts/stage_d_convergence.png` |
+| 20 | Aşama D referans koşusu | ✅ | `stage_d_report.md` |
+
+---
+
+## 6. Test durumu (birleşik)
+
+| Paket | Proje | Test | Süre | Durum |
+|---|---|---|---|---|
+| C# motor | `Backgammon.Tests` (Release) | **285** | ~30 dk 38 s | ✅ 285/285 |
+| C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
+| C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
+| Python | `ml/tests` | **771** | ~8 dk 40 s | ✅ 771/771 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **1244** | | **✅ 0 başarısız** |
+
+**Unity testleri (ayrı, Unity gerektirir):**
+
+| Platform | Test | Süre | Durum |
+|---|---|---|---|
+| EditMode | **7** | ~0,6 s | ✅ 7/7 |
+| PlayMode | **17** | ~20 s | ✅ 17/17 |
+
+Unity testleri `dotnet test` kapsamında değildir; `unity/build.log` içinde kayıtlıdır.
+
+**Neden `Backgammon.Tests` yalnızca Release'te?** Debug derlemesinde `SanityCheck`/`DebugAssert`
+etkin olduğu için 1 000 000 oyunluk fuzz ve performans testleri kullanılamaz hızda çalışır
+(F4-53). Release'te 6 test eksik görünür: `[Conditional("DEBUG")]` işaretli çağrı yerleri
+Release'te derlenmez — bu beklenen farktır (Faz 1'den beri aynı).
+
+**Bilinen kararsız test:** `PerformanceTests.GenerateAfterStates_Throughput` eşiği
+(> 300 000 afterstate/sn) yüke duyarlıdır. Tam koşu sırasında başka ağır iş paralel
+çalışıyorsa 296 000 civarına düşüp kırmızı görünebilir; **tek başına koşulduğunda
+6/6 geçer**. Bu bir gerileme değildir. Doğrulama:
+`dotnet test Backgammon.Tests -c Release --filter "FullyQualifiedName~PerformanceTests"`.
+
+**Test dağılımı:**
+
+| Paket | Dosya | Kapsam |
+|---|---|---|
+| `Backgammon.Tests` | `BackgammonStateTests`, `MoveStructureTests`, `CoordinateTests` | Veri yapıları, koordinat yardımcıları |
+| | `ZobristTests` | Hash tanımı, `MirrorTo` simetrisi, artımlı = tam |
+| | `SanityCheckTests` | `SanityCheck` maddelerinin gerçekten yakaladığı |
+| | `EngineFlowTests` | `ApplyStep`/`UndoStep`, `ApplyMove`/`UndoMove`, `SetDice`, `LoadAfterState`, `EndTurn` |
+| | `LegalMoveGeneratorTests` | Uç durumlar + brute-force referans (1000+ pozisyon) + simetri |
+| | `CubeAndMatchTests` | Küp, Crawford, Jacoby, mars, maç akışı |
+| | `ReferenceComparisonTests` | Bağımsız Python referansı (57 pozisyon / 927 sonuç) |
+| | `FuzzTests` | Seed'li oyun fuzz'ı (2 000 varsayılan, `[Explicit]` 1 000 000) |
+| | `PerformanceTests` | Hız, allocation, çok çekirdekli ölçeklenme |
+| | `VectorizerTests`, `VectorGoldenData` | 221 nöron, altın veri |
+| | `AfterStateListTests`, `StatePoolTests` | SoA, havuz |
+| `Backgammon.Inference.Tests` | `OrtParityTests` | PyTorch↔ORT, dinamik batch |
+| | `EvaluatorContractTests` | Kırpma, offset, terminal, `Version`, `SetModel` |
+| | `ConcurrencyAndAllocationTests` | İş parçacığı güvenliği, 0 bayt/çağrı |
+| | `Phase3IntegrationTests` | Faz 3 v7 Test 1/8/12/16/17 |
+| | `ShardCrossLanguageTests` | C# ↔ Python shard |
+| | `SelfPlayDriverTests`, `EvalBenchTests` | Sürücü, değerlendirme |
+| | `InferenceBenchmark`, `SpikeZeroAllocation` | `[Explicit]` ölçüm |
+| `Backgammon.Tests` | `BearoffTests` | Faz 5 Aşama A: Test 1–13 (indeks, CRC, başlık, CDF, dekoratör) |
+| `Backgammon.Tests` | `MatchTests`, `CubeAndMatchTests` | Faz 5 Aşama B: Test 14–26 (MET, küp, Crawford, maç farkındalığı) |
+| `Backgammon.UI.Tests` | `ViewModelTests` | Faz 5 Aşama C: Test 27–31 (board/küp/skor/analiz VM, hamle girişi) |
+| `Backgammon.UI.Tests` | `OrchestratorTests` | Faz 5 Aşama C: Test 32–33 (deterministik self-play, iptal) + `Think()` |
+| `ml/tests` | `test_model`, `test_export_parity`, `test_golden_input` | Ağ, ONNX, altın girdi |
+| | `test_losses`, `test_td_lambda`, `test_numerics`, `test_tau_crosscheck` | Kayıplar, TD(λ), sayısal kararlılık |
+| | `test_shards`, `test_replay`, `test_train` | Shard, buffer, eğitim döngüsü |
+| | `test_league`, `test_eval_bench`, `test_settings_bench` | Lig, değerlendirme, ayar tablosu |
+| | `test_gnubg_er` | gnubg ER (35 test; gnubg yoksa `skipif`) |
+| | `test_docs_consistency` | Belge tutarlılığı (20 test): yol varlığı, test sayıları, bölüm/karar kimliği sırası |
+| | `test_artifact_roundtrip` | Artefakt raporlarının kendi `.json` çıktısından bayt bayt yeniden üretimi (3 test) |
+| | `test_met_extraction` | Faz 5 Test 35: MET değişmezleri + gnubg XML eşleşmesi (4 test) |
+| | `test_bearoff_ref_matches_csharp` | Faz 5 Test 34: bağımsız Python DP ↔ C# tablosu (3 test) |
+| | `test_export_output_version` | Faz 5 Test 36 + Faz 6 Test 59: `output_version` metadata'sı ve v2 paritesi (8 test) |
+| | `test_stage_b` | Faz 6 Aşama B: Test 53, 55, 56 (equity formülü, `L_cal`, sıcaklık) (9 test) |
+| | `test_stage_c` | Faz 6 Aşama C: Test 63, 64, 65, 67 (shard v1 okunabilirliği, Linux yayını, `outcomeProbs` yokluğu, veri hacmi) (4 test) |
+| `Backgammon.Tests` | `OutcomeDistributionV2Tests` | Faz 6 Aşama B: Test 49–52 (dışlayıcı equity, antisimetri, normalizasyon) |
+| `Backgammon.Inference.Tests` | `OutputVersion2Tests` | Faz 6 Aşama B: Test 54, 57, 58 (v2 kabul, sıfır allocation, v1 geriye uyum) |
+| `Backgammon.Inference.Tests` | `StageCDataEngineTests` | Faz 6 Aşama C: Test 60, 61, 62, 65, 66 (paralel determinizm, GPU ölçümü, açılış çeşitliliği, `dup_cap`) |
+
+---
+
+## 7. Birleşik ölçüm tablosu
+
+| Faz | Ölçüm | Değer |
+|---|---|---|
+| 1 | `GenerateAllLegalMoves` | ~480 000 çağrı/sn |
+| 1 | `GenerateAfterStates` | ~340 000 çağrı/sn |
+| 1 | Rastgele oyun (tek çekirdek / 12 thread) | ~1 700 / ~9 200 oyun/sn |
+| 1 | Fuzz (1 000 000 oyun) | 0 hata, 1 sa 2 dk |
+| 2 | `Vectorize` | ~3 650 000 çağrı/sn |
+| 2 | `VectorizeBatch` | ~3 100 000 kayıt/sn |
+| 2 | Altın eşleşme | 500 × 221 birebir |
+| 3 | Referans eşitliği | max \|Δ\| = 0 |
+| 3 | Arama allocation | 0 bayt |
+| 4 | ONNX çıkarım (CPU, kova 128) | ~724 000 poz/sn |
+| 4 | ONNX çıkarım (CUDA, kova 2048) | ~1 241 000 poz/sn |
+| 4 | ONNX allocation | 0 bayt/çağrı (tüm kovalar) |
+| 4 | CPU↔CUDA paritesi | max 2,98E-008 |
+| 4 | Aşama C değer kaybı | 1,9153 → 1,5629 (−18,4 %) |
+| 4 | Aşama C `RandomBot` | %64,25 |
+| 4 | Aşama D değer kaybı | 4,6620 → 2,5475 |
+| 4 | Aşama D `RandomBot` / `PipBot` / `model_v5` | %80,50 / %40,50 / %54,50 |
+| 4 | gnubg ER (`policy` / `pip`) | 0,1941 / **0,1283** |
+| 5 | Bearoff DB boyutu / `MaxRolls` | 2 496 208 bayt / 22 |
+| 5 | Bearoff C# ↔ Python referansı | max \|Δ\| = 7,630E-006 |
+| 5 | MET (Rockwell–Kazaross) ↔ gnubg 1.08.003 | max \|Δ\| = **0,000E+000** (625 hücre) |
+| 5 | Küp anlaşması (gnubg 0-ply, 132 pozisyon) | ikileme %51,52 / alma %61,36 / ikisi %46,21 |
+| 5 | Değer kafası kalibrasyonu (400 afterstate) | eğim **0,0874**, korelasyon +0,2431, MAE 0,8014 |
+| 5 | Unity EditMode / PlayMode | 7/7 / 5/5 |
+
+---
+
+## 8. Bilinen sınırlar ve sonraki adımlar
+
+### 8.1 Kapsam dışı (bilinçli)
+
+* **Küp kararları (Faz 4'te).** Faz 4'te `ICubeEvaluator`/`ICubePolicyEvaluator` arayüzleri vardı,
+  uygulama yoktu; tüm eğitim ve ölçüm **money game, küpsüz, Jacoby kapalı** varsayımıyla yapıldı
+  (F4-01). **Faz 5'te kapandı:** `EquityCubeAdvisor` + `MatchEquityTable` (bkz. §12.3).
+* **Çok oyunculu toplu çıkarım sunucusu.** GPU yalnızca orada anlamlı olurdu (spec v3 §10).
+* **İki taraflı bearoff veritabanı.** 2 944 581 696 pozisyon ≈ 29,4 GB; Faz 6'ya ertelendi (F5-06).
+* **Unity entegrasyonu (Faz 4'te).** Faz 4'te `Backgammon.Core.asmdef` hazırdı ama sahne/UI yoktu.
+  **Faz 5'te kapandı:** `F:\Projects\Unity\Tavla3D` (bkz. §12.5).
+
+### 8.2 Ölçülmüş zayıflıklar
+
+1. **Model `PipBot`'tan zayıf.** gnubg ER: model 0,1941 vs `PipBot` 0,1283. 10 × 100 oyunluk
+   referans koşusu bir **altyapı doğrulamasıdır**; güç hedefi değildir. Gerçek eğitim için
+   mertebe olarak 10⁵–10⁶ oyun ve çok daha fazla iterasyon gerekir.
+2. **`PipBot` karşısında uzun oyunlar.** 200 oyunun 28'i `max_plies` nedeniyle berabere
+   bitti; `PipBot` vurma eğilimli olduğu için oyunlar uzuyor (F4-45).
+3. **`λ = 0,7` + `γ = 1` uyumsuz.** Uzun oyunlarda hedefler sıfıra çöküyor; `λ = 1,0`
+   (Monte Carlo) veya `γ < 1` gerekir (F4-41).
+4. **Depth 2 pratik değil.** Kısıtsız > 600 s/oyun; kısıtlı bile 50 s/oyun.
+5. **`--threads > 1` deterministik değil.** İş parçacığı başına ayrı RNG (F4-39).
+
+### 8.3 Sonraki adımlar (öncelik sırası)
+
+1. **Gerçek eğitim koşusu.** 10⁵+ oyun, 50+ iterasyon, `λ = 1,0`, `DepthPly = 1`,
+   `MaxCandidates 4/4`, CPU. Hedef: `PipBot` karşısında > %55, gnubg ER < 0,10.
+2. **Küp ağı.** Ayrı bir `ICubeEvaluator` uygulaması + küp self-play verisi.
+3. **gnubg referans verisi (Faz 1 E-01).** gnubg artık kurulu; `reference_positions.json`
+   şemasıyla gnubg'den hamle üretimi referansı alınabilir.
+4. **Depth 2 için performans.** Aday kısıtlaması + transposition table genişletmesi.
+5. **Belge tutarlılığı.** `ml/tests/test_docs_consistency.py` sayıların belgelerle
+   uyuşmasını otomatik doğrular (bkz. §9).
+
+---
+
+## 9. Belge tutarlılığı testi
+
+`ml/tests/test_docs_consistency.py`, belgelerdeki sayısal iddiaların gerçekle uyuşmasını
+doğrular:
+
+* `PHASES.md` §6'daki test sayıları (`245`, `57`, `28`, `194`) ile `pytest --collect-only` ve
+  C# test dosyalarındaki `[Test]` sayıları tutarlı mı?
+* Belgelerde referans verilen tüm artefakt dosyaları (`ml/artifacts/*.md`, `*.json`,
+  `*.onnx`, `SHARD_FORMAT.md`) mevcut mu?
+* `ARCHITECTURE.md` bölüm numaraları tekrar/sıra hatası içeriyor mu?
+* `ASSUMPTIONS.md` karar kimlikleri (`B-`, `C-`, `D-`, `E-`, `F2-`, `F3-`, `F4-`, `F5-`)
+  benzersiz ve sıralı mı?
+* `ml/artifacts/*.md` raporları, ilgili `.json` çıktısından hâlâ bayt bayt yeniden
+  üretilebiliyor mu (`test_artifact_roundtrip.py`)?
+
+Bu test, bu belgenin yazılması sırasında bulunan belge kaymalarını (ARCHITECTURE.md §18 ve
+§34'teki eski test sayıları, `ASSUMPTIONS.md` F4-24'teki "gnubg kurulu değil" ifadesi)
+tekrar oluşmaktan korur.
+
+### 9.1 Artefakt üreticileri ve Türkçe diyakritikler
+
+`ml/artifacts/` altındaki raporların tamamı bir Python betiği tarafından üretilir; elle
+düzenlenmez. Üreticiler (`ml/eval_bench.py`, `ml/league.py`, `ml/settings_bench.py`,
+`ml/gnubg_er.py`) metin şablonlarını **Türkçe diyakritiklerle** (`ı`, `ş`, `ğ`, `ü`, `ö`, `ç`)
+yazar. Bu sayede:
+
+* Rapor yeniden üretildiğinde diyakritikler korunur (ASCII'ye düşmez).
+* `settings_table.md`, `stage_d_er.md` ve `stage_d_eval.md` dosyaları, ilgili `.json`
+  çıktısından **bayt bayt aynı** şekilde yeniden üretilir. Bu eşitlik
+  `ml/tests/test_artifact_roundtrip.py` ile her test koşusunda doğrulanır.
+
+Bir rapor metnini değiştirmek gerektiğinde önce üreticideki şablonu, sonra `.json` içindeki
+etiketleri güncelleyin; aksi hâlde bir sonraki üretim eski metni geri getirir.
+
+---
+
+## 10. Yeniden üretim komutları
+
+```powershell
+# 1. Derleme (0 uyarı / 0 hata beklenir)
+dotnet build TavlaAI_Project.slnx -c Release --nologo -v q
+
+# 2. C# motor testleri (Release zorunlu, ~25 dk)
+dotnet test Backgammon.Tests -c Release --nologo
+
+# 3. C# çıkarım testleri (~2 s)
+dotnet test Backgammon.Inference.Tests -c Release --nologo
+
+# 4. Python testleri (~12 s)
+python -m pytest ml/tests -q
+
+# 5. Vektör altın doğrulaması (bağımsız Python/numpy)
+python tools/vector_verify.py
+
+# 6. Referans veri üretimi (bağımsız Python motoru)
+python tools/reference_gen.py
+
+# 7. Smoke eğitimi (Aşama C, ~5 dk CUDA)
+python ml/train.py --out ml/runs/stage_c_accept --iterations 10 --games 100 `
+	--steps 200 --depth 0 --device cuda --eval-random 200 --seed 20260214 --lam 1.0
+
+# 8. Aşama D referans koşusu (~22 dk CPU)
+python ml/train.py --out ml/runs/stage_d --iterations 10 --games 100 `
+	--steps 200 --depth 1 --max-root 4 --max-inner 4 --lam 1.0 --seed 20260214
+
+# 9. Değerlendirme (üç rakip)
+python ml/eval_bench.py --model ml/runs/stage_d/onnx/model_v10.onnx `
+	--opponents random,pip --vs-model ml/runs/pool_d/v5.onnx `
+	--games 200 --seed 777 --depth 1 --max-root 4 --max-inner 4 `
+	--out ml/artifacts/stage_d_eval.md --json ml/artifacts/stage_d_eval.json
+
+# 10. Faz 3 arama ayarı tablosu
+python ml/settings_bench.py --model ml/artifacts/model_stage_c.onnx --profile quick `
+	--out ml/artifacts/settings_table.md --json ml/artifacts/settings_table.json
+
+# 11. gnubg ER ölçümü (~35 dk)
+python ml/gnubg_er.py --model ml/runs/stage_d/onnx/model_v10.onnx --plies 2 `
+	--criterion policy --out ml/artifacts/stage_d_er.md --json ml/artifacts/stage_d_er.json
+
+# 12. Yakınsama grafiği
+python ml/eval_bench.py --plot ml/runs/stage_d/train_report.json `
+	--plot-out ml/artifacts/stage_d_convergence.png
+```
+
+---
+
+## 11. Belge haritası
+
+| Soru | Belge |
+|---|---|
+| Dört fazın tamamı, kabul kriterleri, ölçümler | **`PHASES.md`** (bu dosya) |
+| Bir bileşen nasıl tasarlandı, neden böyle? | `ARCHITECTURE.md` §1–§42 |
+| Belirsiz bir noktada hangi karar verildi, neden? | `ASSUMPTIONS.md` |
+| Shard dosyası nasıl okunur/yazılır? | `SHARD_FORMAT.md` |
+| Aşama C smoke eğitimi ayrıntıları | `ml/artifacts/stage_c_report.md` |
+| Faz 5 (bearoff, küp/maç, UI, Unity) | **`PHASES.md` §12** + `ARCHITECTURE.md` §43 |
+| Unity projesi kurulumu, testleri, bulunan hatalar | `unity/README.md` |
+| Unity derleme/test kaydı | `unity/build.log` |
+| Faz 5 ölçüm raporu | `ml/artifacts/stage_e_faz5.md` |
+| Küp kararı karşılaştırması (gnubg) | `ml/artifacts/stage_b_cube.md` |
+| Değer kafası teşhisi | `ml/artifacts/stage_b_afterstates.md` |
+| Aşama D lig/eval/ayar/gnubg ayrıntıları | `ml/artifacts/stage_d_report.md` |
+| Faz 6 Aşama D ölçekli eğitim raporu | `ml/artifacts/stage_f_train.md` |
+| Faz 6 Aşama E arama gücü raporu | `ml/artifacts/stage_e_search.md` |
+| CPU vs CUDA kararı (Faz 6 Aşama C) | `ml/artifacts/stage_c_gpu_decision.md` |
+| gnubg ER ham çıktısı | `ml/artifacts/stage_d_er.md`, `stage_d_er.json`, `stage_d_er_pip.json` |
+| Değerlendirme ham çıktısı | `ml/artifacts/stage_d_eval.md`, `stage_d_eval.json` |
+| Arama ayarı tablosu | `ml/artifacts/settings_table.md`, `settings_table.json` |
+| CPU vs CUDA ölçümü | `ml/artifacts/inference_benchmark.txt` |
+| Yakınsama grafiği | `ml/artifacts/stage_d_convergence.png` |
+
+---
+
+## 12. Faz 5 — Bearoff veritabanı, küp/maç katmanı, UI ve Unity
+
+Faz 5'in hedefi, Faz 4'te eğitilen ağı **oynanabilir bir ürüne** dönüştürmekti: kesin
+bearoff değerlendirmesi, küp ve maç farkındalığı, Unity'den bağımsız bir UI katmanı ve
+Unity sahnesi. Ağırlık merkezi **motor değil, ürün**tür; ağ kalitesi Faz 4'teki seviyede
+kalmıştır (bkz. §12.8).
+
+### 12.1 Aşama planı ve kabul durumu
+
+| Aşama | Kapsam | Test | Durum |
+|---|---|---|---|
+| A | Bearoff veritabanı + dekoratör | 1–13 | ✅ 13/13 |
+| B | Küp/maç katmanı | 14–26 | ✅ 47/47 (14–26 + genişletilmiş küp testleri) |
+| C | AI entegrasyonu (`Backgammon.UI`) | 27–37 | ✅ 27–33 C# (12/12), 34–37 Python (13 test) |
+| D | Unity görselleştirme | 38–40 | ✅ EditMode 7/7, PlayMode 5/5 |
+| E | Belge birleştirme | — | ✅ bu bölüm |
+
+### 12.2 Aşama A — Bearoff veritabanı
+
+**Tasarım kararı (F5-01):** veritabanı **modelin içinde değil**, `BackgammonSearch` ile
+`OnnxPolicyValueEvaluator` **arasında bir dekoratördür**. Böylece:
+
+* Faz 1 API'si hiç değişmedi (`AfterStateList.CopyRecordFrom` gibi eklemeler yapılmadı).
+* Ağ, bearoff pozisyonlarını hiç görmez; kesin değer ağın hatasını taşımaz.
+* Dekoratör kapatılabilir (`BearoffAwareOptions.DisableBearoff`) ⇒ A/B karşılaştırması
+  aynı ikiliyle yapılabilir.
+
+**Format (F5-02):** 64 baytlık başlık + `positions × (maxRolls+1) × uint16` CDF tablosu.
+`magic = "TVB1"`, `version = 1`, `points = 6`, `checkers = 15`, `positions = 54 264`,
+`payloadCrc32` (CRC-32/ISO-HDLC). Nicemleme `round(clamp(x,0,1) × 65535)`; en büyük
+okuma hatası `1/65535 ≈ 1,53E-005`.
+
+**Sıralama (F5-03):** kendi colex sıralaması — `Rank(c) = Σ_{i=0..5} C(S_i + i, i+1)`.
+gnubg indeksine bağımlılık yok; `Unrank` ile tam tur doğrulandı (54 264 pozisyon).
+
+**DP (F5-04):** `P(T(c) ≤ k) = (1/36) Σ_zar max_hamle P(T(c') ≤ k−1)`. Yasal hamleler
+`LegalMoveGenerator`'dan gelir, yeniden yazılmadı. `MaxRolls` 12'den **22**'ye otomatik
+yükseltildi (en kötü pozisyon: 6 hanesinde 15 pul).
+
+**Dosya:** `ml/artifacts/bearoff1_v1.bin` — 2 496 208 bayt (2,38 MiB), `MaxRolls = 22`,
+mars tablosu yok. Üretim ~5,5 s (geçiş tablosu ~5,0 s + DP ~0,5 s).
+
+**Bağımsız doğrulama:** `ml/bearoff_ref.py` yalnızca §3.2/3.3/3.9'dan yazılmış ayrı bir
+Python DP'sidir. C# tablosuyla en büyük fark **7,630E-006** (nicemleme sınırının altında),
+tolerans dışı hücre **0**. Test 34 bunu her koşuda doğrular.
+
+**Kesin denklem (§3.7):** `pA[k] = cdfA[k] − cdfA[k−1]`,
+`P(A kazanır) = Σ_k pA[k]·(1 − cdfB[k−1])`, `E = 1 − 2·P(win)`. Saf yarışta mars yoktur;
+arka arkaya mars zaten imkânsızdır.
+
+### 12.3 Aşama B — Küp ve maç katmanı
+
+**Küp ve maç ağın dışındadır (F5-07).** Gerekçe: küp kararı `argmax` değil **eşik**
+kararıdır; maç kazancı ise MET ile kapalı biçimde hesaplanır. İkisi de ağa sokulursa
+hem eğitim verisi hem de kalibrasyon ikiye katlanır, karşılığında hiçbir şey kazanılmaz.
+
+**Negamax tuzağı (F5-08):** maç kazanma olasılığı `MWC` **monoton** olduğu için hamle
+seçimini değiştirmez; ama `MWC` doğrudan negamax'a verilirse işaret/ölçek bozulur.
+Doğru dönüşüm `ME = 2·MWC − 1`'dir. `MatchAwareEvaluator` bunu uygular; money game'de
+tam kimliktir.
+
+**MET (F5-09):** Rockwell–Kazaross tablosu `Backgammon.Core/Match/met_rk.json` içine
+gömülüdür (25 × 25). gnubg 1.08.003'ün `Rockwell-Kazaross.xml` dosyasıyla **625 hücrenin
+tamamında max |Δ| = 0,000E+000** — bit düzeyinde aynı.
+
+**Küp eşikleri (F5-10):** money game'de `E_doubleTake = 2E`, `E_doublePass = 1`.
+Buradan `E > 0,5` ⇒ ikileme; `E > 1,0` ⇒ ikileme ama rakip pas geçer (too good);
+`E < 0,5` ⇒ alma. **Spec ile ilk uygulama çelişiyordu** (`MoneyTakePoint = 1,0`
+kullanılıyordu); spec'in türetmesi doğru olduğu için uygulama düzeltildi
+(`MoneyTooGoodPoint = 1,0`, `shouldTake = E < 0,5 − ε`).
+
+**Maç farkındalığının ölçülen katkısı:** 400 oyunluk karşılaştırmada 2-away %40,00 vs
+%39,50, 4-away %39,75 vs %40,00, 5-away %42,25 vs %44,75 — **hepsi standart hatanın
+içinde**. Yani bu modelle maç farkındalığı ölçülebilir bir kazanç sağlamıyor. Nedeni
+§12.8'deki değer kafası sorunudur, katmanın kendisi değil.
+
+### 12.4 Aşama C — AI entegrasyonu (`Backgammon.UI`)
+
+`Backgammon.UI` **netstandard2.1** ve **hiçbir `UnityEngine` türü içermez**. Bu, Test
+27–33'ün Unity olmadan `dotnet test` ile koşmasını sağlar.
+
+| Tür | Görev |
+|---|---|
+| `GameOrchestrator` | Zincir kurulumu, arama, oyun akışı, küp, analiz |
+| `PositionAnalysis` | UI'ye hazır DTO (equity, MWC, dağılım, pip, rolls-to-off, küp) |
+| `BoardViewModel` / `CubeViewModel` / `MatchScoreViewModel` | Durum yansıması |
+| `AnalysisViewModel` | tr-TR biçimlendirme, "Kesin"/"Tahmin" rozeti |
+| `MoveInputController` | Yasal hedef üretimi, kısmi hamle, geri alma |
+| `BoardLayout` | 24 hane + bar + tepsi + küp dikdörtgenleri (çakışmasız) |
+| `SearchOutcome` | `SearchResult` (`ref struct`) için `Task<T>` uyumlu taşıyıcı |
+
+**Zincir:** `MatchAwareEvaluator` (dış) → `BearoffAwareEvaluator` → temel değerlendirici.
+Money game'de `MatchAwareEvaluator` atlanır. `Version` değişince `SearchWorkspace.Reset()`
+zorunludur (Faz 3 §3.5).
+
+**Eşzamanlılık:** `SemaphoreSlim(1,1)` — aynı anda tek arama. İkinci çağrı
+`InvalidOperationException` atar (Test 33).
+
+### 12.5 Aşama D — Unity
+
+Unity **6000.3.8f1**, URP 17.3.0, uGUI 2.0.0, Input System 1.18.0, test-framework 1.6.0.
+Proje: `F:\Projects\Unity\Tavla3D`. Kurulum ve test komutları `unity/README.md`
+içinde, gerçek koşu kaydı `unity/build.log` içindedir.
+
+**Aşama D'de bulunan üç gerçek hata:**
+
+1. **`BoardLayout` kayan nokta çakışması.** Komşu hanelerin sol kenarı `c·w`, sağ kenarı
+   `(c+1)·w` ile hesaplanınca kayan noktada `1E-013` mertebesinde üst üste binme oluşuyordu.
+   Test 38 yakaladı; `left`/`right` aynı ifade ailesinden türetilerek düzeltildi.
+2. **ONNX Runtime iş parçacığı güvenliği.** `OrtIoBinding` iş parçacığı güvenli değildir.
+   Arama gerçek kare döngüsü içinde arka plan iş parçacığında çalıştırıldığında
+   `SynchronizeBoundInputs` erişim ihlali (`0xC0000005`) üretiyordu. Tek başına çalışan
+   arka plan aramaları geçiyordu; hata yalnızca sahne + kare döngüsü + ONNX birlikteyken
+   ortaya çıkıyordu. Düzeltme: `GameOrchestrator.Think()` — arama **çağıran iş
+   parçacığında** senkron çalışır; Unity tarafı bunu kullanır. `ThinkAsync` Unity'den
+   bağımsız katmanda ve testlerde aynen geçerlidir.
+3. **Girdi işleyicisi.** `StandaloneInputModule` yalnızca eski girdi arka ucuyla çalışır;
+   proje Input System paketini kullanıyordu (`activeInputHandler: 1`) ve her karede
+   `InvalidOperationException` atıyordu. `activeInputHandler: 2` (**Both**) yapıldı.
+
+**Lisans:** batchmode lisansı bu makinede mevcuttur; "Unity testleri geçti" ifadesi
+gerçekten geçen sonuçlara dayanmaktadır (`unity/build.log`).
+
+### 12.5.1 Aşama D sonrası oynanabilirlik yamaları
+
+Aşama D kapandığında oyun **oynanamıyordu**: bardan giriş ve toplama tıklanamıyor,
+insanın küp teklifi yanıtsız kalıyordu. Dört dosya düzeltildi.
+
+| # | Kusur | Düzeltme |
+|---|---|---|
+| 1 | `BarView`/`TrayView` yalnızca görüntüydü (`IPointerClickHandler` yok) | `IPointerClickHandler`, `Point`, `Clicked`, `Initialize(int)`, `SetHighlight(bool)` eklendi |
+| 2 | `BoardView.ApplyHighlights` yalnızca 1..24'ü dolaşıyordu; bar (0/25) ve tepsi (0/25) hiç vurgulanmıyordu | `CreateBar(name, point)` / `CreateTray(name, point)`; `raycastTarget = true`; `TrayClicked` olayı; bar/tepsi vurguları |
+| 3 | `BoardInputController` tepsi tıklamasını bilmiyordu | `TrayClicked` aboneliği, `OnTrayClicked(int)`, `HitTest` içinde `HitTestTray` (sürükle-bırak ile toplama) |
+| 4 | `GameBootstrap.Update` içinde `GamePhase.CubeOffered` dalı yoktu → insan küp teklifinde kilitlenme | `_pendingAiTake` alanı; "Kup" düğmesi `OfferDouble()`'dan **önce** `EvaluateCube().ShouldTake` saklar; `Update` saklanan kararı uygular |
+
+**Neden `OfferDouble()`'dan önce?** `EquityCubeAdvisor.Decide` yalnızca `PreRoll`
+fazında gerçek karar üretir; `CubeOffered` fazında `ShouldTake = true` sabitini
+döndürür. Karar bu yüzden tekliften önce yakalanır.
+
+**Yeni test:** `FullGameTests.FullGame_ReachesGameOver` (PlayMode) bir oyunu her iki
+taraf da AI ile oynayarak `GameOver` fazına kadar götürür; `SmokeTests`'in 60 karelik
+penceresi bu kilitlenmeleri yakalayamıyordu. Süre 3,98 s (`DepthPly = 0`).
+
+**Windows derlemesi:** `TavlaAI.Editor.BuildScript.BuildWindows64` →
+`F:\Projects\Unity\Tavla3D\Build\Tavla3D.exe`. Derleme çalıştırıldığında
+`Player.log` içinde hiçbir istisna/uyarı yoktur.
+
+### 12.5.2 Sprite katmanı (görsel zenginlik)
+
+Aşama D sonunda tahta düz renkli dikdörtgenlerden oluşuyordu. `SpriteLibrary`
+eklenerek tahta, haneler, pullar, zarlar, küp, bar ve tepsiler sprite ile çizilir
+hâle geldi.
+
+| Özellik | Davranış |
+|---|---|
+| Kaynak seçimi | Önce `Resources/Sprites/<ad>`, yoksa **kodla üretilen** sprite |
+| Önbellek | `Dictionary<string, Sprite>`, `HideFlags.DontSave` — kare içinde ayırma yok |
+| Varlık adları | `board`, `point`, `checker_white`, `checker_black`, `die_1`…`die_6`, `cube`, `bar`, `tray` |
+| PNG kuralı | **Texture Type = Sprite (2D and UI)**; aksi hâlde `Resources.Load<Sprite>` `null` döner |
+| Çizim sırası | uGUI'de son kardeş üstte → `CheckerPool` **en son** kurulur |
+
+Değişen dosyalar: `SpriteLibrary.cs` (yeni), `UiFactory`, `CheckerView`,
+`CheckerPool`, `BoardView`, `DiceView`, `CubeView`. `CheckerPool.Place(Color, …)`
+aşırı yüklemesi korunduğu için Test 40 anlamı değişmedi.
+
+Doğrulama: `CompileOnly` 0 hata, EditMode 7/7, PlayMode 5/5
+(`FullGame_ReachesGameOver` 1,82 s), `BuildWindows64` `Succeeded (0 hata)`,
+player 12 s istisnasız. Piksel analizi (1600×1000 pencere): ahşap %53,0,
+koyu üçgen %16,9, açık üçgen %12,5, siyah pul %11,5, beyaz pul %6,2.
+
+### 12.5.3 Duyarlı kenar çubuğu yerleşimi
+
+Kullanıcı geri bildirimi: *"Tavla tahtası üzerinde buton/yazılar oyun alanını
+kapatıyor. Sağ tarafta oyunu engellemeyecek şekilde dizayn et. Seçenekler
+butonunu tıklamadan da seçenekler menüsü ekranda gözüküyor."*
+
+| Sorun | Kök neden | Çözüm |
+|---|---|---|
+| Denetimler tahtanın üstünde | `BoardRoot` 1600×1000 ortada; HUD/kontrol çubuğu üstüne biniyordu | `BoardArea` (esnetilmiş) + `BoardFitter` (en-boy oranı korunur) + sağa sabitlenmiş kenar çubuğu |
+| Ayarlar paneli kendiliğinden açık | `SetVisible` yalnızca `Background`'ı kapatıyordu; `_summary` ve 3 düğme kardeş nesneydi | Tüm çocuklar `Content` altında; `SetVisible` onu açar/kapatır; `IsVisible` eklendi |
+| `ApplyStep: n değerinde kalan zar yok` | Tur bitince `MoveInputController`'daki kısmi hamle yaşıyordu | `RefreshViews` sıra/faz değişiminde `Reset()`; `CompleteMove` hamleyi kopya durumda doğrular |
+
+Yerleşim sabitleri tek yerde: `Infrastructure/UiLayout.cs` (tahta 1500×938,
+oran 1,5991; kenar çubuğu 352, sağ boşluk 20, ayrılan 392). Hem
+`Editor/SceneBuilder.cs` hem `Bootstrap/GameBootstrap.cs` bu sabitleri kullanır,
+böylece Editör ve oyuncu yerleşimi ayrışamaz.
+
+Kenar çubuğu dikey sırası: `MatchScore` (20) → `Crawford` (118) →
+`MatchLength` (158) → `Dice` (236) → `Cube` (360) → `Analysis` (572) →
+`Settings` (780) → `ControlBar` (1002).
+
+Doğrulama: `CompileOnly` 0 hata, `BuildScene` 30 288 B, EditMode 7/7,
+**PlayMode 8/8** (`LayoutTests` 2 + `InputResetTests` 1 yeni),
+`BuildWindows64` `Succeeded (0 hata)`. `LayoutTests` tahta ile her denetimin
+dünya koordinatlarındaki kesişimini ölçer; yerleşim ileride bozulursa test
+kırmızıya döner.
+
+### 12.5.4 Hamle girişi (taş tıklayınca gitmiyor)
+
+Kullanıcı geri bildirimi: *"AI'ye karşı oyun oynarken zara göre taşları hareket
+ettirmiyor. Oynatacağım taşı tıklayınca gideceği alternatifleri doğru gösteriyor,
+ancak seçtiğimde taş gitmiyor."*
+
+| Sorun | Kök neden | Çözüm |
+|---|---|---|
+| Taş hareket etmiyor | `MoveInputController` yasal hamleleri **taban** pozisyondan üretiyor, `TryAddStep` sonrası yeniden üretmiyordu; ikinci tıklama bayat listeye göre doğrulanıp `IsLegal` korumasında sessizce düşüyordu | `_baseState` + `_scratch` alanları ve `Regenerate()`: yasal hamleler **kısmi hamleden sonraki** pozisyondan üretilir |
+| Kısmi hamle görünmüyor | `BoardView` yalnızca `GameOrchestrator.State`'i çiziyordu | `BoardInputController.ApplyPreview()`: `State.Clone()` üzerinde kısmi hamleyi uygular, `_model.Update` + `_board.Refresh` |
+| İkinci zarın hedefleri kayboluyor | Başarılı `TryAddStep` sonrası `ClearSelection()` çağrılıyordu | Çağrı kaldırıldı; seçim taşın gittiği haneye taşınır |
+| Yarım hamle kayboluyor | "Turu bitir" kısmi hamleyi uygulamıyordu | `CommitPartialMove()` eklendi; "Turu bitir" önce onu çağırır. Ayrıca "Geri al" (`UndoStep()`) düğmesi eklendi |
+| Kalan zarlar güncellenmiyor | `DiceView` yalnızca tur değişiminde yenileniyordu | `_boardModel.Changed` → `DiceView.Refresh` (abonelik `new BoardViewModel()` **sonrasında**) |
+
+**Yan bulgu:** `BearoffDatabase.IsOneSidedBearoff` rakibin ev bölgesindeki
+taşlarını kabul ediyordu. `ToCounts` ev bölgesini `(byte)`'a çevirdiği için
+negatif değerler sessizce bozuluyor ve `BearoffIndex.Rank`
+`Toplam taş sayısı 15'i aşamaz: 268` istisnası atıyordu (`FullGameTests`
+kırmızıya döndü). Rakip ev bölgesi kontrolü eklendi (beyaz için 19–24, siyah
+için 1–6); bu aynı zamanda doğru semantiktir — rakip ev bölgesindeyse pozisyon
+temastır ve tek taraflı bearoff tablosu geçersizdir. Regresyon testi:
+`BearoffTests.BearoffDatabase_RejectsContactPositions`.
+
+Doğrulama: `dotnet build` 0 hata; `Backgammon.Tests` **245/245**,
+`Backgammon.Inference.Tests` 57/57, `Backgammon.UI.Tests` **19/19**
+(Test 30b yeni), `ml/tests` 20/20; `CompileOnly` 0 hata, `BuildScene` 30 299 B,
+EditMode 7/7, **PlayMode 10/10** (`MoveFlowTests` 2 yeni),
+`BuildWindows64` `Succeeded (0 hata)`, oyuncu duman testi istisnasız.
+
+### 12.5.5 Oynanış hataları (altı yama)
+
+Kullanıcı geri bildirimi: *"1. rakibin taşını kırdığımda benim taş eksiliyor
+(kayboluyor) 2. Rakibin taşı kırılınca kırık hanesinden içeri girmiyor, meçhul.
+3. taşları toplarken toplanan taşlar görünmüyor. 4. oyun sonunda skor değişmiyor.
+5. rakip hangi zarı attığı görülmüyor. 6. Rakibin ve benim katlama isteklerim
+işlemiyor."*
+
+Altı hatanın beşi üç kök nedene indirgenir; altıncısı iki ayrı kusurdur.
+
+| # | Sorun | Kök neden | Çözüm |
+|---|---|---|---|
+| 1 + 2 | Vurulan rakip taşı **siliniyor**, bara girmiyor | `MoveInputController.TryAddStep` adımı `new MoveStep(from, to, die, MoveFlags.None)` ile yeniden inşa ediyor, `Hit` bayrağını atıyordu. `ApplyStep` rakibin taşını yalnızca `step.IsHit` ise bara gönderir; bayraksız adım `board[To]`'yu sıfırlayıp taşı yok ediyordu | `TryAddStep` artık üretecin verdiği `MoveStep`'i **olduğu gibi** kopyalar (`Hit`/`BearOff`/`FromBar` korunur) |
+| 3 | Toplanan taşlar tepside görünmüyor | `TrayView.SetCount` yalnızca etiketi yazıyordu; `BoardView.Refresh()` tepsilere hiç taş yerleştirmiyordu | `BoardView.StackTray(LayoutRect, int, Sprite)` (2 sütunlu ızgara) + `Refresh()` sonunda beyaz/siyah tepsi çağrıları. `CheckerPool` kapasitesi 30 yeterlidir (toplam taş her zaman 15+15) |
+| 4 | Oyun sonunda skor değişmiyor | `GameOrchestrator.Refresh()` `_isGameOver`/`_result` yazıyor ama sonucu skora **uygulamıyordu**; puan yalnızca `StartNextGame()` içinde işleniyordu | `BackgammonEngine.StartNextGame` → `ApplyResult` + `PrepareNextGame` olarak ikiye ayrıldı. `GameOrchestrator` `_resultApplied` bayrağıyla `Refresh()` içinde `ApplyResult`'u **anında** çağırır; `StartNextGame()` yalnızca `PrepareNextGame` yapar (tek uygulama) |
+| 5 | Rakibin zarları görünmüyor | `EndTurn` `rolledDice`'i sıfırlar; `GameBootstrap.Update` AI için `RollDice()` → `StartAiThink()` → `ApplyMove` → `EndTurn` zincirini **aynı karede** çalıştırıyordu | `DiceView.SetOverride/ClearOverride` (tahtada zar yokken sabitlenen zarları çizer) + `GameBootstrap`'ta `AiRollDisplaySeconds = 0.9f`, `AiDiceTailSeconds = 1.6f`, `_aiRollPending`, `_aiDiceVisibleUntil`, `CaptureAiRoll`, `ShowAiDiceTail`, `UpdateAiDiceOverride` |
+| 6a | İnsanın küp teklifi işlemiyor | `CanOffer` `phase == PreRoll` ister; zar atıldığında faz `Moving` olduğu için düğme **sessizce** hiçbir şey yapmıyordu | `BackgammonEngine.RevertRoll(state, in es)` (atılmış ama oynanmamış zarı geri alır) + `GameOrchestrator.TryOfferDouble()` |
+| 6b | Rakibin (AI) küp kararı işlemiyor | `EquityCubeAdvisor.Decide` `phase == PreRoll` değilse `ShouldTake = true` döner; `OfferDouble()` fazı `CubeOffered` yaptığı için karar teklif **sonrasında** yanlış hesaplanıyordu | Karar `OfferDouble()`'dan **önce** alınır ve `GameOrchestrator.PendingOpponentTake` içinde saklanır |
+
+**Regresyon testleri.**
+
+| Dosya | Test | Kapsam |
+|---|---|---|
+| `Backgammon.UI.Tests/GameplayFixTests.cs` | 7 | vuruş bayrağı korunur, vurulan taş bara gider, toplama bayrağı, oyun sonunda anında skor, çift sayım yok, `TryOfferDouble` zarı geri alır, taş oynandıktan sonra reddedilir |
+| `Backgammon.Tests/MatchFlowSplitTests.cs` | 16 | `ApplyResult` (puan × küp, mars, maç sonu, para oyunu, Crawford, geçersiz kazanan), `PrepareNextGame` (sıfırla + skoru koru, maç bitti, Crawford), `StartNextGame` (tek uygulama), `RevertRoll` (oynanmamış, çift, oynanmış, `Moving` değil, Crawford) |
+| `Assets/Backgammon.UI/Tests/PlayMode/GameplayFixPlayModeTests.cs` | 3 | vurulan taş bara gider + havuzda **30** taş çizilir, toplanan taş tepside çizilir, `DiceView` sabitlemesi |
+
+> **Doğrulama numarası:** havuzdaki görünür taş sayısı her zaman **30** olmalıdır.
+> Vurulan taş silinirse veya toplanan taş çizilmezse 29 çıkar.
+
+Doğrulama: `dotnet build` 0 hata; `Backgammon.UI.Tests` **19/19**,
+`Backgammon.Tests` **245/245**, `Backgammon.Inference.Tests` 57/57,
+`ml/tests` 20/20; `CompileOnly` 0 hata, EditMode 7/7, **PlayMode 13/13**,
+`BuildWindows64` `Succeeded (0 hata)`.
+
+### 12.6 Aşama E — Belge birleştirme
+
+* `PHASES.md` §12 (bu bölüm), §6/§7/§8/§9/§11 güncellendi.
+* `ARCHITECTURE.md` §43 eklendi.
+* `ASSUMPTIONS.md` F5-01…F5-20 eklendi.
+* `ml/tests/test_docs_consistency.py` `EXPECTED_COUNTS` güncellendi.
+* `Faz 5.md` §9.3 (Unity ölçüm tablosu) dolduruldu.
+* `ml/artifacts/stage_e_faz5.md` — ölçüm raporu.
+
+### 12.7 Ölçümler
+
+| Ölçüm | Değer |
+|---|---|
+| Bearoff DB | 2 496 208 bayt, 54 264 pozisyon, `MaxRolls = 22` |
+| Bearoff C# ↔ Python | max \|Δ\| = 7,630E-006, tolerans dışı 0 |
+| MET ↔ gnubg | max \|Δ\| = 0,000E+000 (625 hücre) |
+| Küp anlaşması (0-ply, 132 poz.) | ikileme %51,52 / alma %61,36 / ikisi %46,21 |
+| Küp anlaşması (2-ply, 132 poz.) | ikileme %52,27 / alma %61,36 / ikisi %46,97 |
+| Equity korelasyonu (tek kayıt) | −0,0315 (MAE 1,0550) |
+| Equity korelasyonu (zar ortalamalı) | +0,1395 (MAE 1,2063) |
+| Değer kafası korelasyonu (400 afterstate) | +0,2431 (MAE 0,8014, sapma −0,0850) |
+| Değer kafası kalibrasyonu | `gnubg ≈ 0,0874·bizim + 0,1589` |
+| Bizim değer aralığı / std | −2,8050…+3,2966 / 1,0320 |
+| gnubg değer aralığı / std | −0,8207…+1,6497 / 0,3710 |
+| Maç farkındalığı (400 oyun) | 2-away %40,00 vs %39,50; 4-away %39,75 vs %40,00; 5-away %42,25 vs %44,75 |
+| Unity EditMode / PlayMode | 7/7 / 5/5 |
+
+### 12.8 Ölçülmüş zayıflık: değer kafası aşırı dağınık
+
+Aşama B'de küp anlaşmasının düşük çıkması üzerine 400 rastgele afterstate, gnubg'nin
+`evaluate` fonksiyonuyla **doğrudan** karşılaştırıldı (ön-zar yaklaşımı yok):
+
+* Korelasyon **+0,2431**, MAE **0,8014**, sapma **−0,0850**.
+* En küçük kareler kalibrasyonu `gnubg ≈ a·bizim + b` ⇒ **a = 0,0874**, **b = +0,1589**.
+* Yani modelin değer kafası **≈11,4 kat aşırı dağınık**: `[-3,3]` aralığını neredeyse
+  tamamen kullanıyor, gnubg ise `[-0,82, +1,65]` aralığında kalıyor.
+* Kalibrasyon sonrası MAE **0,2897**'ye düşüyor — yani bilgi **var**, ölçek yanlış.
+
+Bu bir **Faz 4 model kalitesi** sorunudur, Aşama B/C uygulama hatası değildir. Küp
+kararları eşik tabanlı olduğu için aşırı dağınık değer doğrudan yanlış ikileme/pas
+kararına dönüşür. Ayrıntı: `ml/artifacts/stage_b_afterstates.md`.
+
+**Faz 6 önerisi (öncelik sırası):**
+
+1. Değer kafasına kalibrasyon katmanı veya kalibrasyon kaybı ekle; hedef eğim ≈ 1,0.
+2. `EquityCubeAdvisor`'a zar ortalamalı değerlendirme seçeneği ekle (ölçülen kazanç:
+   korelasyonda 4,4 kat iyileşme).
+3. 6 çıktılı kafa (kazanma/mars/arka arkaya mars × iki taraf) ⇒ `output_version = 2`.
+4. İki taraflı bearoff veritabanı (≈29,4 GB) — yalnızca gerçekten gerekliyse.
+
+### 12.9 Belgelenen sapmalar (Faz 5)
+
+| # | Spec ne diyor | Ne yapıldı | Neden |
+|---|---|---|---|
+| 1 | §5.1 `PositionAnalysis` yalnızca `readonly` alanlar | Tam kurucu eklendi | Alanlarla `readonly struct` başlatılamaz |
+| 2 | §5.3 `Task<SearchResult>` | `Task<SearchOutcome>` | `SearchResult` bir `ref struct`; `Task<T>` tür argümanı olamaz (CS0306) |
+| 3 | `MatchAwareEvaluator` ctor'u `IPolicyValueEvaluator` ister | `internal PolicyValueAdapter` eklendi | `BearoffAwareEvaluator` `IPolicyValueEvaluator` uygulamıyor |
+| 4 | §5.4 arama iptal edilebilir | İptal yalnızca arama **başlamadan** etkili | `BackgammonSearch`'te iptal kancası yok; §0 kural 2 eklemeyi yasaklıyor |
+| 5 | §6.2 `Backgammon.UI.Tests` için xUnit | NUnit 4.3.2 | Depo standardı NUnit |
+| 6 | §6.8 `LegalTargets(fromPoint)` | `LegalTargetsFrom(int)` eklendi; "seçim yok" işareti `0` → `-1` | `0` beyaz barın indeksidir, "seçim yok" anlamına gelemez |
+| 7 | §5.3 arama arka plan iş parçacığında | Unity'de `Think()` (çağıran iş parçacığı) | `OrtIoBinding` iş parçacığı güvenli değil (§12.5) |
+| 8 | §6.2 Unity testleri `dotnet test` kapsamında | Ayrı Unity koşusu | Unity testleri Unity Editor gerektirir |
+
+### 12.5.6 İkinci oynanış turu (altı yama)
+
+Kullanıcı geri bildirimi: *"1. money game haricindeki çok sayılı oyunu seçince
+oyun bitiminde skor değişmiyor. 2. ai katlama teklif ettiğinde çarpan 1 gözüküyor.
+Kabul etsem de etmesem de değişen olmuyor. 3. Seçeneklerde renk seçimi de olmalı.
+default beyaz olmalı. 4. eğer atılan zar bloke ise sıranın karşı tarafa geçmesi
+gerekiyor. 5. ilk başlangıçta yüksek zar atan başlamalı önce. 6. Oyuncu hangi
+rengi seçerse seçsin, taşları toplama alanı sağ altta olmalı."*
+
+| # | Sorun | Kök neden | Çözüm |
+|---|---|---|---|
+| 1 | Çok sayılı maçta oyun bitince skor değişmiyor | "Yeni oyun" düğmesi `BackgammonEngine.NewGame()` çağırıyordu; bu `BackgammonState.Reset()` üzerinden `whiteScore`/`blackScore` alanlarını **sıfırlıyordu**. §12.5.5/4'te eklenen anında `ApplyResult` doğru çalışıyordu ama skor hemen ardından siliniyordu | `GameOrchestrator.NewGame()` artık maç bitmemişse `BackgammonEngine.PrepareNextGame()` (skoru, `matchLength`, Crawford bayraklarını korur), maç bittiyse `NewMatch(matchLength, EnableJacoby)` çağırır |
+| 2a | AI küp teklifinde "Kabul"/"Ret" düğmeleri ölü | `CubeView.Initialize()` `Accepted`/`Declined` delegelerini **değer olarak** `CreateButton`'a geçiriyordu; `GameBootstrap` bu olaylara `Initialize()`'dan **sonra** abone olduğu için düğmeler kalıcı olarak `null` delegesi tutuyordu | `RaiseAccepted()`/`RaiseDeclined()` örnek metotları eklendi; olay tıklama anında okunur (`MatchLengthView.Raise` ile aynı desen) |
+| 2b | Teklif sırasında küp "1" gösteriyor | `BackgammonEngine.OfferDouble` yalnızca `phase = CubeOffered` yapar; `cubeValue` **`Take` anına kadar değişmez**. `CubeViewModel.Value` bu yüzden teklif sırasında eski değeri veriyordu | `CubeViewModel.DisplayValue` eklendi: `Visibility == Offered ? Value * 2 : Value`. `CubeView` değer ve "teklif: N" etiketlerinde bunu kullanır |
+| 3 | Renk seçimi yok | `SettingsPanelView` yalnızca zorluk/ipucu/kup sunuyordu; `GameBootstrap.HumanPlayer`/`AiPlayer` `const sbyte` idi | `SettingsPanelView.ColorKey`/`PlayerColor`/`ToggleColor()` (varsayılan **Beyaz**, `PlayerPrefs`), `GameBootstrap.HumanPlayer`/`AiPlayer` örnek özellik, `ApplyPlayerColor()` |
+| 4 | Bloke zarda sıra geçmiyor | `BackgammonEngine.PassTurn()` vardı ama hiçbir yerden çağrılmıyordu; `Moving` fazında yasal hamle yoksa akış kilitleniyordu | `GameOrchestrator.HasLegalMoves` eklendi; `GameBootstrap.Update()` `BlockedPassSeconds` (1,2 sn) bekledikten sonra `EndTurn()` çağırır ve `DiceView.SetCaption("hamle yok - sira geciyor")` gösterir |
+| 5 | Açılışta yüksek zar atan başlamıyor gibi | `RollOpening` zaten `d1 > d2 ? 1 : -1` ile yüksek zarı seçiyordu. Gerçek sorun: AI açılışı kazandığında `RollDice()` → `StartAiThink()` → `ApplyMove()` → `EndTurn()` **aynı karede** çalıştığı için açılış zarları hiç görünmüyordu | `GameBootstrap.AnnounceOpeningRoll()` + `_openingRollPending` / `OpeningRollSeconds` (1,6 sn) beklemesi; `DiceView.SetCaption("acilis d1-d2 - sen basliyorsun|rakip basliyor")` |
+| 6 | Toplama alanı renge göre yukarıda kalıyor | `BoardLayout` `WhiteTray` alt / `BlackTray` üst olarak sabitti; siyah oynayan insanın tepsi sağ **üstte** kalıyordu | `BoardLayout.Calculate(w, h, bool flipVertical)` eklendi (satırlar ve tepsiler dikey aynalanır, nokta kümeleri ayrık kalır); `BoardView.FlipVertical` özelliği `Recalculate()`'ı geçersiz kılar ve bar yarılarını takas eder |
+
+**Regresyon testleri.**
+
+| Dosya | Test | Kapsam |
+|---|---|---|
+| `Backgammon.UI.Tests/GameplayFix2Tests.cs` | 9 | `NewGame` maç skorunu korur, maç bittiğinde yeni maç başlatır, `DisplayValue` teklifte 2 / `Take` sonrası 2, varsayılan yerleşimde beyaz tepsi sağ altta, çevrilmiş yerleşimde siyah tepsi sağ altta, çevirme nokta kümelerini ayrık tutar, `HasLegalMoves` bloke konumda `false` / açılışta `true` |
+| `Assets/Backgammon.UI/Tests/PlayMode/GameplayFix2PlayModeTests.cs` | 4 | teklifte küp etiketi "2" + iki düğme görünür, **Kabul/Ret düğmeleri olayı tetikler** (ölü düğme regresyonu), renk değişimi tahtayı çevirir ve kendi tepsi sağ altta kalır, bloke zarda sıra otomatik geçer |
+
+> **Doğrulama numarası:** `Backgammon.UI.Tests` **19 → 28**, Unity PlayMode **13 → 17**.
+> `ml/tests/test_docs_consistency.py` `EXPECTED_COUNTS["ui"]` 28 olmalıdır.
+
+Doğrulama: `dotnet build` 0 hata; `Backgammon.UI.Tests` **28/28**,
+`Backgammon.Tests` **245/245**, `Backgammon.Inference.Tests` 57/57,
+`ml/tests` 194/194 + belge tutarlılığı 21/21; `CompileOnly` 0 hata,
+EditMode 7/7, **PlayMode 17/17**, `BuildWindows64` `Succeeded (0 hata)`,
+player duman testi temiz.
+
+## 13. Faz 6 — Aşama A: ölçüm hattı ve taban kilidi
+
+Faz 6'nın ilk aşaması **güç değil, ölçüm** aşamasıdır: bundan sonraki her iyileştirme
+tek bir dondurulmuş referans küme üzerinde, aynı gnubg sürümüyle, aynı ply'de
+ölçülecektir. Aşama A bu sözleşmeyi kurar.
+
+### 13.1 Teslim edilenler
+
+| Dosya | İçerik |
+|---|---|
+| `ml/er_harness.py` | Yeniden üretilebilir ER ölçüm hattı. `ml/gnubg_er.py`'yi **olduğu gibi** kullanır (tek doğruluk kaynağı); yeni vektörleştirici yazmaz |
+| `ml/artifacts/reference_corpus_v1.json` | Dondurulmuş **200** pozisyonluk referans küme (tohum `20261114`, SHA-256 `ad85265177515b41fb5e95b3904c231966ececd6928db178be0d84473469d072`) |
+| `ml/artifacts/model_stage_d_v10.onnx` | Faz 5 taban modeli (0,1941 ER'i üreten ağ), yeniden üretim için depoya işlendi |
+| `ml/artifacts/stage_f_baseline.md` | Üretilen taban raporu (Test 41a–48) |
+| `ml/tests/test_er_harness.py` | 12 test (41a–48) |
+
+### 13.2 Referans küme
+
+Küme beş fazı kapsar ve her fazdan en az 20 pozisyon içerir (Test 45):
+
+| Faz | Pozisyon |
+|---|---|
+| temas (`contact`) | 39 |
+| yarış (`race`) | 40 |
+| bearoff (`bearoff`) | 37 |
+| bar (`bar`) | 40 |
+| kapalı tahta (`closed`) | 44 |
+
+Rastgele oyun `race`, `bearoff` ve özellikle `closed` fazlarını neredeyse hiç üretmediği
+için bu üç faz **parametrik ailelerle** kurulur (`_race_positions`, `_bearoff_positions`,
+`_closed_positions`); `contact` ve `bar` tohumlu rastgele oyundan gelir. Küme
+`(tahta)` düzeyinde tekilleştirilir: aynı tahta iki kez sayılmaz.
+
+Bölünme faz katmanlı ve deterministiktir: **CAL 60 / VAL-ER 70 / TEST-ER 70**. Üç küme
+ayrıktır ve tahta paylaşmaz (Kural 10, Test 44). Model seçimi yalnız VAL-ER üzerinden
+yapılır; TEST-ER'e erişim `ml/runs/<ad>/test_access.log` dosyasına yazılır.
+
+### 13.3 Ölçülen taban
+
+| Ölçüm | Değer |
+|---|---|
+| 41a — Faz 5 değerinin yeniden üretimi (50 pozisyon) | **0,1941** (fark 0,0000; tolerans ±0,01) ✅ |
+| 41b — 200 pozisyon ortalama ER | **0,2203** (medyan 0,1325, maks 1,6770, eşleşme %14,0) |
+| 41b — CAL / VAL-ER / TEST-ER | 0,3013 / 0,1898 / 0,1815 |
+| 46 — standart hata (200 pozisyon) | 0,0187; hedef SE 0,005 için gereken n ≈ 2 786 |
+| 41e — veri hacmi (100 oyun, 9 088 karar) | **3 824 bayt/karar** ham, **129 bayt/karar** gzip |
+| 41c — `OutcomeDistribution` kodlaması | **kümülatif** (`Win` = P(en az tek), `Lose = 1 − Win`) |
+| 41d — `resultType` `winner` içeriyor mu | **hayır** (yalnız çarpan: 1/2/3) |
+| 48 — gnubg | `GNU Backgammon 1.08.003-mingw 32-Bit 20240428`, 2-ply, cubeless, money |
+
+> **Dürüst not:** 200 pozisyonluk kümede standart hata 0,0187'dir. Yani 0,01–0,02 ER
+> hedefi bu kümeyle **ölçülemez**; Test 46'nın çıktısı (n ≈ 2 786) Faz 6'nın ilerleyen
+> aşamalarında referans kümenin büyütülmesi gerektiğini söyler. Bu bir kusur değil,
+> ölçümün kendi sınırını önceden bildirmesidir.
+
+### 13.4 Yeniden üretim
+
+```bash
+python ml/er_harness.py build-corpus          # kümeyi yeniden üret (deterministik)
+python ml/er_harness.py verify-corpus         # özet + faz + bölünme denetimi
+python ml/er_harness.py legacy --model ml/artifacts/model_stage_d_v10.onnx --limit 50
+python ml/er_harness.py measure --model ml/artifacts/model_stage_d_v10.onnx --split all
+python ml/er_harness.py data-volume --shards ml/runs/stage_d/shards/it10
+python ml/er_harness.py baseline --model ml/artifacts/model_stage_d_v10.onnx --shards ml/runs/stage_d/shards/it10
+```
+
+gnubg yoksa hat sıfır olmayan çıkış kodu döner ve **hiçbir sayı üretmez** (Test 43).
+## 14. Faz 6 — Aşama B: 6 çıktılı değer kafası ve kalibrasyon
+
+Aşama A **ölçtü**; Aşama B **değer kafasını değiştirir**. Faz 5'in tek skaler değer
+kafası, oyun sonucunun *büyüklüğünü* (mars/backgammon payını) temsil edemiyordu. Bu
+aşama kafayı **dışlayıcı 6 sınıfa** çevirir, `output_version = 2` ONNX sözleşmesini
+kurar ve kalibrasyon teşhisini (D1–D3) ölçer.
+
+### 14.1 Teslim edilenler
+
+| Dosya | İçerik |
+|---|---|
+| `ml/equity.py` | Dışlayıcı ↔ kümülatif dönüşüm ve equity formülü (C# aynası) |
+| `ml/targets.py` | Shard v1 `winner` + `resultType` → 6 sınıflı dışlayıcı hedef |
+| `ml/calibration.py` | Kalibrasyon metrikleri, kabul kriterleri, logit sıcaklık ölçekleme |
+| `ml/diagnose.py` | D1/D2/D3 teşhis hattı ve rapor üreteci |
+| `ml/losses.py` | `value_loss_ce_6class`, `calibration_loss`, `total_loss_v2` |
+| `ml/gen_test_models.py` | C# ONNX fikstürlerini yeniden üretir |
+| `ml/artifacts/model_output_version_2.onnx` | Gerçek v2 grafiği (parite 5,96e-08) |
+| `ml/artifacts/stage_f_diagnosis.md` | Üretilen D1–D3 raporu |
+| `Backgammon.Tests/OutcomeDistributionV2Tests.cs` | Test 49–52 |
+| `Backgammon.Inference.Tests/OutputVersion2Tests.cs` | Test 54, 57, 58 |
+| `ml/tests/test_stage_b.py` | Test 53, 55, 56 |
+
+### 14.2 Dışlayıcı 6 sınıf
+
+Ağ çıktısı **dışlayıcı** altı sınıftır ve toplamı 1'dir:
+
+| Sıra | Sınıf | Anlam | Equity ağırlığı |
+|---|---|---|---|
+| 0 | `W` | kazanır, tek | +1 |
+| 1 | `GW` | kazanır, mars | +2 |
+| 2 | `BW` | kazanır, backgammon | +3 |
+| 3 | `L` | kaybeder, tek | −1 |
+| 4 | `GL` | kaybeder, mars | −2 |
+| 5 | `BL` | kaybeder, backgammon | −3 |
+
+`E = W + 2·GW + 3·BW − (L + 2·GL + 3·BL) ∈ [−3, +3]`.
+
+`OutcomeDistribution` sınıfı **kümülatif** kodlamayı korur (Faz 5 §4.3, gnubg geleneği);
+`FromProbabilities` dışlayıcı girdiyi kümülatife çevirir:
+
+```
+Win = W+GW+BW,  WinGammon = GW+BW,  WinBackgammon = BW
+LoseGammon = GL+BL,  LoseBackgammon = BL,  Lose = 1 − Win
+```
+
+İki equity ifadesi cebirsel olarak **aynıdır**; Test 49/53 bunu sayısal olarak doğrular.
+`FromProbabilities` **monotonluk zorlamaz** (dışlayıcı sınıflar arasında `W ≥ GW ≥ BW`
+gibi bir zorunluluk yoktur) ve geçersiz girdide `IsValid = false` döner.
+
+### 14.3 `output_version = 2` ONNX sözleşmesi
+
+| Alan | v1 | v2 |
+|---|---|---|
+| Girdi | `features [batch,221]` | `features [batch,221]` |
+| Çıktı | `value [batch,1]`, `policy_logit [batch,1]` | `probs [batch,6]`, `policy_logit [batch,1]` |
+| `output_version` metadata | `1` | `2` |
+| `prob_order` metadata | — | `W,GW,BW,L,GL,BL` |
+| `prob_encoding` metadata | — | `exclusive` |
+
+`OnnxModelHandle.SupportedOutputVersion` **2**'dir. `output_version = 1` modeller
+**bit düzeyinde aynı** çalışmaya devam eder (Test 58); `output_version = 3` reddedilir.
+`prob_order`/`prob_encoding` metadata'sı **sürüm kontrolünden önce** doğrulanır: sıra
+yazılı değilse handle modeli yanlış yorumlayabilir ve bu sessiz bir hatadır (F6-10).
+
+### 14.4 Kalibrasyon teşhisi (D1–D3)
+
+983 oyun, 300 adım sabit bütçe, tohum `20261114`, CAL 100 / VAL 100 oyun.
+
+| Teşhis | Ölçüm | Karar |
+|---|---|---|
+| **D1** — eğitim ölçeği | MAE 1,2327 (125 oyun) → 0,8487 (250) → 0,8052 (500); eğim 0,6208 → 0,9190 → 0,9851 | **işaretli** — eğri hâlâ iniyor, sorun ölçek |
+| **D2** — hedef tanımı | `λ=1.0` MAE 0,9734 / eğim 1,0424 vs `λ=0.7` MAE 0,9707 / eğim 1,0490 | işaretli değil (fark %0,3, gürültü) |
+| **D3** — kafa yapısı | 6 çıktılı MAE 0,9362 vs skaler 0,9734 (**%3,8** iyileşme) | **işaretli** |
+
+Yükseltme sırası (Faz 6 §6.2) bu ölçüme göre uygulanır: **6 çıktılı kafa** → `L_cal`
+(`c_cal = 0,1`) → logit sıcaklık (tek `T`) → isotonic (son çare).
+
+> **Dürüst not.** D1'in 5 000 / 10 000 noktaları mevcut 983 oyunla **ölçülemez**;
+> ölçülebilen en büyük nokta raporlanmıştır. Daha büyük ölçek Aşama C'de yeni self-play
+> verisiyle ölçülmelidir. Eğitim bütçesi sabit ve küçüktür: bu rapor **kıyas** içindir,
+> mutlak başarı iddiası taşımaz.
+
+### 14.5 Bulunan kritik hata: `terminal_value` işaret hatası (F6-07)
+
+D2 teşhisi yazılırken iki hedef kurucusu karşılaştırıldı ve **Faz 4'ten beri var olan**
+bir hata bulundu: `ml/replay.py::terminal_value`, `z`'yi `winner` ile çarpıyordu. Oysa
+`td_lambda_targets` işareti her adımda zaten çevirir:
+
+```
+y[T-1] = -z
+y[t]   = -((1-λ)·V[t+1] + λ·y[t+1])
+```
+
+Son karar veren oyuncu **kazanandır** (ölçüldü: 200/200 oyunda `last mover == winner`),
+yani `y[T-2]` kaybedenin bakış açısıdır ve `-z` olmalıdır. `winner = -1` (siyah kazanır)
+durumunda işaret **iki kez** çevriliyor ve o oyunun tüm hedefleri ters yazılıyordu.
+
+**Ölçüm.** 87 628 örneğin **43 986**'sı (%50,2) yanlıştı; ilk örnekler tam olarak
+`[-3,+3,-3,+3,…]` ↔ `[+3,-3,+3,-3,…]` biçiminde işaret terstine dönüyordu. %50,2 oranı,
+oyunların yarısını siyahın kazanmasıyla birebir uyuşur.
+
+**Etki.** Düzeltmeden önce D2 `λ=1.0` için eğim **−0,2270**, korelasyon **−0,0305**
+veriyordu (anlamsız); düzeltmeden sonra eğim **1,0424**, korelasyon **0,7757**.
+Eğitilmemiş v1 modeli ile gerçek equity arasındaki korelasyon **−0,2167**, işareti
+çevrilmiş equity ile **+0,2167** — ağ "kazanma" yönünü sistematik olarak ters öğrenmiş
+durumda. **Faz 4/5 kontrol noktaları geçersizdir** (F6-12); Aşama C sıfırdan eğitir.
+
+### 14.6 Testler
+
+| # | Test | Tür | Durum |
+|---|---|---|---|
+| 49 | `OutcomeDistribution_EquityFormula_Exclusive` | C# | ✅ |
+| 50 | `OutcomeDistribution_IsAntisymmetric` | C# | ✅ |
+| 51 | `OutcomeDistribution_FromProbabilities_Normalizes` | C# | ✅ |
+| 52 | `OutcomeDistribution_FromProbabilities_NoMonotonicityForcing` | C# | ✅ |
+| 53 | `EquityFormula_PythonMatchesCSharp` | pytest | ✅ |
+| 54 | `Onnx_OutputVersion2_IsAccepted` | C# | ✅ |
+| 55 | `CalibrationLoss_ImprovesSlope` | pytest | ✅ |
+| 56 | `LogitTemperatureScaling_UsesCalOnly` | pytest | ✅ |
+| 57 | `Onnx_OutputVersion2_ZeroAllocation` | C# | ✅ |
+| 58 | `Onnx_OutputVersion1_StillWorks` | C# | ✅ |
+| 59 | `Export_OutputVersion2_Parity` | pytest | ✅ |
+
+### 14.7 Yeniden üretim
+
+```bash
+python ml/gen_test_models.py                                   # C# ONNX fikstürleri
+python ml/export_onnx.py --output-version 2 --profile medium \
+    --out ml/artifacts/model_output_version_2.onnx             # v2 grafiği + parite
+python ml/diagnose.py --steps 300                              # D1-D3 raporu
+python -m pytest ml/tests/test_stage_b.py -q                   # Test 53, 55, 56
+dotnet test TavlaAI_Project.slnx --filter "OutcomeDistributionV2Tests|OutputVersion2Tests"
+```
+
+---
+
+## 15. Faz 6 — Aşama C: veri motoru
+
+Aşama B **kafayı** düzeltti; Aşama C **veriyi** düzeltir. Faz 4/5 kontrol noktaları
+işaret hatası nedeniyle geçersizdir (F6-12), yani eğitim verisinin sıfırdan ve
+**tekrarlanabilir** biçimde üretilmesi gerekir. Bu aşama paralel determinizmi kurar,
+`dup_cap` tekrar ayıklamasını ekler, shard v1'in değişmediğini kanıtlar ve veri hacmini
+ölçer.
+
+### 15.1 Teslim edilenler
+
+| Dosya | İçerik |
+|---|---|
+| `Backgammon.SelfPlay/DupCapFilter.cs` | Oyun sonrası deterministik tekrar ayıklama + `DupCapStats` |
+| `Backgammon.SelfPlay/Program.cs` | Oyun başına tohum (`seed(gameIndex) = baseSeed + gameIndex`), `dup_cap` geçişi, tepe bellek/disk hızı raporu |
+| `Backgammon.SelfPlay/SelfPlayRunner.cs` | `ResetSeed(ulong)` — iş parçacığından bağımsız oyun tohumu |
+| `Backgammon.SelfPlay/SelfPlayConfig.cs` | `DupCap` (varsayılan 3, 0 = kapalı) |
+| `Backgammon.SelfPlay/CommandLine.cs` | `--dup-cap <n>` |
+| `Backgammon.SelfPlay/ShardFormat.cs` | `ShardDecisionFlags.DupCapped = 8` (eklemeli; `formatVersion` 1 kalır) |
+| `ml/shards.py` | `DEC_DUP_CAPPED`, `DecisionRecord.is_dup_capped` |
+| `Backgammon.Inference.Tests/StageCDataEngineTests.cs` | Test 60, 61, 62, 65, 66 |
+| `ml/tests/test_stage_c.py` | Test 63, 64, 65, 67 |
+
+### 15.2 Paralel determinizm (Test 60)
+
+Faz 4'ün şeması **iş parçacığına bağlıydı**: `threadSeed = seed + threadIndex·salt` ve
+her iş parçacığı tek bir RNG'yi oyunlar arasında sırayla tüketiyordu. Bu, `--threads N`
+çıktısını `--threads 1`'den farklı yapıyordu — yani veri **yeniden üretilemezdi**.
+
+Yeni şema:
+
+```
+seed(gameIndex) = baseSeed + gameIndex          (iş parçacığından bağımsız)
+havuz kararı    = Xoshiro256StarStar(seed ^ salt)  (ayrı RNG; oyun akışını etkilemez)
+```
+
+`SelfPlayRunner.ResetSeed(seed)` her oyundan önce çağrılır. Sonuç: `--threads 4` çıktısı
+`--threads 1` çıktısıyla **birebir aynıdır** (Test 60 bunu doğrudan `Program.Main`
+üzerinden, shard dosyalarının SHA'sını karşılaştırarak doğrular).
+
+> **Uyarı.** Bu değişiklik eski shard'ların yeniden üretilebilirliğini **bozar**:
+> `ml/runs/stage_d/shards` eski şemayla üretildi. Biçim değişmediği için hâlâ
+> **okunabilir** (Test 63), ama aynı tohumla yeniden üretilemez. Bu beklenen ve kabul
+> edilen bir sonuçtur (F6-13).
+
+### 15.3 `dup_cap` (Test 62, 66)
+
+Aynı afterstate'in tekrar tekrar eğitilmesi veri hacmini şişirir. `dup_cap` (varsayılan
+**3**) aynı parmak izine sahip kararın en fazla 3 kez eğitime girmesini sağlar.
+
+| Tasarım kararı | Gerekçe |
+|---|---|
+| **Oyun sonrası** tek geçiş | Tekrar sayacı global durumdur; iş parçacıklarına dağıtılırsa Test 60 kırılır |
+| `GameId` sırasına göre | İş parçacığı sayısı ve tamamlanma sırası sonucu değiştirmez |
+| Parmak izi = `chosenVector` üzerinde FNV-1a 64 | Shard v1 karar öncesi Zobrist hash'i saklamaz; biçim değişmez |
+| Karar **silinmez**, `IsLearner` temizlenir | TD(λ) zinciri tüm kararların `chosenVector`'üne ihtiyaç duyar |
+| İlk **10 ply** muaf | Açılış çeşitliliği yok olmasın (Test 62) |
+
+Elenen karar `DupCapped` bayrağı alır, `Q`/`PolicyTargetCs`/`CandidateVectors` atılır;
+`chosenVector` korunur. Ölçüm (200 oyun, `--dup-cap 1`): 15 603 açılış-dışı öğrenen
+kararın **23**'ü (%0,15) elendi — gerçek self-play'de tekrar nadirdir, `dup_cap` bir
+güvenlik ağıdır.
+
+**Açılış çeşitliliği (Test 62).** 200 oyun, `T = 0,05`, 10 keşif ply'i: açılış
+afterstate dağılımının entropisi **6,5479 bit** (üst sınır `log2(200) = 7,64`).
+`dup_cap = 1` ile açılış kararlarının sayısı **değişmez** (200/200).
+
+### 15.4 Shard v1 değişmedi (Test 63, 65)
+
+`formatVersion` **1** kalır, `vectorSize` **221** kalır, `SHARD_FORMAT.md` §1–§4 aynıdır.
+Tek ekleme `ShardDecisionFlags` bit3 (`DupCapped = 8`) — eklemeli, geriye uyumlu.
+
+`finalProbs`/`outcomeProbs` alanları **yoktur ve olmayacaktır** (Faz 6 §7.1): 6 sınıflı
+hedef `winner` + `resultType`'tan **türetilir** (`ml/targets.py`). Test 65 bunu iki
+tarafta da doğrular (C#: yansıma ile alan yokluğu; Python: `hasattr` + türetme).
+
+Test 63, Faz 4'te C# tarafından yazılmış `ml/artifacts/csharp_shard.bgsp` dosyasını ve
+`ml/runs/stage_d/shards` altındaki 10 üretim shard'ını okur; her oyun için
+`winner`/`resultType` geçerliliğini ve türetilen hedefin tek-sıcak olduğunu doğrular.
+
+### 15.5 Linux yayını (Test 64)
+
+`dotnet publish -r linux-x64 --self-contained true` **başarılı**; çıktı ELF ikilisi
+(`\x7fELF`). Bu makinede **WSL yok** (`wsl -l -v` → dağıtım yok) ve **Docker yok**, bu
+yüzden *çalıştırma* adımı atlanır ve gerekçe test çıktısına yazılır (F6-15). Yayın ve
+ELF doğrulaması her koşuda yapılır — test sessizce geçmez.
+
+### 15.6 Yürütme sağlayıcısı: CPU vs CUDA (Test 61)
+
+Faz 6 v3 §12.3 "CUDA ≥ CPU" varsayıyordu. **Ölçüm bu varsayımı çürüttü.** CUDA
+sağlayıcısı bu makinede gerçekten yüklendi (doğrulama: `torch\lib` `PATH`'te değilken
+`cublasLt64_12.dll` eksik hatası alınır; eklendiğinde oturum açılır) ve yine de CPU
+kazandı:
+
+| Ölçüm | CPU | CUDA | CUDA/CPU |
+|---|---|---|---|
+| Test 61, 20 oyun, `depth 0`, ısınmalı | **119,26 oyun/sn** | 29,11 oyun/sn | 0,24× |
+| CLI, 60 oyun, `depth 0`, `log-top 4` | **85,91 oyun/sn** | 24,68 oyun/sn | 0,29× |
+| CLI, `depth 1`, `max 4/4` | **1,52 oyun/sn** | 0,25 oyun/sn | 0,16× |
+| CLI, `depth 2`, `max 4/4` | **0,03 oyun/sn** | < 0,01 oyun/sn | < 0,3× |
+
+Tepe bellek: CPU 87 MB, CUDA 381 MB. **Karar: CPU**
+(`SelfPlayConfig.DefaultUseCuda = false`). Ayrıntı ve yeniden üretim:
+`ml/artifacts/stage_c_gpu_decision.md`.
+
+**Neden.** Model ~156 bin parametre; bir forward geçişi CPU'da ~1 µs, GPU çekirdek
+başlatma gecikmesi tek başına 20–50 µs. `depth 0`'da kova 32–64 satıra yuvarlanır, yani
+hesap başlatma maliyetinin altında kalır. Derinlik arttıkça arama ağacı C# tarafında
+CPU'da gezildiği için fark **büyür**. İş parçacıkları arası kova birleştirme (v3 §7.3)
+uygulanırsa kova 2048'e çıkar ve GPU kazanabilir — bu ayrı bir deneydir.
+
+> **Ölçüm tuzağı (düzeltildi).** Isınma geçişi olmadan 6 oyunla yapılan ilk ölçümde CUDA
+> 1,47× *hızlı* göründü. Sebep ölçüm hatasıydı: CPU soğuk (JIT + ONNX oturumu + dosya ön
+> belleği), CUDA sıcak koşuyordu. Test 61 artık ısınma geçişi yapar, 20 oyun ölçer ve
+> CPU'yu iki kez (CUDA'dan önce ve sonra) ölçüp büyüğünü alır.
+
+Test 61 artık "CUDA kazanmalı" demiyor; **ölçülen kazananın seçili olmasını** ister
+(`SelfPlayConfig.DefaultUseCuda` ile karşılaştırır, eşik 1,2×). Başka donanımda CUDA
+kazanırsa test kırmızı olur ve sabitin çevrilmesini söyler — sessiz sapma olmaz.
+Varsayılan CPU derlemesinde CUDA EP yoktur, test `Inconclusive` olur ve CPU ölçümünü
+yazdırır. GPU ölçümü için:
+
+```bash
+dotnet build -c Release -p:OnnxRuntimePackage=Microsoft.ML.OnnxRuntime.Gpu
+```
+
+Determinizm iddiası **taşınmaz** (Faz 6 §7.3): GPU yolu yalnızca hız içindir.
+
+### 15.7 Veri hacmi ölçümü (Test 67)
+
+60 oyun / koşu, `model_stage_d_v10.onnx`, `depth 0`, `log-top 4`, i7-9750H (6C/12T):
+
+| thread | oyun/sn | tepe bellek (MB) | disk yazma (MB/s) |
+|---|---|---|---|
+| 1 | 85,70 | 81 | 24,34 |
+| 6 | 190,14 | 160 | 54,01 |
+| 12 | 209,96 | 254 | 59,64 |
+
+Ölçeklenme: 6 thread **2,22×**, 12 thread **2,45×** (thread 1'e göre; koşudan koşuya ±%10 oynar). Shard boyutu
+`log-top 4` ile **~298 KB/oyun** (sıkıştırmasız). `log-top 12` ile ~11,5 KB/karar
+(`SHARD_FORMAT.md` §4) → oyun başına ~0,8 MB. 10⁵ oyun ≈ **80 GB**; F: sürücüsünde
+427 GB boş alan var, yani sığar. Bu bir **ölçüm**dür, formül iddiası değildir.
+
+> **Dürüst not.** `depth 0` (yalnızca kök) en hızlı ayardır; gerçek eğitim verisi
+> `depth 1–2` ile üretilecek ve hız **belirgin biçimde düşecektir**. Yukarıdaki sayılar
+> üst sınırdır, üretim hızı değildir.
+
+### 15.8 Testler
+
+| # | Test | Tür | Durum |
+|---|---|---|---|
+| 60 | `SelfPlay_ThreadsAreDeterministic` | C# | ✅ |
+| 61 | `SelfPlay_GpuBatching_IsFaster` | C# | ✅ ölçüldü: CPU 4,1× hızlı → CPU seçildi (varsayılan CPU derlemesinde `Inconclusive`) |
+| 62 | `SelfPlay_OpeningDiversity` | C# | ✅ |
+| 63 | `ShardV1_IsStillReadable` | pytest | ✅ |
+| 64 | `SelfPlay_LinuxPublish_Runs` | pytest | ⏭️ yayın ✅, çalıştırma atlandı (WSL/Docker yok) |
+| 65 | `Shard_NoOutcomeProbsField` | C# + pytest | ✅ |
+| 66 | `DupCap_Works` | C# | ✅ |
+| 67 | `SelfPlay_Throughput_IsMeasured` | pytest | ✅ |
+
+### 15.9 Yeniden üretim
+
+```bash
+dotnet build Backgammon.SelfPlay -c Release
+python -m pytest ml/tests/test_stage_c.py -q                    # Test 63, 64, 65, 67
+dotnet test TavlaAI_Project.slnx --filter "StageCDataEngineTests"  # Test 60, 61, 62, 65, 66
+
+# Determinizm elle doğrulama (birebir aynı olmalı)
+Backgammon.SelfPlay --model ml/artifacts/model_stage_d_v10.onnx \
+	--games 12 --seed 7 --threads 1 --depth 0 --out /tmp/t1 --prefix a --gzip false
+Backgammon.SelfPlay --model ml/artifacts/model_stage_d_v10.onnx \
+	--games 12 --seed 7 --threads 4 --depth 0 --out /tmp/t4 --prefix a --gzip false
+```
+
+---
+
+## 16. Faz 6 — Aşama D: ölçekli eğitim
+
+Aşama B kafayı, Aşama C veriyi düzeltti. Aşama D **eğitimi** düzeltir: 6 çıktılı kafayla
+vektör TD(λ) döngüsü, kapasite/AMP kararlarının ölçülmesi, determinizm ve
+devam-ettirme garantileri, ve L0/L1/L2/L3 eğitim merdiveni.
+
+**Kabul (v3 §12.4, v3-DÜZELTME satır 802–804).** ER < 0,02 bir **kapı değil, hedeftir**.
+Aşama D kabulü: "L1/L2/L3 hedefleri raporlanır; ulaşılan/ulaşılamayan değerler
+`ml/artifacts/stage_f_train.md`'ye yazılır; sapma analizi yapılır."
+
+### 16.1 Teslim edilenler
+
+| Dosya | İçerik |
+|---|---|
+| `ml/train_v2.py` | 6 çıktılı kafayla vektör TD(λ) eğitim döngüsü (~1 230 satır) |
+| `ml/tests/test_stage_d.py` | Test 68, 69, 70, 71a, 71b, 72, 73, 74 + 3 birim testi |
+| `ml/replay.py` | `non_terminal_vectors` takma adı |
+| `ml/gnubg_er.py` | `OnnxScorer` `output_version = 2` desteği |
+| `ml/config.yaml` | `train.lam` 0,7 → **1,0** (F6-19) |
+| `Backgammon.SelfPlay/ShardWriter.cs` | Toplu float yazımı (F6-21) |
+| `ml/tests/conftest.py` | `slow` işaretçisi kaydı |
+| `ml/artifacts/stage_f_train.md` | L0/L1/L2/L3 hedef-vs-ulaşılan tablosu + sapma analizi |
+
+### 16.2 Vektör TD(λ): sınıf-yarısı takası (F6-17)
+
+Faz 4'ün skaler zinciri `y[t] = -((1-λ)·V[t+1] + λ·y[t+1])` idi. Altı sınıflı dağılımda
+"`-V`"nin karşılığı işaret çevrimi değil, sınıf yarılarının **takasıdır**:
+
+```
+flip([W, GW, BW, L, GL, BL]) = [L, GL, BL, W, GW, BW]
+y[n-1] = flip(z_terminal)
+y[t]   = flip((1-λ)·p̂[t+1] + λ·y[t+1])
+```
+
+`flip` bir **involusyondur** (`flip(flip(p)) == p`), bu yüzden `λ = 1,0`'da zincir
+`flip^k(z)`'ye indirgenir ve `flip² = id` olduğu için sonuç **tam olarak** oyuncu bakış
+açısından tek-sıcak Monte Carlo hedefidir. F6-07'deki işaret hatasının vektör karşılığı
+böylece yapısal olarak imkânsız hâle gelir. `λ ≥ 1,0` iken `build_exclusive_samples`
+ileri geçişi tamamen atlar (zincir ağa bağlı değildir).
+
+### 16.3 İki probe (F6-19)
+
+| Probe | Hedefler | Ne ölçer |
+|---|---|---|
+| `probe_value` (TD) | 1. iterasyonun modelinden dondurulmuş | "ilk modelden ne kadar uzaklaştık" |
+| `probe_mc` (MC) | `λ = 1,0`, ağdan bağımsız tek-sıcak | gerçek öğrenme eğrisi |
+
+Dondurulmuş TD probe'un hedefleri modelden geldiği için model ilerledikçe **yanıltıcı
+biçimde kötüleşir**. Faz 4 bu sorunu `probe_mc` ile çözmüştü; `train_v2.py`'nin ilk
+sürümünde bu alan eksikti. Her iki probe `probe.npz` içine yazılır ve `--resume`'da
+aynen geri yüklenir (Test 72'nin bit düzeyinde determinizmi buna bağlıdır).
+
+### 16.4 Isınma zorunlu (F6-20)
+
+`medium` profiliyle **eğitilmemiş** ağdan 2 000 oyunluk self-play: **1 584 oyun
+(%79,2)** `--max-plies 500` sınırında iptal, 454,8 karar/oyun, 251 MB shard, 8,5 GB
+tepe bellek. Isınma sonrası: iptal **0**, 65,7 karar/oyun, 26,9 MB, 1,1 GB. Bu yüzden
+`--init-from <ckpt.pt>` (yalnızca ağırlıklar; optimizer/iterasyon taşınmaz, profil aynı
+olmak zorunda) kural hâline getirildi.
+
+### 16.5 `ShardWriter` toplu float yazımı (F6-21)
+
+`WriteFloats` float başına **4 × `WriteByte`** yerine tek bir `byte[]` doldurup **tek
+`Stream.Write`** yapar; `WriteFile` çıktıyı 64 KB `BufferedStream` ile sarar. 2 000
+oyunluk shard: **>7 dk / 8,5 GB** → **12,7 s / 1,1 GB**. Bayt çıktısı değişmedi, yani
+Test 60'ın bit düzeyinde determinizm iddiası korunur.
+
+### 16.6 Ölçülen eğitim merdiveni
+
+| Koşu | Profil | Oyun/iter | İter | Süre | Hedef ER | VAL-ER | TEST-ER | Durum |
+|---|---|---|---|---|---|---|---|---|
+| L0 | `small` | 500 | 20 | 34,4 dk | — (harness) | 0,1550 | **0,1429** | ✅ |
+| L1 | `medium` | 2 000 | 30 | 61,0 dk | < 0,10 | 0,0658 | **0,0708** | ✅ |
+| L2 | `medium` | 10 000 | 30 | 196,0 dk | < 0,05 | 0,0619 | **0,0490** | ⚠️ |
+| L3 | `medium` | 100 000 | 50 | ~40 sa (tahmin) | < 0,02 | — | — | ⏭️ |
+| Faz 5 taban | — | — | — | — | — | — | 0,1941 | — |
+
+**Toplam iyileşme (L2 vs Faz 5):** 0,1941 → 0,0490 = **3,96×** (TEST-ER); VAL-ER
+üzerinden 0,1941 → 0,0619 = **3,14×**. L2'nin TEST-ER'i < 0,05 hedefinin altındadır,
+ancak VAL-ER kazancı **anlamsızdır**: L1 0,0658 → L2 0,0619, fark 0,0039, 40
+pozisyonun standart hatası 0,016–0,020. Yani oyun/iterasyonu **5×** artırmak ER'de
+**ölçülebilir** bir kazanç üretmedi; ER ~0,06–0,07 bandında **plato** yaptı.
+Darboğaz kapasite değil (Test 68 `medium`'u seçti), **öğretmen kalitesi**dir
+(`depth 0` self-play) ve **ölçüm çözünürlüğü**dür. Ayrıntı ve sapma analizi:
+`ml/artifacts/stage_f_train.md`.
+
+### 16.7 Kapasite ve AMP kararları (Test 68, 70)
+
+| Karar | Ölçüm | Sonuç |
+|---|---|---|
+| Kapasite | `medium` ER 0,3535 ± 0,0712 vs `large` 0,2651 ± 0,0594; fark 0,0884 < eşik 0,0927 | **`medium`** |
+| AMP | FP32 2,61 s vs AMP 16,19 s (0,16×); ΔCE 0,00085 | **FP32** |
+
+AMP CPU'da **6,2× yavaş**: `torch.autocast` `bfloat16`'ya düşer ve i7-9750H (Coffee
+Lake) AVX-512 BF16 desteklemez. GPU'da (SM ≥ 8.0) yeniden ölçülmelidir; `decide_amp`
+bunu otomatik yapar.
+
+### 16.8 Testler
+
+| # | Test | Tür | Durum |
+|---|---|---|---|
+| 68 | `Capacity_Gain_IsMeasured` | pytest | ✅ `medium` seçildi |
+| 69 | `TrackH_H0_Parity` | pytest | ⏭️ Ek A kapısı açılmadı (F6-18) |
+| 70 | `Amp_IsMeasured` | pytest | ✅ FP32 seçildi |
+| 71a | `Training_IsReproducible_CPU` | pytest | ✅ bit düzeyinde aynı `metrics.jsonl` |
+| 71b | `Training_IsReproducible_GPU` | pytest | ✅ tolerans içinde (CUDA varsa) |
+| 72 | `Checkpoint_Resume_IsExact` | pytest | ✅ kesintisiz koşuyla aynı |
+| 73 | `BestModel_SelectedByValEr` | pytest | ✅ |
+| 74 | `TestAccess_IsLogged` | pytest | ✅ 2. erişim `exploratory` |
+
+### 16.9 Yeniden üretim
+
+```bash
+python -m pytest ml/tests/test_stage_d.py -q
+
+# L0 — harness dogrulamasi (34 dk)
+python ml/train_v2.py --out ml/runs/stage_d_l0 --profile small \
+	--iterations 20 --games 500 --steps 200 --depth 0 --device cpu --seed 1 \
+	--val-er-every 5 --val-er-cases 20 --test-er --test-er-cases 20
+
+# L1 — isitmali medium (61 dk)
+python ml/train_v2.py --out ml/runs/stage_d_l1 --profile medium \
+	--iterations 30 --games 2000 --steps 300 --depth 0 --device cpu --seed 7 \
+	--selfplay-threads 4 --buffer-games 12000 \
+	--init-from ml/runs/stage_d_boot/checkpoints/ckpt_v3.pt \
+	--val-er-every 5 --val-er-cases 40 --test-er --test-er-cases 40
+```
+
+---
+
+## 17. Faz 6 — Aşama E: arama gücü
+
+**Kaynak:** `Faz 6 v3.md` §9 (Arama Gücü), §12.5 (Test 75–82), §13.4 (Performans).
+**Rapor:** `ml/artifacts/stage_e_search.md`.
+
+### 17.1 Amaç ve değişmez kural
+
+Aşama E'nin tek amacı **hız**tır; güç değil. v3 §9.5'in değişmez kuralı: *her optimizasyon
+`Reference(depth)` ile birebir aynı sonucu vermelidir; fark varsa bu optimizasyon değil hatadır.*
+Bu yüzden Aşama E'de hiçbir sezgisel budama, hiçbir yaklaşık değer, hiçbir "iyileştirme" kabul
+edilmedi — yalnızca **sonucu kanıtlanabilir biçimde değiştirmeyen** iki mekanizma eklendi.
+
+### 17.2 Eklenen iki mekanizma
+
+| Mekanizma | Ayar | Varsayılan | Sonucu değiştirir mi? |
+|---|---|---|---|
+| Transposition table | `SearchSettings.TranspositionCapacity` | **0 (kapalı)** | Hayır — yalnızca EXACT girişler |
+| Bearoff kesmesi | `SearchSettings.UseBearoffCutoff` | **false** | Hayır — kesin değer sabit noktadır |
+
+**TT anahtarı** `s.hash ^ (depth · sabit) ^ (kalan zar maskesi · sabit)`. Zar maskesi zorunludur:
+`Zobrist` tabloları zar içermez, dolayısıyla aynı tahtaya farklı kalan zarlarla ulaşan iki düğüm
+aynı hash'i üretir; maske olmadan TT yanlış değer döndürürdü.
+
+**Yalnızca EXACT.** `LOWER`/`UPPER` bayrakları biçim olarak ayrıldı ama kesme için kullanılmadı.
+`ChanceNode` 21 zar üzerinden ağırlıklı ortalama aldığı için bir sınır değerin ortalamaya girmesi
+ortalamayı da sınır yapar; sınırların yukarı propagasyonu bu motorda güvenli değildir (F6-24).
+
+**Bearoff kesmesi** yalnızca değerlendirici `IExactValueEvaluator` uyguluyorsa etkilidir.
+`BearoffAwareEvaluator` uygular; `MatchAwareEvaluator` **uygulamaz** (`E → ME` dönüşümü tek skaler
+`E`'nin monoton fonksiyonu değildir).
+
+### 17.3 Ölçümler
+
+| Test | Ölçüm | Sonuç |
+|---|---|---|
+| 75 | `Default`/`Reference` yeni alanlar; 24 pozisyon | 0 / false; değer ve hamle birebir aynı; TT isabet 0 |
+| 76 | 20 pozisyon, depth 2, TT 2¹², 3 tur | değer ve hamle birebir aynı; 3. tur **863 isabet** |
+| 77 | 12 saf yarış, depth 1 | düğüm **3 939 → 12** (**328×**); değer ve hamle aynı |
+| 78 | 16 pozisyon, TT / TT+kısıt / bearoff kesmesi | `Reference(depth)` ile **birebir aynı** |
+| 79 | 30 pozisyon, depth 2, aday 4/4, TT 2²⁰ | p50 **0,1217 s**, p95 **0,7133 s**, oyun **5,24 s** |
+| 80 | 200 pozisyon + 20 bitiş, TT açık | **0 bayt** allocation |
+| 81 | `SearchTests` 39 test; `Default`/`Reference` 9+11 alan | değişmedi; referans eşitliği korunuyor |
+| 82 | 24 pozisyon, kalıcı workspace, 3 konfigürasyon | TT ek kazanç **%2,9**; cache tek başına **%0,4** daha iyi |
+
+### 17.4 Ablasyon kararı — TT üretimde açılmaz
+
+Test 82, gerçek kullanım biçimini ölçer (`SelfPlayAgent` workspace'i kararlar arasında yaşatır;
+`Reset()` yalnızca model yeniden yüklenince çağrılır):
+
+| Konfigürasyon | Değerlendirici | Düğüm | TT isabet | Süre |
+|---|---|---|---|---|
+| cache açık, TT kapalı | 91 203 | 92 392 | 0 | 3,546 s |
+| ikisi de açık | 89 876 | 91 065 | 21 | 3,446 s |
+| cache kapalı, TT açık | 93 501 | 94 753 | 84 | 3,534 s |
+
+TT, eval cache'in üzerine yalnızca **%2,9** ekliyor; cache tek başına TT'den **%0,4** daha iyi.
+Sebep: pahalı iş (yaprak değerlendirme + chance düğümü) zaten `UseEvalCache` tarafından
+anahtarlanıyor ve tavla'da gerçek transpozisyon (aynı tahta + aynı zar + aynı derinlik) nadirdir.
+
+v3 §9.5 "kazanç yoksa sadeleştirilir ve raporlanır" der. Karar: **TT varsayılan olarak kapalı
+kalır ve üretim yollarında (`SelfPlayAgent`, `GameOrchestrator`) açılmaz.** Kod opt-in olarak
+korunur — §9.3'ün zorunlu teslimatıdır ve Test 76/78/80 ona bağlıdır (F6-25).
+
+### 17.5 Performans kapıları
+
+| Metrik | Ölçülen | v3 §9.5 hedefi | Durum |
+|---|---|---|---|
+| p50 karar süresi (depth 2) | **0,1217 s** | ≤ 0,15 s | ✅ |
+| p95 karar süresi (depth 2) | **0,7133 s** | ≤ 2 s | ✅ |
+| Ortalama oyun (27 karar) | **5,24 s** | ≤ 5 s (kapı **değil**) | ⚠️ %5 aşım |
+| Isınma sonrası allocation | **0 bayt** | 0 | ✅ |
+
+Ortalama oyun süresi v3 §9.5'te açıkça **kapı değil** ilan edilir ("raporlanır"). 5,24 s,
+5 s'lik raporlama hedefinin %5 üzerindedir; iki gerçek kapı (p50, p95) rahat geçilmiştir.
+
+### 17.6 Alınmayan optimizasyonlar
+
+| # | Öneri | Neden alınmadı |
+|---|---|---|
+| 1 | Sezgisel "E > 0,9 → kes" | v3 §9.5 [v3-DÜZELTME]: sonucu değiştirir, değişmez kuralı ihlal eder |
+| 2 | TT `LOWER`/`UPPER` kesmesi | Chance katmanı ağırlıklı ortalaması sınır propagasyonunu güvensiz kılar (F6-24) |
+| 3 | Depth 3 | v3 §9.6 kapsam dışı; vektör değerli expectiminimax gövde değişikliği gerektirir |
+| 4 | Star2 / daha agresif aday kısıtı | Sonucu değiştirir; Aşama E'nin kapsamı dışı |
+
+### 17.7 Test sayıları
+
+`Backgammon.Tests` **256 → 264** (+8: Test 75–82). Toplam **624 → 632**.
+`Backgammon.Inference.Tests` 64, `Backgammon.UI.Tests` 85, `ml/tests` 219 — değişmedi.
+
+### 17.8 Yeniden üretim
+
+```powershell
+dotnet test Backgammon.Tests\Backgammon.Tests.csproj -c Release `
+  --filter "FullyQualifiedName~SearchPowerTests" --logger "console;verbosity=detailed"
+```
+
+---
+
+## 18. Faz 6 — Aşama F: küp ve maç ustalığı
+
+Aşama F'nin hedefi, Faz 5'te kurulan küp/maç katmanını **ölçülebilir** biçimde gnubg seviyesine
+yaklaştırmaktır. Bu bölüm üç hatanın (F6-28, F6-29, F6-30) bulunup düzeltilmesini ve düzeltme
+sonrası küp kararı uyumunu belgeler. Üçü de birbirini maskeliyordu; sırayla açıldı.
+
+### 18.1 Ölçüm hattı: `ml/cube_bench.py`
+
+Betik gnubg'nin **kendi Python yorumlayıcısıyla** çalışır (`gnubg-cli.exe -p ml/cube_bench.py`),
+çünkü `onnxruntime` gnubg'nin gömülü yorumlayıcısında içe aktarılamaz. İş bölümü:
+
+1. `Backgammon.MatchBench cube` → `ml/artifacts/stage_f_cube_ours.json` (`DiceAveraged = true`)
+   ve `stage_f_cube_ours_single.json` (`DiceAveraged = false`).
+2. `cube_bench.py` → gnubg `cfevaluate` (0-ply ve 2-ply) → `stage_f_cube_gnubg.json`.
+3. `cube_bench.py` → `stage_f_cube.md` (uyum tabloları + karışıklık matrisleri).
+
+Pozisyon kaynağı `ml/artifacts/stage_b_positions.json` (200 pozisyon; 133'ü gnubg için güvenli).
+
+### 18.2 F6-28 — gnubg Python API'si `cubeinfo.move` alanını yok sayar
+
+`gnubg.evaluate` ve `gnubg.cfevaluate`, `cubeinfo` sözlüğündeki `move` alanını **okumaz**; her
+zaman `anBoard[1]`'i sırada kabul eder ve sonucu onun bakış açısından döndürür. Kanıt:
+
+- `cubeinfo(1, -1, 0, ...)` ile `cubeinfo(1, -1, 1, ...)` **bayt bayt aynı** çıktı (dört farklı
+  pozisyonda, iki ayrı süreçte).
+- `anBoard` satırlarını takas etmek sonucu **işaret çevirerek** değiştirir (`p0-money`: +0,1819 →
+  +0,3323; `p3-money`: +1,5216 → −1,1249).
+- Metin protokolü (`set turn 0|1` + `eval`) sırayı **doğru** okur (`p0-money`: turn +1 → 0,332,
+  turn −1 → 0,182). Yani `ml/gnubg_er.py::GnubgSession` etkilenmez.
+
+Düzeltme: `ml/cube_bench.py::gnubg_view(case)` hamleyi yapan oyuncuyu her zaman `anBoard[1]`'e
+yerleştirir, skor demetini ve küp sahibini buna göre eşler; `cubeinfo` koşulsuz `move=1` alır.
+
+### 18.3 F6-29 — Küp danışmanı afterstate'leri hamleyi yapanın perspektifinden değerlendirmeli
+
+`EquityCubeAdvisor.EvaluateDiceAveraged`, afterstate'leri `-perspective` ile değerlendirip
+`v = -values[i]` ve `dists[best].Flip()` uyguluyordu. Bu "negamax" varsayımı Faz 6'da geçersiz:
+`ShardWriter` her karar için `VectorizeAfterMove(..., mover, ...)` yazar, `ml/gnubg_er.py`
+`score_afterstates` `perspective=turn` kullanır ve `BackgammonSearch.SearchNode` de `s.turn`
+geçirir. Ağ **antisimetrik değildir** (ölçüldü: `mean |V(Q, p) + V(Q, −p)| = 0,65`), bu yüzden
+işaret çevirme doğrudan yanlılık üretiyordu.
+
+Düzeltme: `EvaluateBatch`/`EvaluateDistributionBatch` artık `perspective` alır; `v = values[i]`
+ve `dists[best]` (Flip yok).
+
+### 18.4 F6-30 — Maç oyununda çiftleme karşılaştırması `min`, `max` değil
+
+`EquityCubeAdvisor.Decide`, maç oyununda çiftleme kararını `Math.Max(doubleTake, doublePass)`
+ile veriyordu. `max`, **rakibin işbirliği yaptığını** varsayar. Rakip kendi equity'sini maksimize
+eder, yani bizimkini minimize eder; çiftlemeden sonra gerçekleşen değer
+`Math.Min(doubleTake, doublePass)` olmalıdır.
+
+Kanıt: `max` ile 32 fazla çiftleme vardı; bunların 19'u `min` altında "çiftleme"ye dönüyor —
+hata tamamen tek yönlüydü. `tooGood` da sıkılaştırıldı: eski `doublePass > doubleTake` koşulu,
+rakip pas verdiğinde bizim yine 1 puan kazandığımızı yok sayıyordu. Yeni koşul
+`doublePass > doubleTake && noDouble > doubleTake`.
+
+### 18.5 Sonuç — gnubg 0-ply, 133 geçerli pozisyon
+
+| Metrik | Faz 5 taban | F6-28 sonrası | F6-29 sonrası | **F6-30 sonrası** |
+|---|---|---|---|---|
+| Çiftleme uyumu | 52,27 % | 67,67 % | 73,68 % | **84,96 %** |
+| Kabul/ret uyumu | 61,36 % | 77,44 % | 88,72 % | **88,72 %** |
+| Her iki karar uyumu | 46,97 % | 61,65 % | 69,17 % | **81,20 %** |
+| Equity korelasyonu (Pearson) | — | 0,7803 | 0,8330 | **0,8330** |
+| Equity ortalama \|Δ\| | 1,2063 | 0,5249 | 0,3738 | **0,3738** |
+| Equity p90 \|Δ\| | — | 1,0293 | 0,9038 | **0,9038** |
+| İşaretli yanlılık (biz − gnubg) | — | +0,2587 | −0,1872 | **−0,1872** |
+
+Kabul/ret ve equity metriklerinin F6-30'da **değişmemesi** beklenen sonuçtur: `min`/`max` yalnızca
+"çiftle mi?" kararını etkiler. Bu, düzeltmenin gerçekten tek bir karşılaştırmaya dokunduğunun
+kanıtıdır.
+
+**Kapı durumu (v3 §13.3).** Çiftleme uyumu ≥ %75 → **84,96 %**, geçildi. Ortalama \|Δ\| < 1,2063
+→ **0,3738**, geçildi.
+
+`singleRecord` (`DiceAveraged = false`, Faz 5 davranışı) 75,94 % / 81,20 % / 73,68 %,
+korelasyon 0,8218, ortalama \|Δ\| 0,6266. Bu yol **üretimde kullanılmaz**; sıra başı pozisyonu
+değerlendirdiği için ağın hiç görmediği bir girdi dağılımına düşer (bkz. F6-29).
+
+gnubg 2-ply ile fark yok denecek kadar azdır (korelasyon 0,8327, ortalama \|Δ\| 0,3737): bizim
+kararımız gnubg'nin arama derinliğine duyarsızdır, çünkü danışman zaten 21 zar çifti üzerinden
+tam bir 1-ply zar düğümü çözer.
+
+### 18.6 Karışıklık matrisleri (`diceAveraged`, gnubg 0-ply)
+
+| Çiftleme | gnubg: çiftle | gnubg: çiftleme |
+|---|---|---|
+| **bizim: çiftle** | 39 | 13 |
+| **bizim: çiftleme** | 7 | 74 |
+
+| Kabul | gnubg: kabul | gnubg: ret |
+|---|---|---|
+| **bizim: kabul** | 77 | 6 |
+| **bizim: ret** | 9 | 41 |
+
+Düzeltme öncesi çiftleme matrisi 0 / 46 / 43 / 44 idi: gnubg "çiftle" derken biz **hiç**
+çiftlemiyorduk. F6-29 sonrası 42 / 31 / 4 / 56 oldu (hâlâ 31 fazla çiftleme). F6-30 sonrası
+39 / 13 / 7 / 74 — hata artık iki yöne de dağıldı (13 vs 7), yani sistematik değil.
+
+### 18.7 Kalan yanlılık ve sınırlar
+
+- `diceAveraged` medyanı −0,093 (ortalama −0,187). Kalan fark **model kalitesidir**, sözleşme
+  hatası değil: ağ ER kümesinde 0,049 ER'ye kalibre, ama küp pozisyonları farklı bir dağılımdan
+  gelir.
+- `singleRecord` ortalama −0,56 yanlılık gösterir; nedeni 18.3'te açıklandığı gibi sıra başı
+  girdisidir. `CubeAdvisorOptions.DiceAveraged` varsayılanı `true`'dur.
+- gnubg `cubeinfo` varsayılanı `jacoby: 1`'dir (Jacoby kuralı **açık**). Money-game
+  karşılaştırmalarında bu ikincil bir fark yaratabilir; ölçülmedi, açık uç olarak kaydedildi.
+- Maç kazanç ölçümü (Test 87) **tavan etkisine** takıldı: `PipBot` yalnızca pip sayısını
+  minimize eden açgözlü bir bot ve 2/4/5-away maçlarında ~%99 kaybediyor. Hedef (%45) fazlasıyla
+  aşıldı ama ölçümün ayırt ediciliği yok; ayrıntı ve yorum §18.8'de.
+
+### 18.8 Maç kazancı (Test 87)
+
+`Backgammon.MatchBench match-gain`, 2/4/5-away maçlarında `matchAware` açık/kapalı olarak
+400'er oyun oynar. Sonuçlar (`ml/artifacts/stage_f_match_gain.json`, `model_v15.onnx`):
+
+| Maç | matchAware | Kazanma | Puan/maç | Çiftleme | Pas |
+|---|---|---|---|---|---|
+| 2-away | kapalı | 99,50 % | 2,2550 ± 0,0363 | 213 | 30 |
+| 2-away | açık | 99,50 % | 2,3025 ± 0,0354 | 214 | 28 |
+| 4-away | kapalı | 99,00 % | 2,2525 ± 0,0382 | 482 | 32 |
+| 4-away | açık | 99,00 % | 2,2800 ± 0,0387 | 485 | 32 |
+| 5-away | kapalı | 99,50 % | 2,3600 ± 0,0340 | 517 | 8 |
+| 5-away | açık | 99,50 % | 2,3800 ± 0,0338 | 520 | 8 |
+
+Hedef (2-away ≥ %45) **fazlasıyla aşıldı**. Ancak bu ölçümün ayırt ediciliği yoktur: rakip
+`PipBot` pip sayısını açgözlü minimize eden, vuruşları hiç değerlendirmeyen bir bottur; Aşama D
+modeli (TEST-ER 0,049) ona karşı tavan yapıyor. `matchAware` açık/kapalı farkı yalnızca
+puan/maç sütununda görünür (2-away 2,2550 → 2,3025; 4-away 2,2525 → 2,2800; 5-away 2,3600 →
+2,3800) — yani maç farkındalığı **kazanma oranını** değil, **kazanılan puanı** iyileştiriyor. Bu
+beklenen yöndedir: 2-away'de maçı kazandıran tek oyun olduğu için küp yönetimi puanı büyütür,
+oyun kazanma olasılığını değiştirmez. Çiftleme sayıları da tutarlıdır: 2-away'de 213/214,
+4-away'de 482/485, 5-away'de 517/520 — maç farkındalığı çiftleme sıklığını değiştirmiyor, yalnızca
+**ne zaman** çiftleneceğini değiştiriyor.
+
+Faz 5 tabanı (`stage_b_match_gain.json`, `model_v2.onnx`) 2-away'de %40,00 / %39,50 idi. Aradaki
+fark model kalitesi **ve** F6-29/F6-30 düzeltmeleridir: Faz 5'te küp danışmanı işareti ters
+olduğu için gerideyken çiftliyor, öndeyken pas veriyordu.
+
+### 18.9 Yeniden üretim
+
+```powershell
+dotnet build Backgammon.MatchBench\Backgammon.MatchBench.csproj -c Release
+$exe = "Backgammon.MatchBench\bin\Release\net10.0\Backgammon.MatchBench.exe"
+& $exe cube --positions ml\artifacts\stage_b_positions.json `
+  --out ml\artifacts\stage_f_cube_ours.json `
+  --model ml\runs\stage_d_l2\onnx\model_v15.onnx --dice-averaged 1
+& $exe cube --positions ml\artifacts\stage_b_positions.json `
+  --out ml\artifacts\stage_f_cube_ours_single.json `
+  --model ml\runs\stage_d_l2\onnx\model_v15.onnx --dice-averaged 0
+
+$env:TAVLA_ROOT = "F:\Projects\VijualStudioski\TavlaAI_Project"
+& "F:\Program Files (x86)\gnubg\gnubg-cli.exe" -p "F:/Projects/VijualStudioski/TavlaAI_Project/ml/cube_bench.py"
+
+& $exe match-gain --model ml\runs\stage_d_l2\onnx\model_v15.onnx --games 400 `
+  --out ml\artifacts\stage_f_match_gain.json
+```
+
+### 18.10 Dogrulama
+
+```
+ml/tests                     550/550  (3 yavas/kosullu test atlanir)
+Backgammon.Tests             285/285
+Backgammon.Inference.Tests    64/64
+Backgammon.UI.Tests           85/85
+```
+
+Asama E sonunda 264 olan C# motor testi sayisi, Asama F'nin `CubePowerTests` dosyasiyla
+(Test 83, 85, 86, 88) **268**'e cikti. Python tarafinda `ml/tests/test_stage_f.py` uc olcum
+testi ekledi (Test 84, 87, 89): 219 → **224**. Toplam **641**.
+
+Faz 7 Asama A alti yeni pytest dosyasi ekledi (`test_er_power.py` 47, `test_gnubg_hint.py` 68,
+`test_measurement_integrity.py` 45, `test_equity_parity.py` 26, `test_proof_corpus.py` 45,
+`test_er_harness_stage_a.py` 55, `test_human_ladder.py` 37): 224 → **550**. C# tarafinda
+`EquityGoldenTests` yedi test ekledi: 268 → **275**. Toplam **974**.
+## 19. Aşama H — Kapanış
+
+Aşama H kod üretmez; **ölçer, raporlar ve kapatır**. Çıktısı
+`ml/artifacts/stage_f_faz6.md` (Faz 6 kapanış raporu) ve bu bölümdür.
+
+### 19.1 Kapsam
+
+v3 §13.5: *"Tüm testler yeşil; PHASES.md §13, ARCHITECTURE.md §44, ASSUMPTIONS.md
+F6-01…F6-xx yazılır; Bölüm 13 tabloları ölçülmüş değerlerle dolu; Ek A cevapları
+(erişim alındı/alınmadı) yazılır."* Bölüm numaraları v3 yazıldıktan sonra kaydığı için
+gerçekleşen karşılıkları §19 (bu bölüm), ARCHITECTURE.md §50 ve ASSUMPTIONS.md
+F6-01…F6-31'dir.
+
+### 19.2 Yeni ölçüm araçları
+
+| Dosya | İş |
+|---|---|
+| `ml/calibration_bench.py` | §13.2 kalibrasyon ölçümü — gnubg **metin protokolü** ile |
+| `Backgammon.MatchBench` `bench` alt komutu | ONNX çıkarım throughput'u (kova 1…2048, CPU/CUDA) |
+| `Backgammon.MatchBench` `dump-afterstates` | Kalibrasyon için afterstate dökümü |
+
+`ml/calibration_bench.py` neden ayrı bir dosya: Faz 5'in `ml/afterstate_bench.py`
+betiği gnubg'nin **Python API**'sini kullanıyordu ve o yol bu projede güvenilir
+değil (F6-28: `cubeinfo['move']` yok sayılır). Yeni betik metin protokolünü
+(`GnubgSession.eval_afterstates`) kullanır, pip sayılarını doğrular ve
+`measure_position` ile aynı perspektif sözleşmesini uygular.
+
+### 19.3 Ölçülen değerler
+
+**Güç (§13.1).**
+
+| Ölçüm | Faz 5 | Faz 6 | Kapı |
+|---|---|---|---|
+| gnubg ER 2-ply (200 poz.) | 0,1941 (50 poz.) | **0,0740** | hedef < 0,02 → tutmadı |
+| gnubg ER 0-ply (200 poz.) | — | **0,0972** | — |
+| gnubg ER 3-ply (200 poz.) | — | **ölçülemez** (F6-32) | hedef < 0,01 → ölçülmedi |
+| PipBot karşısında | %40,50 | **%99,50** | — |
+| RandomBot karşısında | %80,50 | **%100,00** | — |
+| Faz 5 `v5.onnx` karşısında (1 500 oyun) | — | **%99,67** | > %50, p < 0,05 → **geçti** |
+
+**3-ply satırı hakkında (F6-32).** Aşama H'de "3-ply ER 0,0972" olarak raporlanan değer
+**3-ply değildir**: gnubg'nin `eval` komutu `set evaluation chequerplay evaluation plies N`
+ayarından bağımsız olarak yalnızca `static` / `1 ply` / `2 ply` satırlarını basar ve
+`_equity_at` istenen sütunu bulamayınca sessizce `static`'e (0-ply) düşüyordu. `--plies 0`
+ölçümü `--plies 3` ile 200/200 pozisyonda birebir aynı çıktı. Yani gerçek merdiven
+**0-ply 0,0972 → 2-ply 0,0740**: model hakem güçlendikçe *iyileşiyor*. Sessiz geri düşüş
+kaldırıldı (`MAX_EVAL_PLIES = 2`, aksi halde `ValueError`), `er_harness measure` desteklenmeyen
+derinlikte çalışmadan çıkıyor. Gerçek 3-ply hakem `hint` protokolü + hamle→afterstate eşlemesi
+gerektirir; Faz 7'ye devredildi.
+
+**Kalibrasyon (§13.2).** 400 afterstate, `model_v30.onnx`, gnubg 0-ply / 2-ply:
+eğim **0,6601** / 0,6743, korelasyon **+0,8989** / +0,9016, MAE **0,2755** / 0,2683,
+std oranı **1,3617** / 1,3371. Korelasyon ve std oranı kapıları geçti; **eğim ve MAE
+kapıları kaldı**.
+
+**Küp ve maç (§13.3).** Çiftleme uyumu **%84,96**, kabul/ret **%88,72**, her ikisi
+**%81,20**, ortalama |Δ| **0,3738** — hepsi kapı içinde. 2-away maç farkındalığı
+**%99,50** (hedef ≥ %45, tavan etkisi). Crawford doğru (Test 85).
+
+**Performans (§13.4).** Üretim modeli `medium` (221-256-256-128): CPU kova 128
+**237 708** poz/sn, CUDA kova 2048 **875 580** poz/sn. v3 eşikleri (700 000 /
+1 200 000) `small` mimarisinde ölçülmüştü; `medium` 4,5× daha ağır olduğu için
+**belgelenmiş sapma** olarak raporlanır. Arama allocation **0 bayt**, depth 2 p95
+**0,7133 s/karar** (kapı ≤ 2 s), depth 2 ortalama oyun **5,24 s** (raporlanır),
+12-thread self-play **584,97 oyun/s**.
+
+### 19.4 F6-31 — Faz 5 kalibrasyon ölçümü aynalı tahta kullanıyordu
+
+Aşama H'nin en önemli bulgusu bir **ölçüm hatasıdır**, kod hatası değil. Faz 5'in
+`ml/afterstate_bench.py::to_gnubg_board` tahtayı gnubg'ye aynalanmış veriyordu
+(`row0[i] = board[1+i]`, `row1[i] = -board[24-i]`; doğrusu `row0[i] = board[24-i]`,
+`row1[i] = -board[1+i]`). Simetrik bir pozisyonda doğru çevirim +1,0000 verirken
+hatalı çevirim +0,2819 veriyor; asimetrik bir pozisyonda işaret bile değişiyor.
+
+Sonuç: Faz 5'in "eğim 0,0874, korelasyon +0,2431, MAE 0,8014, std 2,78" rakamları
+modelin gerçek kalibrasyonu **değildi**. Gerçek değerler eğim 0,6601, korelasyon
++0,8989, MAE 0,2755, std 1,3617. Yani Faz 6'nın kalibrasyondaki "iyileşmesi"nin bir
+kısmı gerçek eğitim kazancı, bir kısmı ise **tabanın düzeltilmesidir**. İkisi
+birbirinden ayrıştırılamaz, çünkü Faz 5'in doğru tabanı hiç ölçülmemişti.
+
+Aynı ölçüm gnubg Python API'siyle tekrarlandığında eğim −0,0011, korelasyon −0,0022
+çıktı — yani gürültü. Dört farklı tahta çevirimi denendi, hiçbiri metin protokolüyle
+uyuşmadı. **Kalibrasyon ölçümü için tek güvenilir yol gnubg metin protokolüdür.**
+
+### 19.5 Sapmalar
+
+Kapanış raporunun §10 tablosu on iki sapma listeler. Özet: ER hedefleri (D1, D2)
+tutmadı; kalibrasyon eğim/MAE kapıları (D3, D4) kaldı; ONNX throughput kapıları
+(D5, D6) mimariyle birlikte ölçeklenmediği için karşılanamadı; `large` profili (D8),
+`search_distill` (D9), Ek A (D10), Test 64'ün koşum adımı (D11) ve Test 69 (D12)
+kapsam dışı kaldı. Hiçbiri gizlenmemiştir.
+
+### 19.6 Doğrulama
+
+```
+ml/tests                     550/550  (3 yavaş/koşullu test atlanır)
+Backgammon.Tests             285/285
+Backgammon.Inference.Tests    64/64
+Backgammon.UI.Tests           85/85
+```
+
+Toplam **974**. Aşama H kapanıştan sonra F6-32 için **2** regresyon testi ekledi
+(`test_equity_at_rejects_unsupported_ply`, `test_max_eval_plies_matches_gnubg_contract`):
+222 → **224**. Faz 7 Asama A alti yeni pytest dosyasi ve `EquityGoldenTests` ekledi:
+224 → **550** (pytest), 268 → **275** (C# cekirdek). `ml/tests/test_docs_consistency.py`
+belge tutarlılığını (bölüm numaraları, test sayıları, atıf edilen yollar) korumaya devam ediyor.
+
+## 20. Faz 7 — Aşama A: ölçüm hattı ve hakem sözleşmesi
+
+Faz 7'nin tamamı **ölçüm dürüstlüğü** üzerine kuruludur: hiçbir sayı, kaynağı
+yazılmadan rapora girmez. Aşama A bu altyapıyı kurdu ve **hiçbir eğitim koşusu
+başlatmadı**.
+
+### 20.1 Yeni ölçüm araçları
+
+| Dosya | İş |
+|---|---|
+| `ml/er_power.py` | İstatistiksel güç: `required_n`, `sigma_ci`, `power_curve`, tarama modu |
+| `ml/gnubg_hint.py` | `hint` hakemi: hamle filtresi genişletme, perspektif çevirme, sansür tespiti |
+| `ml/measure_integrity.py` | Dört bağımsız doğrulama probu (Test 93) |
+| `ml/proof_corpus.py` | 2 000 pozisyonluk kanıt korpusu, SHA-256 dondurulmuş |
+| `ml/human_ladder.py` | 7 basamaklı insan karşılaştırma merdiveni (Test 94) |
+| `ml/equity.py` | float32 aynası (F7-06) |
+| `ml/er_harness.py` | `--referee hint`, `--power`, `referee_contract` |
+
+### 20.2 F7-01 — gnubg `hint` hamle filtresi adayları buduyor
+
+`hint` varsayılan olarak yalnızca filtrelenmiş adayları listeler; modelin
+afterstate'i listede olmayabilir. Düzeltme: `set evaluation movefilter <plies>
+<level> 1000 0 0.0` **her** `level in range(plies)` için. Sözdizimi
+`set evaluation movefilter`'dır — `set evaluation chequerplay movefilter`
+**değil**.
+
+### 20.3 F7-02 — gnubg hamle notasyonu hamleyi yapanın perspektifinde
+
+X (Siyah, `turn = -1`) mutlak; O (Beyaz, `turn = +1`) aynalanmış (`p -> 25 - p`).
+`parts[i].rstrip("*")` zorunlu. Bu düzeltilmeden hamle → afterstate eşlemesi
+sistematik olarak yanlıştı.
+
+### 20.4 F7-03 — `hint` en fazla 10 hamle yazdırıyor
+
+200 pozisyonun 39'unda (**%19,5**) modelin afterstate'i listede yoktu.
+`plies <= 2` için `eval` yedeği (%100 kapsama); `plies >= 3` için **sansürlü**,
+yalnızca alt sınır. Bu, F-A9 kapısının (kapsama ≥ %99) neden karşılanmadığının
+kaynağıdır.
+
+### 20.5 F7-04 — `hint@2` ile `eval@2` aynı şey değil
+
+10 pozisyonun 6'sı birebir, 4'ü **0,118**'e varan farkla ayrıştı. Karar:
+**2-ply hakem = `eval`; 3/4-ply hakem = `hint`; `hint@2` asla hakem değildir.**
+
+### 20.6 F7-05 / F7-06 — equity tek kaynak, iki dilde bit düzeyinde
+
+`OutcomeDistribution.Flip()` bit düzeyinde involüsyon **değil** (en büyük sapma
+1,34e-07). C#/Python paritesi float32 aynası olmadan kurulamaz: aynasız sapma
+**0,156**, aynayla **0 uyuşmazlık** (296 geçerli kayıt × 5 kümülatif alan +
+`equityHex`). `ml/tests/test_equity_parity.py` (26 test) `atol = 0` ile doğrular.
+
+### 20.7 F7-07 — 4-ply `hint` maliyeti sınırsızdır
+
+60 pozisyonluk CAL kümesinde 4-ply `hint` 14 pozisyonda 2 412,9 s
+(**172 s/pozisyon**), 15. pozisyonda 900 s zaman aşımı. 1 670 pozisyon ≈ **80
+saat** > 40 saat tavanı. Merdiven hakemi **3-ply**'a indirildi; 4. basamak
+`source = "unmeasured"` olarak raporlandı.
+
+### 20.8 Ölçülen insan merdiveni (60 CAL pozisyon, 3-ply hakem, 642,6 s)
+
+| # | Referans | Kaynak | Kapsama | ER | %95 GA |
+|---|---|---|---|---|---|
+| 0 | gnubg 0-ply | ölçülür | %86,7 | **0,0522** | [0,0270; 0,0773] |
+| 1 | gnubg 1-ply | ölçülür | %80,0 | **0,0530** | [0,0274; 0,0787] |
+| 2 | gnubg 2-ply | ölçülür | %91,7 | **0,0525** | [0,0264; 0,0785] |
+| 3 | gnubg 3-ply | hakemin kendisi | %100 | 0 (tanım) | — |
+| 4 | gnubg 4-ply | **ölçülmedi** | — | — | — |
+| 5 | dünya şampiyonu insan | literatür | — | 0,0025 | — |
+| 6 | gnubg 4-ply + büyük ağ | literatür | — | 0,003 | — |
+
+**Merdiven düz.** Bölüm 4.4'ün beklediği 0,10 / 0,08 / 0,05 düşüşü **görülmedi**.
+Bu, belgenin ölçülmemiş bir varsayımıydı; ölçüm onu çürüttü.
+
+### 20.9 σ̂ ve güç sözleşmesi
+
+`ml/artifacts/stage_h_er_2ply.json` (n = 200, gnubg 2-ply): ortalama **0,073970**,
+σ **0,109072**, SE **0,007713**. σ'nın %95 GA'sı (bootstrap, 20 000 yeniden
+örnekleme) [0,092153; 0,124178] → **±%14,7**. Kanıt n'i **üst güven sınırından**
+hesaplandı: σ = 0,124178, h = 0,005 → **1 670** (tek yönlü). `er_sigma_log.json`
+Aşama A satırıyla açıldı (12 alan).
+
+### 20.10 Aşama A kabul durumu (Bölüm 10.6)
+
+| Kriter | Durum |
+|---|---|
+| Test 90–94 yeşil | GEÇTİ |
+| Test 122–123 yeşil (iki dilde bit düzeyinde) | GEÇTİ |
+| Test 124 yeşil (güç sözleşmesi) | GEÇTİ |
+| Hakem sözleşmesi zorunlu (`methodNote`) | GEÇTİ |
+| `hint` 3-ply ve 4-ply veriyor | GEÇTİ |
+| Hamle → afterstate eşlemesi 200/200 | GEÇTİ (0 hata) |
+| Dört doğrulama probu kalıcı test | GEÇTİ (45 test) |
+| İnsan merdiveni 0–4 ölçülmüş | **KISMİ** — 0–3 ölçüldü, 4 ölçülemedi (F7-07) |
+| σ ölçülmüş, kanıt n'i üst güven sınırından | GEÇTİ (1 670) |
+| Kanıt korpusu üretildi ve SHA-256 donduruldu | GEÇTİ |
+| `assert_valid` negatif testi yeşil | GEÇTİ |
+
+### 20.11 Doğrulama
+
+```
+ml/tests                     550/550  (3 yavaş/koşullu test atlanır)
+Backgammon.Tests             285/285
+Backgammon.Inference.Tests    64/64
+Backgammon.UI.Tests           85/85
+```
+
+Toplam **974**. Aşama A yedi yeni pytest dosyası ve `EquityGoldenTests` ekledi:
+224 → **550** (pytest), 268 → **275** (C# çekirdek).
+
+## 21. Faz 7 — Aşama B: kapasite ve veri (Test 95–98)
+
+Aşama B'nin sorusu tek cümleydi: **`large` profile geçmek %15 kazanç getiriyor
+mu?** Cevap **hayır** — ve bu, ölçümün en değerli çıktısıdır.
+
+### 21.1 Test 95 — profil ölçümü ve parite
+
+| Profil | Mimari | Parametre | ONNX | Parite max abs | CPU kova 128 |
+|---|---|---|---|---|---|
+| `medium` | 221-256-256-128 | 156 423 | 615,5 KB | **5,96e-08** | 347 448 poz/sn |
+| `large` | 221-512-512-512 | 642 567 | 2 514,5 KB | **5,96e-08** | 141 875 poz/sn |
+
+F-B3 kapısı (parite ≤ 1e-6) **geçti**. `large` throughput'ta 2,45× yavaş.
+
+### 21.2 Test 96 — kapasite kararı: `medium` kalır
+
+İki profil, **aynı** 6 shard (`it5, it10, it15, it20, it25, it30`), aynı tohum
+(11), aynı adım (3 000), aynı λ (1,0), aynı kritik çarpan (2,0), CPU:
+
+| Profil | Parametre | Eğitim | VAL-ER | SE | depth 2 p95 |
+|---|---|---|---|---|---|
+| `medium` | 156 423 | 679,8 s | **0,0640** | 0,0119 | 4,4972 s |
+| `large` | 642 567 | 1 297,8 s | **0,0664** | 0,0120 | 13,6816 s |
+
+| Bacak | Kriter | Ölçülen | Durum |
+|---|---|---|---|
+| (a) | `large` VAL-ER kazancı ≥ %15 | **−%3,7** | **TUTMADI** |
+| (b) | `large` depth 2 p95 ≤ 2 s | **13,68 s** | **TUTMADI** |
+
+Gözlenen fark −0,0024, gürültü eşiğinin (0,0025) **altında** ve işareti **ters**.
+Yani "fark yok" bile denemez; `large` hafifçe **daha kötü**.
+
+**Yorum.** 3 000 adım, 642 567 parametreli bir ağı doyurmuyor. `large` `medium`
+kadarını öğreniyor, fazladan kapasitesini kullanamıyor, yalnızca optimizasyon
+zorluğu ekliyor. "Daha büyük ağ daha iyi" varsayımı **ölçülerek reddedildi**.
+
+### 21.3 F7-10 — ilk koşu geçersizdi
+
+İlk Test 96 koşusu (1 000 adım, tek shard) `medium` 0,2631 / `large` 0,2532
+verdi ve "%3,8 kazanç" diye raporlandı. Bu **yanlıştı**: `ml/train_v2.py` ONNX'i
+her iterasyonun **başında** aktarır, yani `--iterations 1` koşusunda
+`model_v1.onnx` **rastgele başlangıçtır**. Ölçülen şey eğitilmiş model değildi.
+
+| Model | VAL-ER | SE |
+|---|---|---|
+| `model_v1.onnx` (eğitim öncesi) | 0,2631 | 0,0356 |
+| `model_v1_trained.onnx` (eğitim sonrası) | **0,0640** | 0,0119 |
+
+Fark **4,1×**. Düzeltme: `ml/export_ckpt.py` (checkpoint → ONNX). Bölüm 21.2'nin
+tüm sayıları bu yolla üretilmiş eğitilmiş modellerden gelir.
+
+### 21.4 F7-09 — depth 2, gerçek ONNX ile bütçeyi 10 kat aşıyor
+
+| Model | Derinlik | p50 | p95 | Ortalama | ONNX çağrısı / karar |
+|---|---|---|---|---|---|
+| `medium` | 0 | 0,0003 s | 0,0010 s | 0,0004 s | 1 |
+| `medium` | 1 | 0,0233 s | 0,0902 s | 0,0328 s | 85 |
+| `medium` | **2** | **2,0300 s** | **4,4972 s** | **2,1471 s** | 6 028 |
+| `large` | 1 | 0,0718 s | 0,2598 s | 0,0895 s | 85 |
+| `large` | **2** | **6,5306 s** | **13,6816 s** | **6,9198 s** | 5 948 |
+
+Faz 6 Test 79'un 0,7133 s p95'i **sentetik** `HashEvaluator` ile ölçülmüştü;
+gerçek çıkarım maliyetini içermiyordu. Maliyet ONNX **çağrı sayısıyla** doğrusal
+(~0,35 ms/çağrı, kova boyutundan bağımsız): depth 2, 84×84 = 7 056 yaprak şans
+düğümü üretir. Üretimde kullanılabilir derinlik **depth 1**'dir (p95 0,09 s,
+bütçenin %4,5'i).
+
+### 21.5 Test 97 — açılış çeşitliliği
+
+`DupCapFilter.DefaultOpeningPlies = 10`, `DefaultCap = 3`. Sentetik tekrarlı
+oyunlarla doğrulandı: `OpeningExempt == Games × 10`, `d < 10` hiçbir karar
+kırpılmadı, kırpılan karar `ChosenVector`'ü koruyup `Q`/`PolicyTargetCs`/
+`CandidateVectors`'ü kaybetti, `cap = 0` filtreyi kapatıyor, farklı parmak izleri
+korunuyor. **9 C# testi yeşil.**
+
+### 21.6 Test 98 — kritik karar ağırlığı (F7-08)
+
+`ml/critical.py` + `ml/train_v2.py` entegrasyonu. Dağılım (6 shard, 3 000 adım):
+
+| Başlık | Örnek | Kritik | Oran | Etkin örnek | Etkin oran |
+|---|---|---|---|---|---|
+| değer | 1 187 935 | 1 187 935 | **%100** | 1 187 935 | %100 |
+| politika | 864 734 | 224 477 | **%25,96** | 771 296 | %89,2 |
+
+**Politika yarısı çalışıyor.** **Değer yarısı dejenere (F7-08):** para oyununda
+her değer örneğinin `|equity| = 1`'dir, dolayısıyla `|equity| >= 0,5` eşiği
+hiçbir şeyi ayırmaz. `weight_distribution` artık `degenerate` bayrağı döndürür ve
+`train_v2` dejenere başlık için ağırlığı **uygulamaz**, durumu **raporlar**.
+Değer başlığı için doğru ölçüt henüz tasarlanmadı.
+
+### 21.7 B1 / B2 / B3 yolu — **SEÇİLMEDİ**
+
+Bölüm 5.1.6 üç yol tanımlar ve **kullanıcı onayı** ister. Ölçüm sonrası durum:
+
+| Yol | Bu ölçümden sonra |
+|---|---|
+| **B1 — EVREN kapısı** (~1 ay) | **Geçersiz** — `large`'ın kazancı zaten ölçüldü: −%3,7 |
+| **B2 — Kabul** (~3 ay) | **Geçersiz** — takvim `large`'a geçişi varsayıyordu |
+| **B3 — Kapsam daraltma** (~2 ay) | **Tek tutarlı yol** — `medium` kalır, bütçe büyümez, ER hedefi ≤ 0,02, **şampiyon iddiası düşer** |
+
+**Onay bekliyor.** Onay olmadan `large` ile hiçbir eğitim koşusu başlatılmaz.
+
+### 21.8 Aşama B kabul durumu (Bölüm 10.7)
+
+| Kapı | Kriter | Ölçülen | Durum |
+|---|---|---|---|
+| F-B1 | `large` VAL-ER kazancı ≥ %15 | −%3,7 | **TUTMADI** |
+| F-B2 | `large` depth 2 p95 ≤ 2 s | 13,68 s | **TUTMADI** |
+| F-B3 | `large` export paritesi ≤ 1e-6 | 5,96e-08 | **GEÇTİ** |
+| Test 95 | Profil ölçümü + parite | iki profil | GEÇTİ |
+| Test 96 | Kapasite kararı | `medium` kalır | GEÇTİ |
+| Test 97 | İlk 10 ply `dup_cap` muafiyeti | 9 C# testi | GEÇTİ |
+| Test 98 | Kritik karar ağırlığı | politika %26,0; değer dejenere | **KISMİ** |
+
+### 21.9 Doğrulama
+
+```
+ml/tests                     771/771  (3 yavaş/koşullu test atlanır)
+Backgammon.Tests             285/285
+Backgammon.Inference.Tests   100/100
+Backgammon.UI.Tests           88/88
+```
+
+Toplam **1244**. Aşama B üç yeni pytest dosyası (`test_critical.py` 76,
+`test_capacity_bench.py` 48, `test_export_ckpt.py` 12) ve `StageBDataQualityTests` (9)
+ekledi. B3 kararı dört dosya daha ekledi: `test_distill.py` (34), `test_calibrate.py` (32),
+`test_critical.py` içindeki 20 marj testi ve `ProductionDepthTests` (10).
+550 → **749** (pytest), 64 → **83** (inference).
+
+## 22. Faz 7 — Aşama B sonrası: B3 kapsam daraltması (onaylandı)
+
+**Tarih:** 2026-11-17. **Durum:** tamamlandı, 771 pytest + 285 + 100 + 88 C# testi yeşil.
+
+### 22.1 Karar
+
+Aşama B ölçümü B1 ve B2'yi **geçersiz** kıldı: `large`'ın kazancı zaten **−%3,7**
+olarak ölçüldü (medium 0,0640 / large 0,0664), yani EVREN erişimi veya 3 aylık
+takvim bu kararı değiştiremez. **B3 onaylandı** ve altı kalem yürürlüğe girdi:
+
+| # | Karar | Uygulama |
+|---|---|---|
+| 1 | `large` dosyası kapatıldı | `large` üretim adayı değil; eğitim koşusu başlatılmaz |
+| 2 | Depth 2 üretimden çıkarıldı | `SearchSettings.ProductionDepthPly = 1`, `SelfPlayConfig.Validate` reddeder |
+| 3 | Test 98 onarıldı | Değer kafası **karar marjı** ölçütü; kritik oran %100 → **%33,3** |
+| 4 | Kalibrasyon önceliklendirildi | `ml/calibrate.py`; eğim 0,6447 → **0,9584**, MAE 0,2641 → **0,1782** |
+| 5 | Damıtma 500 000 karar | `ml/distill.py`; 500 000 = **70,7 saat** (tavan 72) |
+| 6 | ER hedefi ≤ 0,02 | Bölüm 4.4 birinci koşulu uygulanmaz; **şampiyon iddiası düşer** |
+
+### 22.2 Yeni modüller
+
+| Dosya | Satır | Test | İş |
+|---|---|---|---|
+| `ml/distill.py` | ~300 | 34 | Damıtma hacmi planı; `DISTILL_VOLUME_CAP = 500_000`, `DISTILL_TIME_CAP_HOURS = 72`, `DEC_DISTILLED = 16` |
+| `ml/calibrate.py` | ~330 | 32 | CAL/VAL bölmesi, affine onarım, dört kapı; Kural 10 (yalnızca CAL) |
+| `ml/critical.py` | +90 | +20 | `critical_mask_value_margin`, `VALUE_CRITERION_*`, `criterion` alanı |
+| `ml/train_v2.py` | +60 | — | `ExclusiveSamples.margin` / `.best_equity`, probe kalıcılığı |
+| `Backgammon.Inference.Tests/ProductionDepthTests.cs` | ~150 | 10 | Depth 2 üretimde açılamaz |
+
+### 22.3 Ölçümler
+
+**Test 98 onarımı** (200 oyunluk gerçek shard kümesi, 12 264 değer örneği):
+
+| Ölçüt | Kritik oran | Etkin oran | Dejenere? |
+|---|---|---|---|
+| Eski: `\|equity(y)\| >= 0,5` | **%100,0** | %100,0 | **evet** |
+| Yeni: `\|best_equity\| >= 0,5` **ve** `marj <= 0,05` | **%33,3** | %88,9 | hayır |
+
+**Kalibrasyon onarımı** (CAL 200 / VAL 200, tohum 20261117):
+
+| Metrik | Öncesi (VAL) | Sonrası (VAL) | Kapı | Sonuç |
+|---|---|---|---|---|
+| Eğim | 0,6447 | **0,9584** | 0,85–1,15 | geçti |
+| Korelasyon | +0,9022 | +0,9022 | ≥ 0,75 | geçti |
+| MAE | 0,2641 | **0,1782** | ≤ 0,15 | **KALDI** |
+| Std oranı | 1,3993 | **0,9414** | 0,7–1,4 | geçti |
+
+Affine onarım `hedef ~ 0,6727 * tahmin + 0,1402`. Korelasyon **değişmedi**
+(doğrusal dönüşüm Pearson'u değiştirmez). MAE kapı dışında kaldığı için post-hoc
+onarım **yetmiyor**; `L_cal` yeniden eğitimi (Aşama D) zorunlu.
+
+**Damıtma planı** (4,07 s/karar, 8× paralel → 1,9656 karar/sn):
+
+| Hacim | Süre | Kısıtlayan |
+|---|---|---|
+| **500 000** | **70,7 saat** | hacim |
+| 2 000 000 | 72,0 saat (kırpılmış) | **süre** |
+
+### 22.4 Yeni bulgular
+
+`ASSUMPTIONS.md`: **F7-12** (değer maskesi onarımı), **F7-13** (post-hoc
+kalibrasyon eğimi düzeltir, MAE'yi düzeltmez), **F7-14** (damıtma hacmi ile 72
+saat çelişiyordu), **F7-15** (depth 2 üretimden çıkarıldı).
+
+### 22.5 Açık kalan
+
+- **MAE 0,1782 > 0,15.** `L_cal` yeniden eğitimi koşulmadı; Aşama D'nin eğitim
+  koşusu bu boşluğu kapatmalı.
+- **Depth 2 geri dönüşü** yaprak-cephe toplu değerlendirmesine bağlı; kapsam dışı.
+- **Damıtma koşusu** (500 000 karar, ~70,7 saat) henüz başlatılmadı; Aşama C.
+- **ER ≤ 0,02** hedefi ölçülmedi; mevcut 2-ply ER 0,0740.
+
+## 23. Faz 7 — Aşama C: arama damıtma (Test 99–102)
+
+**Tarih:** 2026-11-17. **Durum:** hat tamamlandı, **Test 102 kapısı BAŞARISIZ
+(güçsüz)**. 771 pytest + 285 + 100 + 88 C# testi yeşil.
+
+### 23.1 Ne yapıldı
+
+Üretim modeli 1-ply oynuyor (F7-15). 2-ply daha iyi karar veriyor ama karar
+başına ~2,0 s (p95 2,85 s) sürüyor ve 2 s bütçesini aşıyor. Bu yüzden 2-ply
+**öğretmen** olarak kullanılıp bilgisi 1-ply öğrenciye aktarıldı.
+
+| Bileşen | Dosya | Test |
+|---|---|---|
+| Arama damıtma modu | `Backgammon.Core/Search/SearchSettings.cs`, `BackgammonSearch.cs` | Test 99 (10) |
+| Shard bayrağı | `Backgammon.SelfPlay/ShardModel.cs` (`DEC_DISTILLED = 16`) | Test 100 (8) |
+| Determinizm | `Backgammon.Inference.Tests/DistillDeterminismTests.cs` | Test 101 (9) |
+| Kapı | `ml/distill_compare.py` | Test 102 (32) |
+
+Shard **şema değişikliği olmadı** (F7-16): politika hedefi mevcut `q`, değer
+hedefi mevcut `searchValue`. `DEC_DISTILLED` yalnızca işaret taşır.
+
+### 23.2 Ölçülen maliyet
+
+| Kol | Oyun | Derinlik | Karar | Duvar saati | Oyun başına |
+|---|---|---|---|---|---|
+| Damıtma | 20 | 2 | 1 048 | **1 034,26 s** | **51,7 s** |
+| Kontrol | 20 | 1 | 1 128 | **19,13 s** | 0,96 s |
+
+Öğretmen **54×** daha pahalı. Bu, §5.1.1 bütçesinin ana girdisidir.
+
+### 23.3 Test 102 — BAŞARISIZ
+
+| Ölçüm | Kontrol | Damıtılmış |
+|---|---|---|
+| VAL-ER (2-ply gnubg, n=70) | 0,0883 | 0,0602 |
+| SE | 0,0153 | 0,0120 |
+
+Kazanç nokta tahmini **0,3182** (eşik 0,25) ama %95 GA **[-0,0351; 0,6715]**
+sıfırı içeriyor → kapı **başarısız**.
+
+**Bu "damıtma işe yaramaz" demek değildir.** Gerekli n (gözlenen dağılımdan):
+%80 güç için kol başına **264**, tam %25 kazanç için **427** pozisyon. Koşu
+**70** kullandı — gerekenin **1/4'ü**. Kapı tasarım gereği karar veremezdi.
+
+### 23.4 Yeni varsayımlar
+
+`ASSUMPTIONS.md`: **F7-16** (damıtma yeni shard alanı gerektirmedi), **F7-17**
+(damıtma değer hedefi 6 sınıflı dağılım değil skaler equity; kalibrasyon terimi
+kapatılır, bu yüzden CE/MAE sütunları kollar arasında karşılaştırılamaz).
+
+**F7-10 dördüncü kez tekrarlandı:** ilk denemede iki kolun `model_v1.onnx`
+dosyaları bayt bayt aynı çıktı, çünkü `train_v2.py` ONNX'i eğitimden **önce**
+yazar. Doğru yol `ml/export_ckpt.py` ile checkpoint'ten aktarmaktır.
+
+### 23.5 Açık kalan
+
+- **Test 102 kararlı değil.** Tekrar için ≥ 200 oyun (damıtma kolu 2,87 h) ve
+  ≥ 500 val pozisyonu gerekir. Bu tamamlanana kadar §5.4'ün kazanç iddiası
+  kanıtlanmış sayılmaz.
+- **F7-03 sansürü.** 3/4-ply'de modelin hamlesi `hint` ilk-10 listesinde
+  değilse pozisyon **sansürlü** sayılır; kapsama ~%80,5. F-A9 kapısı %99 ister.
+- **F7-04 yöntem değişimi.** 2-ply hakemi `eval`, 3/4-ply hakemi `hint`; her
+  rapor `methodNote` taşımalı.

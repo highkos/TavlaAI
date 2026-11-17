@@ -1,0 +1,1024 @@
+{
+  "generator": "ml/gnubg_er.py",
+  "model": "ml/runs/stage_d/onnx/model_v10.onnx",
+  "gnubg": "F:/Program Files (x86)/gnubg/gnubg-cli.exe",
+  "gnubgVersion": "GNU Backgammon 1.08.003-mingw 32-Bit 20240428",
+  "plies": 2,
+  "criterion": "policy",
+  "cubeful": false,
+  "totalCases": 57,
+  "measuredCases": 50,
+  "skippedCases": [
+    "bar-closed-white",
+    "bar-open-white",
+    "bearoff-exact-white",
+    "bearoff-overshoot-white",
+    "bearoff-blocked-white",
+    "bearoff-exact-black",
+    "bar-open-black"
+  ],
+  "summary": {
+    "count": 50,
+    "meanEquityLoss": 0.1941,
+    "medianEquityLoss": 0.141,
+    "maxEquityLoss": 0.56,
+    "exactMatchRate": 0.32
+  },
+  "positions": [
+    {
+      "name": "big-die-white",
+      "turn": 1,
+      "dice": [
+        3,
+        5
+      ],
+      "afterstateCount": 1,
+      "gnubgBestIndex": 0,
+      "gnubgBestEquity": 1.895,
+      "gnubgHintMove": "24/19",
+      "gnubgHintEquity": 2.012,
+      "modelAfterstateIndex": 0,
+      "modelEquity": 1.895,
+      "equityLoss": 0.0,
+      "modelValue": -10.300523,
+      "exactMatch": true,
+      "notes": [
+        "tek yasal hamle",
+        "0-ply hint ile 2-ply eval farkli"
+      ]
+    },
+    {
+      "name": "double-4-steps-white",
+      "turn": 1,
+      "dice": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "afterstateCount": 75,
+      "gnubgBestIndex": 52,
+      "gnubgBestEquity": 0.254,
+      "gnubgHintMove": "13/11(2) 6/4(2)",
+      "gnubgHintEquity": 0.254,
+      "modelAfterstateIndex": 42,
+      "modelEquity": -0.045,
+      "equityLoss": 0.299,
+      "modelValue": -0.067175,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "start-6-6",
+      "turn": 1,
+      "dice": [
+        6,
+        6,
+        6,
+        6
+      ],
+      "afterstateCount": 11,
+      "gnubgBestIndex": 0,
+      "gnubgBestEquity": 0.392,
+      "gnubgHintMove": "24/18(2) 13/7(2)",
+      "gnubgHintEquity": 0.392,
+      "modelAfterstateIndex": 10,
+      "modelEquity": -0.152,
+      "equityLoss": 0.544,
+      "modelValue": -2.714842,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "start-3-1",
+      "turn": 1,
+      "dice": [
+        1,
+        3
+      ],
+      "afterstateCount": 16,
+      "gnubgBestIndex": 11,
+      "gnubgBestEquity": 0.159,
+      "gnubgHintMove": "8/5 6/5",
+      "gnubgHintEquity": 0.16,
+      "modelAfterstateIndex": 14,
+      "modelEquity": -0.146,
+      "equityLoss": 0.305,
+      "modelValue": -3.220978,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "start-5-5",
+      "turn": 1,
+      "dice": [
+        5,
+        5,
+        5,
+        5
+      ],
+      "afterstateCount": 4,
+      "gnubgBestIndex": 2,
+      "gnubgBestEquity": 0.144,
+      "gnubgHintMove": "13/3(2)",
+      "gnubgHintEquity": 0.146,
+      "modelAfterstateIndex": 0,
+      "modelEquity": -0.124,
+      "equityLoss": 0.268,
+      "modelValue": 0.427144,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-000",
+      "turn": 1,
+      "dice": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "afterstateCount": 42,
+      "gnubgBestIndex": 30,
+      "gnubgBestEquity": 0.235,
+      "gnubgHintMove": "8/7(2) 6/5(2)",
+      "gnubgHintEquity": 0.235,
+      "modelAfterstateIndex": 35,
+      "modelEquity": -0.211,
+      "equityLoss": 0.446,
+      "modelValue": -2.206889,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-001",
+      "turn": 1,
+      "dice": [
+        1,
+        4
+      ],
+      "afterstateCount": 26,
+      "gnubgBestIndex": 7,
+      "gnubgBestEquity": 0.21,
+      "gnubgHintMove": "24/23* 7/3",
+      "gnubgHintEquity": 0.21,
+      "modelAfterstateIndex": 16,
+      "modelEquity": -0.311,
+      "equityLoss": 0.521,
+      "modelValue": -0.214609,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-002",
+      "turn": 1,
+      "dice": [
+        2,
+        6
+      ],
+      "afterstateCount": 1,
+      "gnubgBestIndex": 0,
+      "gnubgBestEquity": -0.437,
+      "gnubgHintMove": "bar/23",
+      "gnubgHintEquity": -0.463,
+      "modelAfterstateIndex": 0,
+      "modelEquity": -0.437,
+      "equityLoss": 0.0,
+      "modelValue": -6.192881,
+      "exactMatch": true,
+      "notes": [
+        "tek yasal hamle",
+        "0-ply hint ile 2-ply eval farkli"
+      ]
+    },
+    {
+      "name": "random-003",
+      "turn": 1,
+      "dice": [
+        5,
+        6
+      ],
+      "afterstateCount": 1,
+      "gnubgBestIndex": 0,
+      "gnubgBestEquity": -0.399,
+      "gnubgHintMove": "bar/20",
+      "gnubgHintEquity": -0.396,
+      "modelAfterstateIndex": 0,
+      "modelEquity": -0.399,
+      "equityLoss": 0.0,
+      "modelValue": -5.627739,
+      "exactMatch": true,
+      "notes": [
+        "tek yasal hamle"
+      ]
+    },
+    {
+      "name": "random-004",
+      "turn": -1,
+      "dice": [
+        2,
+        4
+      ],
+      "afterstateCount": 24,
+      "gnubgBestIndex": 6,
+      "gnubgBestEquity": 0.216,
+      "gnubgHintMove": "13/9 6/4",
+      "gnubgHintEquity": 0.215,
+      "modelAfterstateIndex": 23,
+      "modelEquity": 0.116,
+      "equityLoss": 0.1,
+      "modelValue": -4.367786,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-005",
+      "turn": 1,
+      "dice": [
+        1,
+        6
+      ],
+      "afterstateCount": 9,
+      "gnubgBestIndex": 2,
+      "gnubgBestEquity": -0.217,
+      "gnubgHintMove": "22/15",
+      "gnubgHintEquity": -0.216,
+      "modelAfterstateIndex": 5,
+      "modelEquity": -0.343,
+      "equityLoss": 0.126,
+      "modelValue": -3.39922,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-006",
+      "turn": -1,
+      "dice": [
+        3,
+        5
+      ],
+      "afterstateCount": 36,
+      "gnubgBestIndex": 19,
+      "gnubgBestEquity": 0.286,
+      "gnubgHintMove": "20/15 18/15",
+      "gnubgHintEquity": 0.29,
+      "modelAfterstateIndex": 35,
+      "modelEquity": 0.283,
+      "equityLoss": 0.003,
+      "modelValue": -3.371516,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-007",
+      "turn": 1,
+      "dice": [
+        5,
+        6
+      ],
+      "afterstateCount": 4,
+      "gnubgBestIndex": 0,
+      "gnubgBestEquity": -0.104,
+      "gnubgHintMove": "bar/20 23/17*",
+      "gnubgHintEquity": -0.104,
+      "modelAfterstateIndex": 2,
+      "modelEquity": -0.265,
+      "equityLoss": 0.161,
+      "modelValue": -3.713511,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-008",
+      "turn": 1,
+      "dice": [
+        2,
+        3
+      ],
+      "afterstateCount": 28,
+      "gnubgBestIndex": 13,
+      "gnubgBestEquity": -0.036,
+      "gnubgHintMove": "20/17* 13/11*",
+      "gnubgHintEquity": -0.035,
+      "modelAfterstateIndex": 14,
+      "modelEquity": -0.192,
+      "equityLoss": 0.156,
+      "modelValue": -0.388911,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-009",
+      "turn": -1,
+      "dice": [
+        3,
+        5
+      ],
+      "afterstateCount": 1,
+      "gnubgBestIndex": 0,
+      "gnubgBestEquity": 0.256,
+      "gnubgHintMove": "bar/22 bar/20*",
+      "gnubgHintEquity": 0.208,
+      "modelAfterstateIndex": 0,
+      "modelEquity": 0.256,
+      "equityLoss": 0.0,
+      "modelValue": -3.694742,
+      "exactMatch": true,
+      "notes": [
+        "tek yasal hamle",
+        "0-ply hint ile 2-ply eval farkli"
+      ]
+    },
+    {
+      "name": "random-010",
+      "turn": -1,
+      "dice": [
+        4,
+        5
+      ],
+      "afterstateCount": 31,
+      "gnubgBestIndex": 15,
+      "gnubgBestEquity": 0.431,
+      "gnubgHintMove": "20/16* 6/1",
+      "gnubgHintEquity": 0.43,
+      "modelAfterstateIndex": 7,
+      "modelEquity": 0.137,
+      "equityLoss": 0.294,
+      "modelValue": -0.131761,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-011",
+      "turn": 1,
+      "dice": [
+        3,
+        5
+      ],
+      "afterstateCount": 26,
+      "gnubgBestIndex": 6,
+      "gnubgBestEquity": -0.161,
+      "gnubgHintMove": "17/14 13/8",
+      "gnubgHintEquity": -0.16,
+      "modelAfterstateIndex": 12,
+      "modelEquity": -0.594,
+      "equityLoss": 0.433,
+      "modelValue": -3.592513,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-012",
+      "turn": -1,
+      "dice": [
+        2,
+        6
+      ],
+      "afterstateCount": 1,
+      "gnubgBestIndex": 0,
+      "gnubgBestEquity": 0.397,
+      "gnubgHintMove": "bar/19*",
+      "gnubgHintEquity": 0.521,
+      "modelAfterstateIndex": 0,
+      "modelEquity": 0.397,
+      "equityLoss": 0.0,
+      "modelValue": -6.236712,
+      "exactMatch": true,
+      "notes": [
+        "tek yasal hamle",
+        "0-ply hint ile 2-ply eval farkli"
+      ]
+    },
+    {
+      "name": "random-013",
+      "turn": 1,
+      "dice": [
+        1,
+        3
+      ],
+      "afterstateCount": 6,
+      "gnubgBestIndex": 5,
+      "gnubgBestEquity": -0.073,
+      "gnubgHintMove": "bar/22* 2/1",
+      "gnubgHintEquity": -0.072,
+      "modelAfterstateIndex": 5,
+      "modelEquity": -0.073,
+      "equityLoss": 0.0,
+      "modelValue": -0.791356,
+      "exactMatch": true,
+      "notes": []
+    },
+    {
+      "name": "random-014",
+      "turn": -1,
+      "dice": [
+        1,
+        2
+      ],
+      "afterstateCount": 1,
+      "gnubgBestIndex": 0,
+      "gnubgBestEquity": 0.399,
+      "gnubgHintMove": "bar/24*",
+      "gnubgHintEquity": 0.403,
+      "modelAfterstateIndex": 0,
+      "modelEquity": 0.399,
+      "equityLoss": 0.0,
+      "modelValue": -7.37821,
+      "exactMatch": true,
+      "notes": [
+        "tek yasal hamle"
+      ]
+    },
+    {
+      "name": "random-015",
+      "turn": 1,
+      "dice": [
+        1,
+        5
+      ],
+      "afterstateCount": 5,
+      "gnubgBestIndex": 2,
+      "gnubgBestEquity": -0.115,
+      "gnubgHintMove": "bar/20* 9/8",
+      "gnubgHintEquity": -0.114,
+      "modelAfterstateIndex": 0,
+      "modelEquity": -0.157,
+      "equityLoss": 0.042,
+      "modelValue": -2.534448,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-016",
+      "turn": -1,
+      "dice": [
+        5,
+        6
+      ],
+      "afterstateCount": 1,
+      "gnubgBestIndex": 0,
+      "gnubgBestEquity": 0.264,
+      "gnubgHintMove": "bar/20 bar/19",
+      "gnubgHintEquity": 0.194,
+      "modelAfterstateIndex": 0,
+      "modelEquity": 0.264,
+      "equityLoss": 0.0,
+      "modelValue": -8.891707,
+      "exactMatch": true,
+      "notes": [
+        "tek yasal hamle",
+        "0-ply hint ile 2-ply eval farkli"
+      ]
+    },
+    {
+      "name": "random-017",
+      "turn": 1,
+      "dice": [
+        2,
+        3
+      ],
+      "afterstateCount": 26,
+      "gnubgBestIndex": 24,
+      "gnubgBestEquity": -0.146,
+      "gnubgHintMove": "8/5*/3",
+      "gnubgHintEquity": -0.146,
+      "modelAfterstateIndex": 25,
+      "modelEquity": -0.266,
+      "equityLoss": 0.12,
+      "modelValue": -2.894983,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-018",
+      "turn": -1,
+      "dice": [
+        2,
+        5
+      ],
+      "afterstateCount": 45,
+      "gnubgBestIndex": 19,
+      "gnubgBestEquity": 0.939,
+      "gnubgHintMove": "9/4* 6/4",
+      "gnubgHintEquity": 0.946,
+      "modelAfterstateIndex": 12,
+      "modelEquity": 0.497,
+      "equityLoss": 0.442,
+      "modelValue": -4.56202,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-019",
+      "turn": -1,
+      "dice": [
+        1,
+        5
+      ],
+      "afterstateCount": 6,
+      "gnubgBestIndex": 1,
+      "gnubgBestEquity": 0.319,
+      "gnubgHintMove": "bar/20 6/5",
+      "gnubgHintEquity": 0.313,
+      "modelAfterstateIndex": 4,
+      "modelEquity": -0.088,
+      "equityLoss": 0.407,
+      "modelValue": -4.126183,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-020",
+      "turn": 1,
+      "dice": [
+        1,
+        2
+      ],
+      "afterstateCount": 41,
+      "gnubgBestIndex": 1,
+      "gnubgBestEquity": 0.66,
+      "gnubgHintMove": "24/22*/21*",
+      "gnubgHintEquity": 0.66,
+      "modelAfterstateIndex": 5,
+      "modelEquity": 0.284,
+      "equityLoss": 0.376,
+      "modelValue": -0.166705,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-021",
+      "turn": -1,
+      "dice": [
+        3,
+        4
+      ],
+      "afterstateCount": 17,
+      "gnubgBestIndex": 14,
+      "gnubgBestEquity": -0.154,
+      "gnubgHintMove": "24/21* 13/9",
+      "gnubgHintEquity": -0.158,
+      "modelAfterstateIndex": 0,
+      "modelEquity": -0.659,
+      "equityLoss": 0.505,
+      "modelValue": -3.582095,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-022",
+      "turn": 1,
+      "dice": [
+        2,
+        4
+      ],
+      "afterstateCount": 8,
+      "gnubgBestIndex": 2,
+      "gnubgBestEquity": 0.76,
+      "gnubgHintMove": "bar/21 6/4",
+      "gnubgHintEquity": 0.767,
+      "modelAfterstateIndex": 2,
+      "modelEquity": 0.76,
+      "equityLoss": 0.0,
+      "modelValue": -2.485491,
+      "exactMatch": true,
+      "notes": []
+    },
+    {
+      "name": "random-023",
+      "turn": 1,
+      "dice": [
+        1,
+        5
+      ],
+      "afterstateCount": 17,
+      "gnubgBestIndex": 6,
+      "gnubgBestEquity": 0.603,
+      "gnubgHintMove": "23/22* 13/8",
+      "gnubgHintEquity": 0.604,
+      "modelAfterstateIndex": 5,
+      "modelEquity": 0.601,
+      "equityLoss": 0.002,
+      "modelValue": -0.208683,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-024",
+      "turn": 1,
+      "dice": [
+        1,
+        2
+      ],
+      "afterstateCount": 10,
+      "gnubgBestIndex": 7,
+      "gnubgBestEquity": 0.079,
+      "gnubgHintMove": "bar/24* 7/5",
+      "gnubgHintEquity": 0.08,
+      "modelAfterstateIndex": 7,
+      "modelEquity": 0.079,
+      "equityLoss": 0.0,
+      "modelValue": 0.090112,
+      "exactMatch": true,
+      "notes": []
+    },
+    {
+      "name": "random-025",
+      "turn": -1,
+      "dice": [
+        1,
+        5
+      ],
+      "afterstateCount": 1,
+      "gnubgBestIndex": 0,
+      "gnubgBestEquity": 0.454,
+      "gnubgHintMove": "bar/24 bar/20*",
+      "gnubgHintEquity": 0.423,
+      "modelAfterstateIndex": 0,
+      "modelEquity": 0.454,
+      "equityLoss": 0.0,
+      "modelValue": -11.725248,
+      "exactMatch": true,
+      "notes": [
+        "tek yasal hamle",
+        "0-ply hint ile 2-ply eval farkli"
+      ]
+    },
+    {
+      "name": "random-026",
+      "turn": 1,
+      "dice": [
+        3,
+        4
+      ],
+      "afterstateCount": 7,
+      "gnubgBestIndex": 2,
+      "gnubgBestEquity": -0.371,
+      "gnubgHintMove": "bar/21 7/4",
+      "gnubgHintEquity": -0.371,
+      "modelAfterstateIndex": 2,
+      "modelEquity": -0.371,
+      "equityLoss": 0.0,
+      "modelValue": 0.009043,
+      "exactMatch": true,
+      "notes": []
+    },
+    {
+      "name": "random-027",
+      "turn": -1,
+      "dice": [
+        3,
+        6
+      ],
+      "afterstateCount": 15,
+      "gnubgBestIndex": 14,
+      "gnubgBestEquity": 0.988,
+      "gnubgHintMove": "24/21* 24/18*",
+      "gnubgHintEquity": 0.989,
+      "modelAfterstateIndex": 13,
+      "modelEquity": 0.507,
+      "equityLoss": 0.481,
+      "modelValue": -9.998234,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-028",
+      "turn": 1,
+      "dice": [
+        2,
+        6
+      ],
+      "afterstateCount": 3,
+      "gnubgBestIndex": 2,
+      "gnubgBestEquity": -0.576,
+      "gnubgHintMove": "bar/23 13/7",
+      "gnubgHintEquity": -0.588,
+      "modelAfterstateIndex": 0,
+      "modelEquity": -0.888,
+      "equityLoss": 0.312,
+      "modelValue": -0.590923,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-029",
+      "turn": 1,
+      "dice": [
+        3,
+        5
+      ],
+      "afterstateCount": 16,
+      "gnubgBestIndex": 2,
+      "gnubgBestEquity": -0.385,
+      "gnubgHintMove": "23/18* 13/10*",
+      "gnubgHintEquity": -0.404,
+      "modelAfterstateIndex": 2,
+      "modelEquity": -0.385,
+      "equityLoss": 0.0,
+      "modelValue": 2.397986,
+      "exactMatch": true,
+      "notes": []
+    },
+    {
+      "name": "random-030",
+      "turn": -1,
+      "dice": [
+        3,
+        5
+      ],
+      "afterstateCount": 32,
+      "gnubgBestIndex": 19,
+      "gnubgBestEquity": 0.982,
+      "gnubgHintMove": "20/17* 6/1",
+      "gnubgHintEquity": 0.985,
+      "modelAfterstateIndex": 19,
+      "modelEquity": 0.982,
+      "equityLoss": 0.0,
+      "modelValue": -10.545261,
+      "exactMatch": true,
+      "notes": []
+    },
+    {
+      "name": "random-031",
+      "turn": -1,
+      "dice": [
+        1,
+        2
+      ],
+      "afterstateCount": 49,
+      "gnubgBestIndex": 32,
+      "gnubgBestEquity": 0.997,
+      "gnubgHintMove": "20/18* 6/5",
+      "gnubgHintEquity": 0.999,
+      "modelAfterstateIndex": 48,
+      "modelEquity": 0.753,
+      "equityLoss": 0.244,
+      "modelValue": -7.212144,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-032",
+      "turn": 1,
+      "dice": [
+        2,
+        6
+      ],
+      "afterstateCount": 4,
+      "gnubgBestIndex": 0,
+      "gnubgBestEquity": -0.026,
+      "gnubgHintMove": "bar/23*/17*",
+      "gnubgHintEquity": -0.079,
+      "modelAfterstateIndex": 0,
+      "modelEquity": -0.026,
+      "equityLoss": 0.0,
+      "modelValue": -1.897448,
+      "exactMatch": true,
+      "notes": [
+        "0-ply hint ile 2-ply eval farkli"
+      ]
+    },
+    {
+      "name": "random-033",
+      "turn": 1,
+      "dice": [
+        1,
+        5
+      ],
+      "afterstateCount": 20,
+      "gnubgBestIndex": 2,
+      "gnubgBestEquity": -0.557,
+      "gnubgHintMove": "23/18 14/13*",
+      "gnubgHintEquity": -0.556,
+      "modelAfterstateIndex": 4,
+      "modelEquity": -0.896,
+      "equityLoss": 0.339,
+      "modelValue": 0.745255,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-034",
+      "turn": -1,
+      "dice": [
+        1,
+        3
+      ],
+      "afterstateCount": 42,
+      "gnubgBestIndex": 41,
+      "gnubgBestEquity": 0.718,
+      "gnubgHintMove": "20/16*",
+      "gnubgHintEquity": 0.719,
+      "modelAfterstateIndex": 10,
+      "modelEquity": 0.381,
+      "equityLoss": 0.337,
+      "modelValue": -11.941217,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-035",
+      "turn": 1,
+      "dice": [
+        3,
+        5
+      ],
+      "afterstateCount": 4,
+      "gnubgBestIndex": 2,
+      "gnubgBestEquity": -0.106,
+      "gnubgHintMove": "bar/20 6/3",
+      "gnubgHintEquity": -0.053,
+      "modelAfterstateIndex": 3,
+      "modelEquity": -0.232,
+      "equityLoss": 0.126,
+      "modelValue": -0.164434,
+      "exactMatch": false,
+      "notes": [
+        "0-ply hint ile 2-ply eval farkli"
+      ]
+    },
+    {
+      "name": "random-036",
+      "turn": -1,
+      "dice": [
+        3,
+        5
+      ],
+      "afterstateCount": 41,
+      "gnubgBestIndex": 12,
+      "gnubgBestEquity": 0.32,
+      "gnubgHintMove": "12/4",
+      "gnubgHintEquity": 0.317,
+      "modelAfterstateIndex": 4,
+      "modelEquity": -0.03,
+      "equityLoss": 0.35,
+      "modelValue": -10.497511,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-037",
+      "turn": 1,
+      "dice": [
+        3,
+        3,
+        3,
+        3
+      ],
+      "afterstateCount": 5,
+      "gnubgBestIndex": 1,
+      "gnubgBestEquity": 0.354,
+      "gnubgHintMove": "20/17*/11 6/3",
+      "gnubgHintEquity": 0.354,
+      "modelAfterstateIndex": 0,
+      "modelEquity": 0.018,
+      "equityLoss": 0.336,
+      "modelValue": -0.925154,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-038",
+      "turn": 1,
+      "dice": [
+        1,
+        6
+      ],
+      "afterstateCount": 8,
+      "gnubgBestIndex": 0,
+      "gnubgBestEquity": 0.024,
+      "gnubgHintMove": "22/21* 22/16",
+      "gnubgHintEquity": 0.025,
+      "modelAfterstateIndex": 6,
+      "modelEquity": -0.05,
+      "equityLoss": 0.074,
+      "modelValue": -2.052155,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-039",
+      "turn": -1,
+      "dice": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "afterstateCount": 17,
+      "gnubgBestIndex": 12,
+      "gnubgBestEquity": 0.315,
+      "gnubgHintMove": "bar/21(2) 15/11* 6/2",
+      "gnubgHintEquity": 0.283,
+      "modelAfterstateIndex": 0,
+      "modelEquity": -0.245,
+      "equityLoss": 0.56,
+      "modelValue": -12.049552,
+      "exactMatch": false,
+      "notes": [
+        "0-ply hint ile 2-ply eval farkli"
+      ]
+    },
+    {
+      "name": "random-040",
+      "turn": 1,
+      "dice": [
+        2,
+        4
+      ],
+      "afterstateCount": 1,
+      "gnubgBestIndex": 0,
+      "gnubgBestEquity": -0.29,
+      "gnubgHintMove": "bar/21 11/9",
+      "gnubgHintEquity": -0.237,
+      "modelAfterstateIndex": 0,
+      "modelEquity": -0.29,
+      "equityLoss": 0.0,
+      "modelValue": -3.71546,
+      "exactMatch": true,
+      "notes": [
+        "tek yasal hamle",
+        "0-ply hint ile 2-ply eval farkli"
+      ]
+    },
+    {
+      "name": "random-041",
+      "turn": 1,
+      "dice": [
+        2,
+        6
+      ],
+      "afterstateCount": 20,
+      "gnubgBestIndex": 0,
+      "gnubgBestEquity": 0.111,
+      "gnubgHintMove": "24/18 20/18",
+      "gnubgHintEquity": 0.11,
+      "modelAfterstateIndex": 4,
+      "modelEquity": -0.121,
+      "equityLoss": 0.232,
+      "modelValue": -4.093553,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-042",
+      "turn": 1,
+      "dice": [
+        4,
+        5
+      ],
+      "afterstateCount": 8,
+      "gnubgBestIndex": 4,
+      "gnubgBestEquity": -0.16,
+      "gnubgHintMove": "bar/20 6/2",
+      "gnubgHintEquity": -0.157,
+      "modelAfterstateIndex": 7,
+      "modelEquity": -0.232,
+      "equityLoss": 0.072,
+      "modelValue": -3.629215,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-043",
+      "turn": 1,
+      "dice": [
+        3,
+        4
+      ],
+      "afterstateCount": 30,
+      "gnubgBestIndex": 17,
+      "gnubgBestEquity": -0.079,
+      "gnubgHintMove": "13/9 6/3",
+      "gnubgHintEquity": -0.079,
+      "modelAfterstateIndex": 4,
+      "modelEquity": -0.449,
+      "equityLoss": 0.37,
+      "modelValue": -4.889423,
+      "exactMatch": false,
+      "notes": []
+    },
+    {
+      "name": "random-044",
+      "turn": -1,
+      "dice": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "afterstateCount": 77,
+      "gnubgBestIndex": 74,
+      "gnubgBestEquity": 0.535,
+      "gnubgHintMove": "18/14 13/9(3)",
+      "gnubgHintEquity": 0.535,
+      "modelAfterstateIndex": 10,
+      "modelEquity": 0.213,
+      "equityLoss": 0.322,
+      "modelValue": -3.363305,
+      "exactMatch": false,
+      "notes": []
+    }
+  ]
+}
