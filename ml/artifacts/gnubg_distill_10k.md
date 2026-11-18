@@ -68,6 +68,15 @@ Nokta tahmini iyilesti ama eslesmis %95 GA **sifiri dislamiyor**: fark gurultude
 
 > GA sifiri dislamiyor: nokta tahmini iyilesme gosterse de fark **gurultuden ayirt edilemiyor**. Bu yuzden kazanc kanitlanmis sayilmaz.
 
+### 4.2 Veri hacmi kollari
+
+| Kol | Pozisyon | ER | Fark (once) | GA95 | Sifiri disliyor |
+|---|---|---|---|---|---|
+| 2000 | 70 | 0.0533 | +0.0176 | [-0.0062; +0.0414] | **hayir** |
+| 10000 | 70 | 0.0617 | +0.0091 | [-0.0209; +0.0392] | **hayir** |
+
+> Veri hacmi arttikca ER'nin **monoton** iyilesmesi beklenir. Iyilesmiyorsa kol farki gurultudur; hacim tek basina cozum degildir.
+
 ## 5. Durustluk notlari
 
 - Egitim top-1 1.0000 **ezberdir**, genelleme degil: veri kumesi `medium` profilin kapasitesinin altinda. Gercek olcu VAL-ER'dir.
