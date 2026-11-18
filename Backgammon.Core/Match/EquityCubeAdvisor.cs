@@ -237,8 +237,12 @@ namespace Backgammon.Core
             // pozisyonlarda bile "ciftle" der (olculdu: 32 yanlis ciftlemenin 19'u).
             double doubleValue = Math.Min(doubleTake, doublePass);
 
-            // "Cok iyi": rakip kabul eder ama oynamak cifttikten de iyidir.
-            bool tooGood = doublePass > doubleTake && noDouble > doubleTake;
+            // "Cok iyi": oynamaya devam etmek, cifttikten sonraki **en iyi** sonuctan da
+            // iyidir. F7-72: eski tanim `doublePass > doubleTake && noDouble > doubleTake`
+            // idi; bu yalnizca "rakip kabul eder" durumunu yakaliyordu. Rakip **reddettiginde**
+            // de cok-iyi durumu olusur (teklif eden 1 puan alir, oysa mars sansi daha degerli);
+            // 5-away/5-away + E=0,9 tam olarak bu durumdur ve eski tanim bunu kaciriyordu.
+            bool tooGood = noDouble > doubleValue + _options.Epsilon;
             bool shouldDouble = doubleValue > noDouble + _options.Epsilon;
 
             // Rakip perspektifinden kabul kararı.

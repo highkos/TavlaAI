@@ -1,12 +1,13 @@
 {
   "scenarios": [
-    {"name": "crawford-no-cube", "shouldDouble": false, "shouldTake": true, "isDeadCube": false, "expectedDouble": false, "expectedTake": true, "correct": true},
-    {"name": "crawford-no-cube-black", "shouldDouble": false, "shouldTake": true, "isDeadCube": false, "expectedDouble": false, "expectedTake": true, "correct": true},
-    {"name": "one-away-cannot-double", "shouldDouble": false, "shouldTake": true, "isDeadCube": false, "expectedDouble": false, "expectedTake": true, "correct": true},
-    {"name": "post-crawford-free-drop", "shouldDouble": true, "shouldTake": true, "isDeadCube": false, "expectedDouble": true, "expectedTake": true, "correct": true},
-    {"name": "normal-double-pass", "shouldDouble": true, "shouldTake": false, "isDeadCube": false, "expectedDouble": true, "expectedTake": false, "correct": true},
-    {"name": "dead-cube-no-double", "shouldDouble": false, "shouldTake": true, "isDeadCube": false, "expectedDouble": false, "expectedTake": true, "correct": true}
+    {"name": "crawford-no-cube", "shouldDouble": false, "shouldTake": true, "isDeadCube": false, "isTooGood": false, "equity": 0.90, "equityNoDouble": 0.000000, "equityDoubleTake": 0.000000, "equityDoublePass": 0.000000, "expectedDouble": false, "expectedTake": true, "correct": true},
+    {"name": "crawford-no-cube-black", "shouldDouble": false, "shouldTake": true, "isDeadCube": false, "isTooGood": false, "equity": 0.90, "equityNoDouble": 0.000000, "equityDoubleTake": 0.000000, "equityDoublePass": 0.000000, "expectedDouble": false, "expectedTake": true, "correct": true},
+    {"name": "one-away-cannot-double", "shouldDouble": false, "shouldTake": true, "isDeadCube": false, "isTooGood": false, "equity": 0.90, "equityNoDouble": 0.000000, "equityDoubleTake": 0.000000, "equityDoublePass": 0.000000, "expectedDouble": false, "expectedTake": true, "correct": true},
+    {"name": "post-crawford-free-drop", "shouldDouble": true, "shouldTake": true, "isDeadCube": false, "isTooGood": false, "equity": 0.90, "equityNoDouble": -0.963809, "equityDoubleTake": -0.952307, "equityDoublePass": -0.502358, "expectedDouble": true, "expectedTake": true, "correct": true},
+    {"name": "normal-double-pass", "shouldDouble": true, "shouldTake": false, "isDeadCube": false, "isTooGood": false, "equity": 0.30, "equityNoDouble": 0.086781, "equityDoubleTake": 0.189025, "equityDoublePass": 0.154830, "expectedDouble": true, "expectedTake": false, "correct": true},
+    {"name": "too-good-to-double", "shouldDouble": false, "shouldTake": false, "isDeadCube": false, "isTooGood": true, "equity": 0.90, "equityNoDouble": 0.292455, "equityDoubleTake": 0.615629, "equityDoublePass": 0.154830, "expectedDouble": false, "expectedTake": false, "correct": true},
+    {"name": "one-away-no-double", "shouldDouble": false, "shouldTake": true, "isDeadCube": false, "isTooGood": false, "equity": 0.90, "equityNoDouble": 0.000000, "equityDoubleTake": 0.000000, "equityDoublePass": 0.000000, "expectedDouble": false, "expectedTake": true, "correct": true}
   ],
-  "total": 6,
-  "correct": 6
+  "total": 7,
+  "correct": 7
 }

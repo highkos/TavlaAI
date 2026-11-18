@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1219** | ~8 dk 30 s | ✅ 1219/1219 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1704** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1246** | ~8 dk 30 s | ✅ 1246/1246 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **1731** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -2479,7 +2479,7 @@ Bölüm 5.1.6 üç yol tanımlar ve **kullanıcı onayı** ister. Ölçüm sonra
 ### 21.9 Doğrulama
 
 ```
-ml/tests                     1219/1219  (3 yavaş/koşullu test atlanır)
+ml/tests                     1246/1246  (3 yavaş/koşullu test atlanır)
 Backgammon.Tests             285/285
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
@@ -2930,10 +2930,10 @@ Ayrı bir `EquityCubeAdvisor` işi gerektirir.
 Backgammon.Tests             297/297   (29 dk 56 s)
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
-ml/tests                    1219/1219  (3 yavaş/koşullu test atlanır)
+ml/tests                    1246/1246  (3 yavaş/koşullu test atlanır)
 ```
 
-Toplam **1704**. Derleme 0 uyarı / 0 hata.
+Toplam **1731**. Derleme 0 uyarı / 0 hata.
 
 
 ## 30. Faz 7-R Aşama R-B — ölçüm altyapısı (F7-55 – F7-62)
@@ -3054,7 +3054,7 @@ Tek çekirdek 2-ply `hint`: ortalama **0,562 s**/pozisyon. 4 süreçte
 ### 30.10 Doğrulama
 
 ```
-ml/tests                    1219/1219  (3 yavaş/koşullu test atlanır)
+ml/tests                    1246/1246  (3 yavaş/koşullu test atlanır)
 ```
 
 Test 128–133 yeşil. `test_docs_consistency.py` 21/21 yeşil.
@@ -3177,7 +3177,7 @@ görünüyordu; ikisi de **ölçüm hatasıydı**.
 | 137 | `Verdict_NoCapacityInference` | `ml/tests/test_stage_r_c.py` | YEŞİL |
 | 138 | `LearningCurve_Runs` | `ml/tests/test_stage_r_c.py` | YEŞİL |
 
-`pytest ml/tests` → **1219 passed, 3 skipped** (1222 toplandı; R-B'de 1159).
+`pytest ml/tests` → **1246 passed, 3 skipped** (1222 toplandı; R-B'de 1159).
 `test_docs_consistency.py` → 21/21.
 
 ### 31.8 Test numarası çakışması (düzeltildi)
@@ -3201,3 +3201,150 @@ Düzeltildi: `test_corpus2.py` → Test 128–133, R-C testleri → Test 134–1
 ### 31.10 Sonraki aşama
 
 **R-D — gnubg öğretmen hattı yeniden tasarımı.** Önkoşul: bu raporun onayı.
+
+---
+
+## 32. Faz 7-R Aşama R-C ek — küp kararı ER'si (F7-72 – F7-77)
+
+### 32.1 Neden ayrı bir eksen
+
+Bütün hamle ER'si ölçümleri **küpsüzdür**. Dünya şampiyonu seviyesi küp
+kararlarını da gerektirir; küp hatası hamle hatasından bağımsızdır ve
+toplanmaz. Bu bölüm küp kararını ayrı ölçer.
+
+### 32.2 `crawford` 5/6 → 7/7
+
+`Backgammon.MatchBench crawford` **5/6** veriyordu. Düşen senaryo
+`normal-double-pass` (5-away/5-away, E = 0,9) idi.
+
+Kök neden `EquityCubeAdvisor.Decide` içindeki tek taraflı "çok iyi" tanımı:
+`tooGood = doublePass > doubleTake && noDouble > doubleTake`. Bu yalnızca
+"rakip kabul eder" durumunu yakalar. 5-away/5-away'de E = 0,9'da rakip
+**reddeder**; teklif eden 1 puan alır (MWC 0,607) ama oynamaya devam etse
+marslarla 0,692 MWC'ye ulaşır. Doğru cevap **çiftlememek**tir — yani
+senaryonun beklentisi yanlıştı.
+
+Düzeltme: `doubleValue = min(doubleTake, doublePass)` üzerinden iki taraflı
+tanım. `RunCrawford` yeniden yazıldı (senaryo başına `Equity`, 7 senaryo,
+`too-good-to-double` eklendi). **Sonuç 7/7.**
+
+| Senaryo | E | Çiftle | Kabul | Doğru |
+|---|---|---|---|---|
+| `crawford-no-cube` | 0,90 | hayır | evet | ✅ |
+| `crawford-no-cube-black` | 0,90 | hayır | evet | ✅ |
+| `one-away-cannot-double` | 0,90 | hayır | evet | ✅ |
+| `post-crawford-free-drop` | 0,90 | evet | evet | ✅ |
+| `normal-double-pass` | 0,30 | evet | hayır | ✅ |
+| `too-good-to-double` | 0,90 | hayır | hayır | ✅ |
+| `one-away-no-double` | 0,90 | hayır | evet | ✅ |
+
+`ml/artifacts/stage_b_crawford.json` yeniden üretildi (eskisi 6/6 diyordu).
+
+### 32.3 Küp ER'si tanımı
+
+gnubg `eval` üç *cubeful* equity verir. Rakip bizim equity'mizi **minimize**
+eder:
+
+```
+doubleValue = min(doublePass, doubleTake)
+best        = max(noDouble, doubleValue)
+cubeLoss    = max(0, best - secilen)
+```
+
+**`max` tuzağı.** `max(noDouble, doublePass, doubleTake)` yanlıştır:
+`doublePass` her zaman `+1,000` olduğu için her pozisyonda "çiftle" der.
+Gerçek çıktıyla doğrulandı — `noDouble 0,216 / doublePass 1,000 /
+doubleTake −0,001` → `best 0,216`, `bestAction no-double`,
+`loss(no-double) 0,000`, `loss(double) 0,217`.
+
+### 32.4 Ölçüm
+
+Referans sözleşmesi: gnubg `eval`, **2-ply**, cubeful on, küp açık;
+`Cubeful equities` bloğu + `Proper cube action` satırı. Korpus: 50 pozisyon
+(`--stride 20`) × 4 bağlam × 2 sahiplik = **400 vaka**; faz dağılımı
+240 contact / 104 bar / 56 race. Bootstrap 20 000.
+
+| Ölçüm | Değer |
+|---|---|
+| **Küp ER'si** | **0,0642** |
+| %95 GA | [0,0469; 0,0837] |
+| sigma | 0,1894 |
+| Standart hata | 0,0095 |
+| Çiftleme uyumu | 300/400 (0,7500) |
+| Kabul/red uyumu | 64/76 (0,8421) |
+| Hedef | < 0,0200 → **karşılanmıyor (3,2×)** |
+
+Karışıklık matrisi (çiftleme):
+
+| gnubg \ biz | Çiftleme yok | Çiftle |
+|---|---|---|
+| **Çiftleme yok** | 242 | **82** |
+| **Çiftle** | **18** | 58 |
+
+Hata **asimetrik**: 82 yanlış çiftleme, 18 kaçırılmış çiftleme. Danışman
+fazla agresif.
+
+Bağlama göre: para oyunu **0,0284** (uyum 0,81), 5-puan maçı **0,0860**
+(0,745), 9-puan maçı **0,0564** (0,70). Sahipliğe göre: merkez **0,0575**
+(0,78), bizde **0,0709** (0,72).
+
+Güç (Kural 4, sigma üst sınırı 0,2367): Δ = 0,02 → gereken n **380**
+(mevcut 400 yeterli); Δ = 0,01 → **1517** (yetersiz).
+
+### 32.5 Korpusun üç sessiz hatası (düzeltildi)
+
+1. **Crawford bağlamı.** Dördüncü bağlam `(5, 4, 1)` bir Crawford oyunudur;
+   orada küp yoktur. 150 vaka sıfır bilgiyle ölçüme giriyordu. Yerine
+   `(5, 2, 1)` konuldu; Crawford ayrı doğrulama senaryosu oldu.
+2. **Mutlak küp sahipliği.** `cubeOwner = 1` mutlak yazıldığında sıra `-1`
+   olan pozisyonlarda küp rakipte kalıyor, `CanOffer` false dönüyordu
+   (400 vakanın 68'i). Sahiplik artık göreli: `1` → `turn`, `-1` → `-turn`.
+3. **`phase` anahtar çakışması.** Korpus `phase: "contact"` yazıyordu; C#
+   `StateFromJson` bunu `GamePhase` sanıp `phase çözümlenemedi: contact`
+   ile duruyordu. Anahtar `phaseClass` oldu.
+
+Ayrıca `--stride` eklendi: korpus fazlara göre gruplandığı için düz
+`--limit` yalnızca `contact` seçiyordu.
+
+### 32.6 gnubg çıktısı: satırlar sıralanır
+
+gnubg cubeful satırları **sıralar**, sabit numaralamaz. En iyi eylem
+"Double, take" ise çıktı `1. Double, take / 2. Double, pass / 3. No double`
+olur. Numaraya göre eşleştirme `noDouble` alanına `+0,632` yazıyordu.
+Artık etikete göre eşleştirilir; equity satırları `Proper cube action`
+satırından **önceki** parçada aranır. Tanınan biçimler: `No double`,
+`No redouble`, `Double/Redouble, pass`, `Double/Redouble, take`,
+`Too good to (re)double, pass`, `..., beaver`.
+
+### 32.7 Kapsam genişletmesi
+
+| Aşama | Ek kapsam |
+|---|---|
+| R-C | küp ER'si ölçümü — **tamamlandı** |
+| R-D | küp-farkındalıklı damıtma: değer kafası 6'lı dağılımı da öğrenmeli |
+| R-E | kapasite testi küp ER'sini de raporlar |
+| R-F | güç iddiası **küp dahil**; para + 5-puan + 9-puan ayrı raporlanır |
+
+### 32.8 Testler
+
+| Test | Ad | Dosya | Durum |
+|---|---|---|---|
+| 139 | `CubeParse_RealOutput` | `ml/tests/test_cube_er.py` | YEŞİL |
+| 140 | `CubeParse_RankedOrder` | `ml/tests/test_cube_er.py` | YEŞİL |
+| 141 | `CubeParse_Redouble` | `ml/tests/test_cube_er.py` | YEŞİL |
+| 142 | `CubeParse_TooGood` | `ml/tests/test_cube_er.py` | YEŞİL |
+| 143 | `CubeValue_MinNotMax` | `ml/tests/test_cube_er.py` | YEŞİL |
+| 144 | `CubeLoss_NonNegative` | `ml/tests/test_cube_er.py` | YEŞİL |
+| 145 | `CubeSummary_Bootstrap` | `ml/tests/test_cube_er.py` | YEŞİL |
+| 146 | `CubePower_SigmaUpper` | `ml/tests/test_cube_er.py` | YEŞİL |
+| 147 | `CubeCorpus_CrossProduct` | `ml/tests/test_cube_er.py` | YEŞİL |
+
+### 32.9 Açık noktalar
+
+1. **Küp ER'si 0,0642 — hedef 0,02 karşılanmıyor.** Düzeltme R-D/R-E'de.
+2. Hata yönü (82 yanlış / 18 kaçırılmış) `HeuristicOutcomeDistribution`'ın
+   sabit mars oranlarıyla (contact 0,20 / race 0,05) tutarlı; ölçülmedi.
+3. gnubg `cubeinfo` varsayılanı `jacoby: 1`; para oyununda ikincil bir fark
+   yaratabilir — ölçülmedi.
+4. Δ = 0,01 için n = 1517 gerekiyor; mevcut 400 yetersiz.
+5. **G7 üst sınırı (1,5) hâlâ onay bekliyor** (Kural 2).

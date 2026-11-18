@@ -1646,30 +1646,36 @@ namespace Backgammon.MatchBench
                 }
             }
 
-            var inner = new ConstantEvaluator(0.9f);
-            var distribution = new HeuristicOutcomeDistributionEvaluator(inner);
-            var advisor = new EquityCubeAdvisor(inner, MatchEquityTable.Default, distribution,
-                                                CubeAdvisorOptions.Default);
-
             var scenarios = new List<(string Name, int MatchLength, int White, int Black, bool Crawford,
                                       bool CrawfordPlayed, int CubeValue, sbyte CubeOwner, sbyte Turn,
-                                      bool ExpectDouble, bool ExpectTake)>();
+                                      float Equity, bool ExpectDouble, bool ExpectTake)>();
 
             // Crawford oyunu: küp kullanılmaz.
-            scenarios.Add(("crawford-no-cube", 5, 4, 0, true, false, 1, 0, 1, false, true));
-            scenarios.Add(("crawford-no-cube-black", 5, 0, 4, true, false, 1, 0, -1, false, true));
+            scenarios.Add(("crawford-no-cube", 5, 4, 0, true, false, 1, 0, 1, 0.9f, false, true));
+            scenarios.Add(("crawford-no-cube-black", 5, 0, 4, true, false, 1, 0, -1, 0.9f, false, true));
 
             // Post-Crawford, 1-away olan taraf teklif edemez (çiftlemek ona hiçbir şey kazandırmaz).
-            scenarios.Add(("one-away-cannot-double", 5, 4, 1, false, true, 1, 0, 1, false, true));
+            scenarios.Add(("one-away-cannot-double", 5, 4, 1, false, true, 1, 0, 1, 0.9f, false, true));
 
             // Post-Crawford, teklif eden 4-away olan taraf.
-            scenarios.Add(("post-crawford-free-drop", 5, 4, 1, false, true, 1, 0, -1, true, true));
+            scenarios.Add(("post-crawford-free-drop", 5, 4, 1, false, true, 1, 0, -1, 0.9f, true, true));
 
-            // Normal maç oyunu: 5-away/5-away, E = 0.9 ⇒ çiftle, rakip reddeder.
-            scenarios.Add(("normal-double-pass", 5, 0, 0, false, false, 1, 0, 1, true, false));
+            // Normal maç oyunu: 5-away/5-away, E = 0.3 ⇒ çiftle, rakip reddeder.
+            //
+            // F7-72: bu senaryo eskiden E = 0.9 kullanıyordu ve "çiftle" bekliyordu.
+            // 5-away/5-away'de E = 0.9 **"çiftlemek için fazla iyi"** bir pozisyondur:
+            // rakip serbestçe reddeder, teklif eden 1 puan alır (MWC 0,607) ama oynamaya
+            // devam etse marslarla 0,692 MWC'ye ulaşır. Doğru cevap **çiftlememek**tir.
+            // Ölçüldü: E = 0.3'te çiftle/reddet, E = 0.9'da çiftleme.
+            scenarios.Add(("normal-double-pass", 5, 0, 0, false, false, 1, 0, 1, 0.3f, true, false));
 
-            // Ölü küp: 1-away olan taraf teklif edemez.
-            scenarios.Add(("dead-cube-no-double", 3, 2, 0, false, true, 1, 0, 1, false, true));
+            // F7-72: "çiftlemek için fazla iyi" — çiftleme, rakip reddeder ama oynamak daha iyi.
+            scenarios.Add(("too-good-to-double", 5, 0, 0, false, false, 1, 0, 1, 0.9f, false, false));
+
+            // 1-away olan taraf teklif edemez: çiftlemek ona hiçbir şey kazandırmaz.
+            // F7-72: senaryo adı "dead-cube" idi ama `IsDeadCube` (CubeValue >= max(away))
+            // burada false döner; yanıltıcı ad düzeltildi.
+            scenarios.Add(("one-away-no-double", 3, 2, 0, false, true, 1, 0, 1, 0.9f, false, true));
 
             var sb = new StringBuilder();
             sb.Append("{\n  \"scenarios\": [");
@@ -1679,6 +1685,11 @@ namespace Backgammon.MatchBench
 
             foreach (var s in scenarios)
             {
+                var inner = new ConstantEvaluator(s.Equity);
+                var distribution = new HeuristicOutcomeDistributionEvaluator(inner);
+                var advisor = new EquityCubeAdvisor(inner, MatchEquityTable.Default, distribution,
+                                                    CubeAdvisorOptions.Default);
+
                 CubeDecision d = DecideCrawford(advisor, s.MatchLength, s.White, s.Black, s.Crawford,
                                                 s.CrawfordPlayed, s.CubeValue, s.CubeOwner, s.Turn);
                 bool ok = d.ShouldDouble == s.ExpectDouble && d.ShouldTake == s.ExpectTake;
@@ -1692,6 +1703,11 @@ namespace Backgammon.MatchBench
                 sb.Append(", \"shouldDouble\": ").Append(d.ShouldDouble ? "true" : "false");
                 sb.Append(", \"shouldTake\": ").Append(d.ShouldTake ? "true" : "false");
                 sb.Append(", \"isDeadCube\": ").Append(d.IsDeadCube ? "true" : "false");
+                sb.Append(", \"isTooGood\": ").Append(d.IsTooGood ? "true" : "false");
+                sb.Append(", \"equity\": ").Append(s.Equity.ToString("F2", CultureInfo.InvariantCulture));
+                sb.Append(", \"equityNoDouble\": ").Append(d.EquityNoDouble.ToString("F6", CultureInfo.InvariantCulture));
+                sb.Append(", \"equityDoubleTake\": ").Append(d.EquityDoubleTake.ToString("F6", CultureInfo.InvariantCulture));
+                sb.Append(", \"equityDoublePass\": ").Append(d.EquityDoublePass.ToString("F6", CultureInfo.InvariantCulture));
                 sb.Append(", \"expectedDouble\": ").Append(s.ExpectDouble ? "true" : "false");
                 sb.Append(", \"expectedTake\": ").Append(s.ExpectTake ? "true" : "false");
                 sb.Append(", \"correct\": ").Append(ok ? "true" : "false");

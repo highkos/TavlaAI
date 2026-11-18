@@ -3282,13 +3282,13 @@ aynı şey değildir.
 ### 51.5 Doğrulama
 
 ```
-ml/tests                     1219/1219  (3 yavaş/koşullu test atlanır)
+ml/tests                     1246/1246  (3 yavaş/koşullu test atlanır)
 Backgammon.Tests             297/297
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
 ```
 
-Toplam **1704**. Aşama B üç yeni pytest dosyası (`test_critical.py` 76,
+Toplam **1731**. Aşama B üç yeni pytest dosyası (`test_critical.py` 76,
 `test_capacity_bench.py` 48, `test_export_ckpt.py` 12) ve `StageBDataQualityTests` (9)
 ekledi. B3 kararı dört dosya daha ekledi: `test_distill.py` (34), `test_calibrate.py` (32),
 `test_critical.py` içindeki 20 marj testi ve `ProductionDepthTests` (10).

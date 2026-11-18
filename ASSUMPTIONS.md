@@ -4310,3 +4310,169 @@ R-B'de `test_corpus2.py` Test 127–132 olarak numaralandı. Ancak
 (`f8b9917`'de eklendi). Yani son test numarası 127'ydi ve R-T1 = **128**
 olmalıydı. Düzeltildi: `test_corpus2.py` → Test 128–133, R-C testleri →
 Test 134–138.
+
+---
+
+## F7-72 — `crawford` 5/6: hata senaryodaydı, kodda değil
+
+`Backgammon.MatchBench crawford` koşusu **5/6** veriyordu. Düşen senaryo
+`normal-double-pass` (5-away/5-away, E = 0,9) idi ve `shouldDouble: false`
+dönüyordu; senaryo `true` bekliyordu.
+
+**Kök neden.** `EquityCubeAdvisor.Decide` içindeki "çok iyi" tanımı
+
+```
+tooGood = doublePass > doubleTake && noDouble > doubleTake
+```
+
+idi. Bu yalnızca **"rakip kabul eder"** durumunu yakalar. 5-away/5-away'de
+E = 0,9 olan bir pozisyonda rakip **reddeder**; teklif eden 1 puan alır
+(MWC 0,607) ama oynamaya devam etse marslarla 0,692 MWC'ye ulaşır. Yani
+doğru cevap **çiftlememek**tir. Senaryonun beklentisi yanlıştı.
+
+**Düzeltme.** `doubleValue = min(doubleTake, doublePass)` üzerinden iki
+taraflı tanım:
+
+```
+tooGood     = noDouble > doubleValue + Epsilon
+shouldDouble = doubleValue > noDouble + Epsilon
+```
+
+`RunCrawford` yeniden yazıldı: senaryo başına `Equity` alanı, danışman
+döngü içinde kurulur, `normal-double-pass` E = 0,3'e çekildi, yeni
+`too-good-to-double` senaryosu (E = 0,9, çiftleme **beklenmez**) eklendi.
+JSON artık `isTooGood`, `equity`, `equityNoDouble`, `equityDoubleTake`,
+`equityDoublePass`, `expectedDouble`, `expectedTake`, `correct` taşır.
+
+**Sonuç: 7/7.** `normal-double-pass` E = 0,30 → `shouldDouble: true,
+shouldTake: false` (nd 0,086781 / dt 0,189025 / dp 0,154830).
+`too-good-to-double` E = 0,90 → `shouldDouble: false, isTooGood: true`
+(nd 0,292455 / dt 0,615629 / dp 0,154830).
+
+`ml/artifacts/stage_b_crawford.json` yeniden üretildi (eskisi 6/6 diyordu).
+`dotnet test Backgammon.Tests` → **297/297**.
+
+**Yan bulgu.** `dead-cube-no-double` senaryosunun adı yanıltıcıydı:
+`MatchState.IsDeadCube` = `CubeValue >= max(awayA, awayB)` olduğu için
+3-away/1-away + küp 1'de **false** döner. Senaryo `one-away-no-double`
+olarak yeniden adlandırıldı; beklenen davranış (teklif yok) aynı.
+
+---
+
+## F7-73 — Küp ER'si: ayrı bir ölçüm ekseni
+
+Bütün hamle ER'si ölçümleri **küpsüzdür** (`cubeless`). Dünya şampiyonu
+seviyesi küp kararlarını da gerektirir; bu yüzden `ml/cube_er.py` eklendi.
+
+**Tanım.** gnubg `eval` üç *cubeful* equity verir. Rakip bizim equity'mizi
+**minimize** eder, bu yüzden çiftledikten sonraki değer
+`doubleValue = min(doublePass, doubleTake)`'tir. En iyi değer
+`best = max(noDouble, doubleValue)`. **Küp ER'si** = `best − seçilen`.
+
+**`max` tuzağı.** İlk sürüm `max(noDouble, doublePass, doubleTake)`
+kullanıyordu. `doublePass` her zaman `+1,000` olduğu için bu her pozisyonda
+"çiftle" der ve kaybı yanlış hesaplar. Gerçek çıktıyla doğrulandı:
+`noDouble 0,216 / doublePass 1,000 / doubleTake −0,001` → `doubleValue
+−0,001`, `best 0,216`, `bestAction no-double`, `loss(no-double) 0,000`,
+`loss(double) 0,217`.
+
+**Ölçülen (n = 400, gnubg `eval` 2-ply cubeful, bootstrap 20 000):**
+
+| Ölçüm | Değer |
+|---|---|
+| **Küp ER'si** | **0,0642** |
+| %95 GA | [0,0469; 0,0837] |
+| sigma | 0,1894 |
+| Çiftleme uyumu | 300/400 (0,7500) |
+| Kabul/red uyumu | 64/76 (0,8421) |
+| Hedef | < 0,0200 |
+
+Karışıklık matrisi: 242 doğru "çiftleme yok", **82 yanlış çiftleme**,
+**18 kaçırılmış çiftleme**, 58 doğru çiftleme. Yani hata **asimetrik**:
+danışman gnubg'nin çiftlemediği yerde çiftliyor.
+
+Bağlama göre: para oyunu **0,0284** (en iyi), 5-puan maçı **0,0860**,
+9-puan maçı **0,0564**. Sahipliğe göre: merkez **0,0575**, bizde **0,0709**.
+
+**Güç.** sigma üst sınırı 0,2367 (Kural 4). Δ = 0,02 için gereken n = **380**
+(mevcut 400 yeterli); Δ = 0,01 için **1517** (yetersiz).
+
+**Kapsam.** Bu ölçüm küp kararını ölçer, hamle seçimini değil. İkisi
+**toplanmaz**; dünya şampiyonu iddiası ikisini birden gerektirir.
+
+---
+
+## F7-74 — Küp korpusu: üç sessiz ölçüm hatası
+
+İlk korpus (5 pozisyon × 4 bağlam × 3 sahiplik = 60 vaka) üç hata taşıyordu.
+
+1. **Crawford bağlamı.** Dördüncü bağlam `(5, 4, 1)` idi; bu bir **Crawford**
+   oyunudur ve orada küp yoktur. 150 vaka sıfır bilgiyle ölçüme giriyordu.
+   Yerine Crawford olmayan `(5, 2, 1)` (3-away/4-away) konuldu. Crawford
+   ayrı bir doğrulama senaryosudur (`CRAWFORD_CONTEXT`), ER'ye girmez.
+2. **Mutlak küp sahipliği.** `cubeOwner = 1` mutlak yazıldığında sıra `-1`
+   olan pozisyonlarda küp **rakipte** kalıyor, `CanOffer` false dönüyor ve
+   vaka karar üretmiyordu (400 vakanın 68'i). Sahiplik artık **göreli**:
+   `1` = "kup bizde" → `turn`, `-1` = "rakipte" → `-turn`, `0` = merkez.
+3. **`phase` anahtar çakışması.** Korpus `phase: "contact"` yazıyordu; C#
+   `StateFromJson` bu alanı `GamePhase` olarak okuyup
+   `phase çözümlenemedi: contact` ile duruyordu. Anahtar `phaseClass` oldu.
+
+Ayrıca `--stride` eklendi: korpus fazlara göre gruplanmış olduğu için düz
+`--limit` yalnızca `contact` seçiyordu. `--stride 20` → 50 pozisyon,
+faz dağılımı 240 contact / 104 bar / 56 race.
+
+---
+
+## F7-75 — gnubg küp çıktısı: satırlar sıralanır, numaralanmaz
+
+`parse_cube_analysis` ilk sürümde `1. No double`, `2. Double, pass`,
+`3. Double, take` numaralarına göre eşleştiriyordu. gnubg bu satırları
+**sıralar**: en iyi eylem "Double, take" ise çıktı
+
+```
+1. Double, take        +0,632
+2. Double, pass        +1,000  (+0,368)
+3. No double           +0,598  (-0,034)
+Proper cube action: Double, take
+```
+
+olur. Numaraya göre eşleştirme bu vakalarda `noDouble` alanına `+0,632`
+yazıyordu. Artık **etikete** göre eşleştirilir ve equity satırları
+`Proper cube action` satırından **önceki** parçada aranır (o satır da
+"Double, take" içerir).
+
+Tanınan dört ek biçim: `No redouble`, `Redouble, pass`, `Redouble, take`,
+`Too good to (re)double, pass`. Sonuncusu ilk sürümde tanınmıyor ve ölçümü
+tamamen durduruyordu (Kural 6 gereği doğru davranış, ama eksik ayrıştırma).
+
+---
+
+## F7-76 — Küp ER'si hedefi 0,02 **karşılanmıyor**
+
+Ölçülen 0,0642, hedefin **3,2 katı**. Bu, hamle ER'sinden bağımsız bir
+eksikliktir: `search1` hamle ER'si 0,0210 ile hedefe yakınken küp kararı
+0,0642'de. Yani "güç" iddiası yalnızca hamle tarafında değil, küp
+tarafında da açık veriyor.
+
+Hata yönü de bilgilendirici: 82 yanlış çiftleme / 18 kaçırılmış çiftleme.
+Danışman **fazla agresif** çiftliyor. Bu, `HeuristicOutcomeDistribution`'ın
+mars oranlarını (contact 0,20 / race 0,05) sabit varsaymasıyla tutarlıdır;
+gerçek dağılım ağdan alınsa bile eşikler canlı-küp varsayımına dayanır.
+
+**Kapsam kararı.** Küp ER'si R-C'ye ölçüm olarak girer; **düzeltme R-D/R-E'ye
+bırakılır**. Faz 7-R'nin kapsamı şu şekilde genişletilir:
+
+| Aşama | Ek kapsam |
+|---|---|
+| R-C | küp ER'si ölçümü (bu belge) — **tamamlandı** |
+| R-D | küp-farkındalıklı damıtma: değer kafası 6'lı dağılımı da öğrenmeli |
+| R-E | kapasite testi küp ER'sini de raporlar |
+| R-F | güç iddiası **küp dahil**; para + 5-puan + 9-puan ayrı raporlanır |
+
+---
+
+## F7-77 — Test numaralandırması: R-T23 = **139**
+
+R-C testleri 134–138'i aldı. Küp ER'si testleri **139–147** olarak eklendi
+(`ml/tests/test_cube_er.py`, 27 test). Sonraki boş numara **148**.
