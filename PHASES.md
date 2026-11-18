@@ -752,11 +752,11 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 
 | Paket | Proje | Test | Süre | Durum |
 |---|---|---|---|---|
-| C# motor | `Backgammon.Tests` (Release) | **285** | ~30 dk 38 s | ✅ 285/285 |
+| C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
 | Python | `ml/tests` | **1142** | ~8 dk 30 s | ✅ 1142/1142 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1615** | | **✅ 0 başarısız** |
+| **Toplam** | | **1627** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -2862,3 +2862,75 @@ için en az 264, güvenli olması için ~400 pozisyon gerekir.
 `ml/artifacts/gnubg_distill_verdict.json` (karar `belirsiz`),
 `ml/artifacts/gnubg_distill.md` (§4.1 eşleştirilmiş test, §4.2 veri hacmi
 kolları), `ml/artifacts/gnubg_policy_er_10k.json`.
+
+## 29. Kod denetimi — 15 kusur, kanıtla doğrulama (F7-25 – F7-37)
+
+`faz 7 v2.md` on beş kusur bildirdi. Her iddia **kaynak koda karşı** doğrulandı;
+hiçbiri satır numarasına güvenilerek uygulanmadı. Sonuç: **13 düzeltme**,
+**1 zaten doğru**, **1 iddia yanlış**.
+
+### 29.1 Kritik
+
+| # | İddia | Karar | Kanıt |
+|---|---|---|---|
+| 1 | `StatePool.Return` `Reset()` çağırmıyor | ✅ gerçek | Havuzdan alınan durum eski taşır; test kırmızı |
+| 2 | Sahiplik kontrolü yok | ✅ gerçek | Tek kontrol `_available >= Length`, yani kapasite |
+| 3 | `AfterStateList` kapasitesi 2048 yetmiyor | ✅ gerçek | Ölçülen en kötü tahta **2139** afterstate (1-1) |
+
+**HATA 3 ölçümü.** 200 000 rastgele pozisyonda en fazla **576** afterstate
+(2-2) görüldü; hiçbiri 1024'ü aşmadı. Rastgele örnekleme bu yüzden kusuru
+göstermez. Parça sayısını koruyan tepe-tırmanma araması (420 s, 93 yeniden
+başlatma) **2139**'a ulaştı: tahta
+`0,-10,1,1,1,-1,1,1,1,-1,1,1,-1,1,1,0,1,1,0,1,1,-1,1,0,-1,0`, zar 1-1.
+2139 bir **alt sınırdır**, teorik maksimum değil. `DefaultCapacity` 2048 → **4096**
+(~1,9× pay) ve `MeasuredMaxAfterStates = 2139` sabiti eklendi; regresyon testi
+tam bu tahtayı kurup `Count == 2139` doğrular.
+
+### 29.2 Orta
+
+| # | İddia | Karar | Not |
+|---|---|---|---|
+| 4 | Dizi tamponu `AfterStateList`'ten küçük | ✅ gerçek, ama yön güvenli | `SeqBufCapacity` 65 536 > 4096; `SequenceBufferCapacity` açıldı, test invariant'ı kilitledi |
+| 5 | Terminal `ResultPoints` küp değerini içeriyor | ❌ zaten doğru | `IsGameOver` yalnız `IsTerminal` iken çağrılır; test eklendi |
+| 6 | `StateFromJson` `phase` alanını yok sayıyor | ✅ gerçek | `phase` opsiyonel okunur; sayı 0-5 veya ad kabul edilir |
+| 7 | `DefaultModelPath` sessizce fixture'a düşüyor | ✅ kısmen | Yorum vardı, uyarı yoktu; iki `Console.Error` uyarısı eklendi |
+| 8 | `SelfPlayAgent` her hamlede `BackgammonState` ayırıyor | ❌ **iddia yanlış** | Sınıf hiç `BackgammonState` tutmuyor; `SelfPlayRunner` alan olarak taşır |
+| 9 | `AddPass` hash'i doğrulamadan kopyalıyor | ✅ gerçek | `[Conditional("DEBUG")] VerifyHash` eklendi |
+| 10 | `_gen` taşması koruması hiç ateşlenmiyor | ✅ gerçek | `int` taşması `int.MinValue`'ya gider, 0'a asla; `uint`'e çevrildi |
+| 11 | `BuildBenchList` gereksiz 4096 ayırıyor | ✅ gerçek | `new AfterStateList()` |
+| 12 | `DiceAveragedEquity` her çağrıda `SearchWorkspace` ayırıyor | ✅ gerçek | `[ThreadStatic]` yeniden kullanım + `Reset()` |
+| 13 | `RunCrawford` sabit 0,9 equity kullanıyor | ⚠️ ölçüm tercihi | Sabit equity senaryoları deterministik yapar; `--model` opsiyonu **eklendi**, varsayılan değişmedi |
+
+### 29.3 Küçük
+
+| # | İddia | Karar | Not |
+|---|---|---|---|
+| 14 | `Swap` paralel dizileri belgelendirmiyor | ✅ gerçek | `<remarks>` eklendi; `BoardOf` salt-okunur |
+| 15 | `StepBuf` derinlik sınırını kontrol etmiyor | ✅ gerçek, erişilemez | `MaxSequenceLength` zaten koruyor; yine de açık koruma eklendi |
+
+### 29.4 Düzeltilmeyen iki madde
+
+* **HATA 5** zaten doğruydu. `GenerateAfterStates` adımları doğrudan uygular ve
+  `IsGameOver`'i yalnız `output.IsTerminal[index]` iken çağırır. Davranış bir
+  testle sabitlendi (küp 1/2/4/8 için `ResultPoints == 1`).
+* **HATA 8** yanlıştı. `SelfPlayAgent` yalnız `SearchWorkspace` ve
+  `OnnxPolicyValueEvaluator` tutar. `SearchTests.Test10_ZeroAllocation`
+  ısınma sonrası sıfır ayırma zaten kanıtlıyor. **Kod değişmedi.**
+
+### 29.5 Kapsam dışı bulgu
+
+`crawford` koşusu **5/6** veriyor: `normal-double-pass` (5-away/5-away, E = 0,9)
+`shouldDouble = false` dönüyor. `git stash` ile **HEAD'de de 5/6** olduğu
+doğrulandı — önceden var olan bir kusur, bu denetimin kapsamı dışında (F7-35).
+Ayrı bir `EquityCubeAdvisor` işi gerektirir.
+
+### 29.6 Doğrulama
+
+```
+Backgammon.Tests             297/297   (29 dk 56 s)
+Backgammon.Inference.Tests   100/100
+Backgammon.UI.Tests           88/88
+ml/tests                    1142/1142  (3 yavaş/koşullu test atlanır)
+```
+
+Toplam **1627**. Derleme 0 uyarı / 0 hata.

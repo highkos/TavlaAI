@@ -8,7 +8,11 @@ namespace Backgammon.Core
     /// </summary>
     public sealed class MoveList
     {
-        public const int DefaultCapacity = 2048;
+        /// <summary>
+        /// Varsayılan kapasite. Tekilleştirilmiş hamle sayısı afterstate sayısına eşit olduğu için
+        /// <see cref="AfterStateList.DefaultCapacity"/> ile aynı tutulur (F7-26).
+        /// </summary>
+        public const int DefaultCapacity = AfterStateList.DefaultCapacity;
 
         public readonly MoveSequence[] Moves;
 

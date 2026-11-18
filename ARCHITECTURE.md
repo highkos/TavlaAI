@@ -3283,12 +3283,12 @@ aynı şey değildir.
 
 ```
 ml/tests                     1142/1142  (3 yavaş/koşullu test atlanır)
-Backgammon.Tests             285/285
+Backgammon.Tests             297/297
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
 ```
 
-Toplam **1615**. Aşama B üç yeni pytest dosyası (`test_critical.py` 76,
+Toplam **1627**. Aşama B üç yeni pytest dosyası (`test_critical.py` 76,
 `test_capacity_bench.py` 48, `test_export_ckpt.py` 12) ve `StageBDataQualityTests` (9)
 ekledi. B3 kararı dört dosya daha ekledi: `test_distill.py` (34), `test_calibrate.py` (32),
 `test_critical.py` içindeki 20 marj testi ve `ProductionDepthTests` (10).
@@ -3637,3 +3637,57 @@ Hiçbiri anlamlı değil. Ayrıca 5× veri ER'yi **kötüleştirdi** (0,0533 →
 * Eşleştirme yalnızca **aynı** korpus ve **aynı** hakem derinliği için
   geçerlidir; farklı derinliklerde ölçüm yapıldıysa eşleştirme anlamsızdır
   (F7-04).
+
+## 58. Kod denetimi düzeltmeleri (F7-25 – F7-37)
+
+`faz 7 v2.md`'nin on beş kusurundan **13'ü düzeltildi**, **1'i zaten doğruydu**,
+**1'i yanlıştı**. Her iddia kaynak koda karşı doğrulandı.
+
+### 58.1 Havuz ve kapasite
+
+`StatePool` yeniden yazıldı: serbest liste artık bir **indeks yığını**
+(`_free`, `_rented`, `_freeCount`). `Return()` önce `Array.IndexOf` ile
+sahipliği doğrular (yabancı durum `InvalidOperationException`), sonra çift
+iadeyi reddeder, sonra `s.Reset()` çağırır. Eski kod tek kontrol olarak
+`_available >= _states.Length` kullanıyordu — bu bir **kapasite** kontrolüdür,
+sahiplik değil. Havuz üretimde kullanılmıyor (yalnız testler), yani kazanç
+sıfır; kusur yine de gerçekti.
+
+`AfterStateList.DefaultCapacity` 2048 → **4096**. Gerekçe ölçüldü: parça
+sayısını koruyan arama 1-1 zarda **2139** afterstate üreten bir tahta buldu.
+`MeasuredMaxAfterStates = 2139` sabiti ve bu tahtayı kuran regresyon testi
+eklendi. 2139 alt sınırdır; 4096 ~1,9× pay bırakır.
+
+### 58.2 Sessiz hatalar
+
+* `LegalMoveGenerator._gen` `int` idi. `int` taşması `int.MinValue`'ya gider,
+  `0`'a asla; yani `if (_gen == 0)` koruması **hiç ateşlenmiyordu**. `uint`'e
+  çevrildi (`_dedupGen` dahil).
+* `AfterStateList.AddPass` hash'i doğrulamadan kopyalıyordu. `[Conditional("DEBUG")]
+  VerifyHash` eklendi — Release'te sıfır maliyet, DEBUG'da yakalar.
+* `StateFromJson` `phase` alanını yok sayıp her durumu `PreRoll` yapıyordu.
+  Artık opsiyonel `phase` okunur (sayı 0-5 veya ad); aralık dışı `FormatException`.
+* `DefaultModelPath` fixture'a düştüğünde sessizdi. İki `Console.Error` uyarısı
+  eklendi; yol zinciri değişmedi.
+
+### 58.3 Ölçüm yolu
+
+`DiceAveragedEquity` her çağrıda `SearchWorkspace` ve `BackgammonState`
+ayırıyordu; `[ThreadStatic]` alanlara taşındı ve her aramadan önce `Reset()`
+çağrılır. `BuildBenchList` gereksiz yere 4096'lik liste ayırıyordu; varsayılana
+döndü. `RunCrawford` sabit 0,9 equity kullanır — bu **ölçüm tercihidir**, kusur
+değil: senaryoları modelden bağımsız ve deterministik yapar. `--model` opsiyonu
+eklendi; verilirse aynı senaryolar gerçek `OnnxPolicyValueEvaluator` ile de
+koşar ve JSON'a `modelScenarios` / `modelCorrect` yazar.
+
+### 58.4 Düzeltilmeyenler
+
+* **HATA 5** zaten doğruydu: `ResultPoints` küp değerini içermez, Jacoby
+  uygulanmıştır. Bir testle sabitlendi.
+* **HATA 8** yanlıştı: `SelfPlayAgent` hiç `BackgammonState` tutmaz;
+  `SelfPlayRunner` durumu alan olarak taşır. Kod değişmedi.
+
+### 58.5 Kapsam dışı
+
+`crawford` 5/6: `normal-double-pass` senaryosu yanlış cevap veriyor ve bu
+**HEAD'de de aynı**. Önceden var olan kusur; ayrı iş (F7-35).

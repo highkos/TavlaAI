@@ -28,11 +28,18 @@ namespace Backgammon.Core
         /// </summary>
         private const int SeqBufCapacity = 1 << 16;
 
+        /// <summary>
+        /// <see cref="SeqBufCapacity"/> değeri. F7-29: bu buffer
+        /// <see cref="AfterStateList.DefaultCapacity"/>'dan küçük olmamalıdır; aksi halde
+        /// <see cref="GenerateAfterStates"/> liste hâlâ yer varken buffer'da taşar.
+        /// </summary>
+        public static int SequenceBufferCapacity => SeqBufCapacity;
+
         [ThreadStatic] private static MoveStep[][] _stepBuf;
         [ThreadStatic] private static ulong[] _dedupHash;
         [ThreadStatic] private static int[] _dedupIndex;
-        [ThreadStatic] private static int[] _dedupGen;
-        [ThreadStatic] private static int _gen;
+        [ThreadStatic] private static uint[] _dedupGen;
+        [ThreadStatic] private static uint _gen;
         [ThreadStatic] private static MoveList _scratchMoves;
         [ThreadStatic] private static MoveSequence[] _seqBuf;
         [ThreadStatic] private static ulong[] _seqHashBuf;
@@ -372,6 +379,14 @@ namespace Backgammon.Core
             ref int count,
             ref bool overflow)
         {
+            // F7-37: StepBuf boyutu MaxSteps + 1. remainingCount <= 4 olduğu için depth
+            // en fazla 4 olur; yine de sessiz taşma yerine açık hata verilir.
+            if (depth > MoveSequence.MaxSteps)
+            {
+                throw new InvalidOperationException(
+                    "Collect: depth " + depth + " > MaxSteps " + MoveSequence.MaxSteps + ".");
+            }
+
             if (depth > maxCount)
             {
                 maxCount = depth;
@@ -432,6 +447,13 @@ namespace Backgammon.Core
 
         private static void Emit(BackgammonState s, int depth, int maxCount, int restrictDie, ref MoveSequence current, MoveList output)
         {
+            // F7-37: bkz. Collect — StepBuf indeksi MaxSteps ile sınırlıdır.
+            if (depth > MoveSequence.MaxSteps)
+            {
+                throw new InvalidOperationException(
+                    "Emit: depth " + depth + " > MaxSteps " + MoveSequence.MaxSteps + ".");
+            }
+
             if (depth == maxCount)
             {
                 Record(s.hash, ref current, output);
@@ -635,18 +657,23 @@ namespace Backgammon.Core
         // Tekilleştirme (Bölüm 5.1 madde 3)
         // ------------------------------------------------------------------
 
+        /// <summary>
+        /// Yeni bir tekilleştirme nesli başlatır. Nesil sayacı <c>uint</c>'tir: taşma
+        /// <c>int.MaxValue</c> → <c>int.MinValue</c> gibi negatife düşseydi <c>== 0</c> koruması
+        /// hiç tetiklenmezdi. <c>uint</c> ile taşma tam olarak 0'a sarar ve tablo temizlenir (F7-28).
+        /// </summary>
         private static void BeginDedup()
         {
             if (_dedupGen == null)
             {
-                _dedupGen = new int[DedupSize];
+                _dedupGen = new uint[DedupSize];
                 _dedupHash = new ulong[DedupSize];
                 _dedupIndex = new int[DedupSize];
                 _gen = 0;
             }
 
             _gen++;
-            if (_gen == 0)
+            if (_gen == 0u)
             {
                 Array.Clear(_dedupGen, 0, DedupSize);
                 _gen = 1;
@@ -719,6 +746,10 @@ namespace Backgammon.Core
         // Scratch buffer'lar
         // ------------------------------------------------------------------
 
+        /// <summary>
+        /// Derinliğe göre adım tamponları. Boyut <c>MaxSteps + 1</c> (indeks 0..4);
+        /// <c>remainingCount</c> en fazla 4 olduğu için <c>depth</c> bu aralığı aşamaz (F7-37).
+        /// </summary>
         private static MoveStep[][] StepBuf
         {
             get

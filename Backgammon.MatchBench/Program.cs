@@ -432,7 +432,8 @@ namespace Backgammon.MatchBench
         /// <summary>Olcum icin gercekci afterstate listesi uretir (terminal olmayan).</summary>
         private static AfterStateList BuildBenchList(int minCount)
         {
-            var list = new AfterStateList(4096);
+            // F7-34: sabit 4096 yerine varsayilan kapasite; tek dogru kaynak AfterStateList.
+            var list = new AfterStateList();
             var rng = new Xoshiro256StarStar(0x5EED1234UL);
             var state = new BackgammonState();
             var scratch = new AfterStateList();
@@ -740,9 +741,36 @@ namespace Backgammon.MatchBench
             state.blackScore = c.TryGetProperty("blackScore", out JsonElement bs) ? bs.GetInt32() : 0;
             state.isCrawfordGame = c.TryGetProperty("isCrawfordGame", out JsonElement ic) && ic.GetBoolean();
             state.crawfordPlayed = c.TryGetProperty("crawfordPlayed", out JsonElement cp) && cp.GetBoolean();
-            state.phase = GamePhase.PreRoll;
+            state.phase = c.TryGetProperty("phase", out JsonElement ph) ? ParsePhase(ph) : GamePhase.PreRoll;
             state.hash = BackgammonEngine.ComputeZobristHash(state);
             return state;
+        }
+
+        /// <summary>
+        /// JSON'daki <c>phase</c> alanını çözer. Hem sayı (0..5) hem de
+        /// <see cref="GamePhase"/> adı (ör. <c>"Moving"</c>) kabul edilir; büyük/küçük harf duyarsızdır.
+        /// </summary>
+        private static GamePhase ParsePhase(JsonElement e)
+        {
+            if (e.ValueKind == JsonValueKind.Number)
+            {
+                int v = e.GetInt32();
+                if (v < 0 || v > (int)GamePhase.GameOver)
+                {
+                    throw new FormatException("phase aralık dışı: " + v);
+                }
+
+                return (GamePhase)v;
+            }
+
+            string name = e.GetString();
+            if (Enum.TryParse(name, ignoreCase: true, out GamePhase parsed) &&
+                Enum.IsDefined(typeof(GamePhase), parsed))
+            {
+                return parsed;
+            }
+
+            throw new FormatException("phase çözümlenemedi: " + name);
         }
 
         // ------------------------------------------------------------------
@@ -1386,10 +1414,15 @@ namespace Backgammon.MatchBench
         private static readonly int[] FirstDice = { 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5, 5, 6 };
         private static readonly int[] SecondDice = { 1, 2, 3, 4, 5, 6, 2, 3, 4, 5, 6, 3, 4, 5, 6, 4, 5, 6, 5, 6, 6 };
 
+        [ThreadStatic] private static SearchWorkspace _diceAvgWorkspace;
+        [ThreadStatic] private static BackgammonState _diceAvgScratch;
+
         private static double DiceAveragedEquity(BackgammonState state, IPolicyValueEvaluator evaluator)
         {
-            var scratch = new BackgammonState();
-            var workspace = new SearchWorkspace();
+            // F7-31: workspace ve scratch state yeniden kullanilir; her cagride yeniden
+            // ayirmak gereksiz allocation uretiyordu. Her arama oncesi Reset() cagrilir.
+            BackgammonState scratch = _diceAvgScratch ??= new BackgammonState();
+            SearchWorkspace workspace = _diceAvgWorkspace ??= new SearchWorkspace();
             EngineSettings es = EngineSettings.Default;
             var ss = new SearchSettings
             {
@@ -1418,6 +1451,7 @@ namespace Backgammon.MatchBench
 
                 // DepthPly = 0: afterstate'ler degerlendirilir, terminal kayitlar ve pas
                 // arama tarafindan ele alinir.
+                workspace.Reset();
                 SearchResult sr = BackgammonSearch.Search(scratch, ss, es, workspace, evaluator);
                 total += weight * sr.EvaluationScore;
                 weightSum += weight;
@@ -1599,11 +1633,16 @@ namespace Backgammon.MatchBench
         private static int RunCrawford(string[] args)
         {
             string outPath = null;
+            string modelPath = null;
             for (int i = 1; i < args.Length; i++)
             {
                 if (args[i] == "--out" && i + 1 < args.Length)
                 {
                     outPath = args[++i];
+                }
+                else if (args[i] == "--model" && i + 1 < args.Length)
+                {
+                    modelPath = args[++i];
                 }
             }
 
@@ -1640,20 +1679,8 @@ namespace Backgammon.MatchBench
 
             foreach (var s in scenarios)
             {
-                var state = new BackgammonState();
-                state.Reset();
-                state.matchLength = s.MatchLength;
-                state.whiteScore = s.White;
-                state.blackScore = s.Black;
-                state.isCrawfordGame = s.Crawford;
-                state.crawfordPlayed = s.CrawfordPlayed;
-                state.cubeValue = s.CubeValue;
-                state.cubeOwner = s.CubeOwner;
-                state.turn = s.Turn;
-                state.phase = GamePhase.PreRoll;
-                state.hash = BackgammonEngine.ComputeZobristHash(state);
-
-                CubeDecision d = advisor.Decide(state, s.Turn);
+                CubeDecision d = DecideCrawford(advisor, s.MatchLength, s.White, s.Black, s.Crawford,
+                                                s.CrawfordPlayed, s.CubeValue, s.CubeOwner, s.Turn);
                 bool ok = d.ShouldDouble == s.ExpectDouble && d.ShouldTake == s.ExpectTake;
                 if (ok)
                 {
@@ -1674,6 +1701,49 @@ namespace Backgammon.MatchBench
 
             sb.Append("\n  ],\n  \"total\": ").Append(index);
             sb.Append(",\n  \"correct\": ").Append(correct);
+
+            // F7-35: senaryolar sabit 0,9 equity ile deterministik kural testidir. Ayni
+            // senaryolar gercek modelle de kosulur; kural karari modelden bagimsiz olmali.
+            int modelCorrect = -1;
+            if (modelPath != null)
+            {
+                OnnxEvaluatorOptions options = OnnxEvaluatorOptions.Default;
+                using OnnxModelHandle handle = OnnxModelHandle.Load(modelPath, options);
+                using var evaluator = new OnnxPolicyValueEvaluator(handle, options);
+                {
+                    var modelDistribution = new HeuristicOutcomeDistributionEvaluator(evaluator);
+                    var modelAdvisor = new EquityCubeAdvisor(evaluator, MatchEquityTable.Default,
+                                                             modelDistribution, CubeAdvisorOptions.Default);
+
+                    sb.Append(",\n  \"modelPath\": ").Append(JsonString(modelPath));
+                    sb.Append(",\n  \"modelScenarios\": [");
+
+                    modelCorrect = 0;
+                    int mi = 0;
+                    foreach (var s in scenarios)
+                    {
+                        CubeDecision d = DecideCrawford(modelAdvisor, s.MatchLength, s.White, s.Black,
+                                                        s.Crawford, s.CrawfordPlayed, s.CubeValue,
+                                                        s.CubeOwner, s.Turn);
+                        bool ok = d.ShouldDouble == s.ExpectDouble && d.ShouldTake == s.ExpectTake;
+                        if (ok)
+                        {
+                            modelCorrect++;
+                        }
+
+                        sb.Append(mi == 0 ? "\n" : ",\n");
+                        sb.Append("    {\"name\": ").Append(JsonString(s.Name));
+                        sb.Append(", \"shouldDouble\": ").Append(d.ShouldDouble ? "true" : "false");
+                        sb.Append(", \"shouldTake\": ").Append(d.ShouldTake ? "true" : "false");
+                        sb.Append(", \"correct\": ").Append(ok ? "true" : "false");
+                        sb.Append('}');
+                        mi++;
+                    }
+
+                    sb.Append("\n  ],\n  \"modelCorrect\": ").Append(modelCorrect);
+                }
+            }
+
             sb.Append("\n}\n");
 
             if (outPath != null)
@@ -1682,7 +1752,32 @@ namespace Backgammon.MatchBench
             }
 
             Console.WriteLine("crawford: " + correct + "/" + index + " dogru.");
+            if (modelCorrect >= 0)
+            {
+                Console.WriteLine("crawford (model): " + modelCorrect + "/" + index + " dogru.");
+            }
+
             return correct == index ? 0 : 1;
+        }
+
+        private static CubeDecision DecideCrawford(EquityCubeAdvisor advisor, int matchLength, int white,
+                                                   int black, bool crawford, bool crawfordPlayed,
+                                                   int cubeValue, sbyte cubeOwner, sbyte turn)
+        {
+            var state = new BackgammonState();
+            state.Reset();
+            state.matchLength = matchLength;
+            state.whiteScore = white;
+            state.blackScore = black;
+            state.isCrawfordGame = crawford;
+            state.crawfordPlayed = crawfordPlayed;
+            state.cubeValue = (byte)cubeValue;
+            state.cubeOwner = cubeOwner;
+            state.turn = turn;
+            state.phase = GamePhase.PreRoll;
+            state.hash = BackgammonEngine.ComputeZobristHash(state);
+
+            return advisor.Decide(state, turn);
         }
 
         private sealed class ConstantEvaluator : IPolicyValueEvaluator
@@ -1734,7 +1829,18 @@ namespace Backgammon.MatchBench
 
             // Egitilmis model; `ml/artifacts/model_v2.onnx` yalnizca test fiksturudur.
             string trained = Path.Combine("ml", "runs", "stage_d", "onnx", "model_v5.onnx");
-            return File.Exists(trained) ? trained : Path.Combine("ml", "artifacts", "model_v2.onnx");
+            if (File.Exists(trained))
+            {
+                return trained;
+            }
+
+            // F7-30: fikstur modeli egitilmemistir; sessizce kullanmak yanlis olcume yol acar.
+            string fixture = Path.Combine("ml", "artifacts", "model_v2.onnx");
+            Console.Error.WriteLine(
+                "UYARI: egitilmis model bulunamadi; test fiksturu kullaniliyor: " + fixture);
+            Console.Error.WriteLine(
+                "UYARI: bu modelin gucu olculmemistir, sonuclar olcum olarak kullanilamaz (F7-30).");
+            return fixture;
         }
 
         private static string Num(double value)

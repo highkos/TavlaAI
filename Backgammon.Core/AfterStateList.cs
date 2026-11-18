@@ -10,7 +10,19 @@ namespace Backgammon.Core
     public sealed class AfterStateList
     {
         public const int BoardSize = 26;
-        public const int DefaultCapacity = 2048;
+
+        /// <summary>
+        /// Ölçülen en yüksek afterstate sayısı (F7-26). 1-1 dublesinde <b>2139</b>; 200 000
+        /// rastgele pozisyonda en fazla 576. Tepe-tırmanma aramasıyla bulundu, teorik üst sınır
+        /// değildir. Eski varsayılan kapasite (2048) bu yasal pozisyonda <b>aşılıyordu</b>.
+        /// </summary>
+        public const int MeasuredMaxAfterStates = 2139;
+
+        /// <summary>
+        /// Varsayılan kapasite. Ölçülen üst sınırın (<see cref="MeasuredMaxAfterStates"/>) yaklaşık
+        /// 1,9 katı; eski değer 2048 idi ve ölçülen en kötü pozisyonda taşıyordu (F7-26).
+        /// </summary>
+        public const int DefaultCapacity = 4096;
 
         /// <summary>Capacity * 26. Kayıt i: [i*26 .. i*26+25].</summary>
         public readonly sbyte[] Boards;
@@ -65,6 +77,22 @@ namespace Backgammon.Core
             Count = 0;
         }
 
+        /// <summary>
+        /// Artımlı hash'in tahtayla tutarlı olduğunu doğrular. Yalnızca Debug derlemelerinde
+        /// çağrılır; Release'de çağrı tamamen kaldırılır (sıfır maliyet).
+        /// </summary>
+        [System.Diagnostics.Conditional("DEBUG")]
+        private static void VerifyHash(BackgammonState s)
+        {
+            ulong recomputed = BackgammonEngine.ComputeZobristHash(s);
+            if (s.hash != recomputed)
+            {
+                throw new InvalidOperationException(
+                    "AddPass: state.hash tutarsız (state.hash=" + s.hash.ToString("X16") +
+                    " recomputed=" + recomputed.ToString("X16") + ").");
+            }
+        }
+
         public ReadOnlySpan<sbyte> BoardOf(int i)
         {
             if ((uint)i >= (uint)Count)
@@ -79,12 +107,18 @@ namespace Backgammon.Core
         /// "Pas afterstate'i": pozisyon aynı, turn = s.turn, Sequence.Count = 0, hash s.hash'e eşit.
         /// Pas'ta oyun bitemez; bu yüzden IsTerminal = false, ResultType = 0, ResultPoints = 0.
         /// </summary>
+        /// <remarks>
+        /// Hash doğrudan kopyalanır (artımlı hash sözleşmesi). Bayat bir hash transpozisyon
+        /// tablosunda yanlış eşleşmeye yol açacağı için Debug derlemelerinde doğrulanır (F7-27).
+        /// </remarks>
         public void AddPass(BackgammonState s)
         {
             if (s == null)
             {
                 throw new ArgumentNullException(nameof(s));
             }
+
+            VerifyHash(s);
 
             if (Count >= Capacity)
             {
@@ -146,6 +180,19 @@ namespace Backgammon.Core
         }
 
         /// <summary>TÜM alanları birlikte takas eder (kararlı bölümleme için).</summary>
+        /// <remarks>
+        /// <para>
+        /// Kayıtlar <b>paralel dizilerde</b> tutulur (<see cref="Boards"/>, <see cref="WhiteBorneOff"/>,
+        /// <see cref="BlackBorneOff"/>, <see cref="Hash"/>, <see cref="Sequences"/>, <see cref="IsTerminal"/>,
+        /// <see cref="ResultType"/>, <see cref="ResultPoints"/>). Bu yüzden takas <b>hepsinde</b>
+        /// birlikte yapılmalıdır; biri atlanırsa kayıtlar birbirine karışır (F7-36).
+        /// </para>
+        /// <para>
+        /// <see cref="BoardOf"/> yalnızca <b>okuma</b> içindir (<see cref="ReadOnlySpan{T}"/> döner).
+        /// Tahta yazmak gerekiyorsa <see cref="Boards"/> doğrudan kullanılmalıdır; aksi halde
+        /// bu metot ile <see cref="BoardOf"/> arasındaki sözleşme bozulur.
+        /// </para>
+        /// </remarks>
         public void Swap(int i, int j)
         {
             if ((uint)i >= (uint)Count)

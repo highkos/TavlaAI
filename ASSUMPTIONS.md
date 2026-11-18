@@ -3471,3 +3471,244 @@ değildir**.
 Çıktılar: `ml/artifacts/gnubg_distill_verdict.json` (karar `belirsiz`),
 `ml/artifacts/gnubg_distill.md` (§4.1 eşleştirilmiş test, §4.2 veri hacmi
 kolları), `ml/artifacts/gnubg_policy_er_10k.json`.
+
+## F7-25 — StatePool: sifirlama ve sahiplik denetimi (olculdu)
+
+**Soru.** `StatePool.Return()` havuza donen durumu baslangic dizilimine
+sifirliyor mu, ve yabanci bir durumun havuza donulmesi engelleniyor mu?
+
+**Olculen (duzeltme oncesi).** Ikisi de **hayir**.
+
+* `Return()` yalnizca `_available++` yapiyordu; durum uzerinde `Reset()`
+  cagrilmiyordu. Havuzdan tekrar `Rent()` edilen durum **onceki oyunun
+  tahtasini** tasiyordu.
+* Tek denetim `_available >= _states.Length` idi; bu bir **kapasite**
+  denetimidir, **sahiplik** denetimi degil. Havuz doluyken yabanci bir durum
+  dondurulurse istisna atiliyordu, ama havuzda yer varken yabanci durum
+  **sessizce** havuzun sahip oldugu bir durumun yerine geciyordu.
+
+**Duzeltme.** `StatePool` yeniden yazildi: indeks yigini tabanli serbest liste
+(`_free`, `_rented`, `_freeCount`), `Array.IndexOf` ile sahiplik denetimi,
+cift iade denetimi ve `Return()` icinde `s.Reset()`.
+
+**Testler.** `StatePoolTests` 5 -> **12** test. Uc test duzeltme oncesi
+**kirmizi** idi: `Return_ResetsStateToStartPosition`,
+`Return_ThenRent_DoesNotLeakStaleData`, `Return_ForeignState_DoesNotCorruptPool`.
+
+**Dikkat — bu bir olu soyutlamaydi.** Tum `.cs` dosyalarinda `StatePool`
+yalnizca `StatePool.cs` ve `StatePoolTests.cs` icinde geciyor; uretim kodunda
+**kullanan yok**. Yani bu duzeltme gercek bir sizintiyi kapatmiyor, ileride
+kullanilacak bir soyutlamayi dogru hale getiriyor. Bu, onceligi dogru
+belirlemek icin onemli: F7-25'in uretim kazanci **sifir**.
+
+**Maliyet.** `Array.IndexOf` her `Return()` icin O(kapasite) tarama yapar.
+Havuzlar kucuk (1-4) ve tarama **allocation yapmaz**, ama "performans kaybi
+yok" demek dogru olmaz; "olculemeyecek kadar kucuk" demek dogrudur.
+
+## F7-26 — AfterStateList kapasitesi: 2048 yasal bir pozisyonda tasiyor (olculdu)
+
+**Soru.** `AfterStateList.DefaultCapacity = 2048` yeterli mi?
+
+**Yontem.** Iki olcum.
+
+1. **Rastgele ornekleme.** 200 000 rastgele pozisyon (rastgele oyun, 40 ply):
+   en fazla **576** afterstate (zar 2-2), 1024'u asan **sifir**.
+2. **Tepe-tirmanma aramasi.** Tas sayisini koruyan mutasyonla (`CountPieces(±1)
+   == 15` dogrulamasi) 1 315 644 yeniden baslatma, 200 s: en fazla **2139**
+   afterstate, zar **1-1**, tahta
+   `0,-10,1,1,1,-1,1,1,1,-1,1,1,-1,1,1,0,1,1,0,1,1,-1,1,0,-1,0`.
+
+**Sonuc: 2139 > 2048.** Yasal bir pozisyon (15'e 15 tas) eski varsayilan
+kapasiteyi **asiyordu**; `AfterStateList.Add` `InvalidOperationException`
+atiyordu. Yani bu, teorik degil **erisilebilir** bir cokme.
+
+**Duzeltme.** `DefaultCapacity` 2048 -> **4096** (olculen ust sinirin ~1,9
+kati). `MeasuredMaxAfterStates = 2139` sabiti eklendi ve
+`WorstKnownPosition_FitsInDefaultCapacity` testi bu tahtayi birebir kurup
+`list.Count == 2139` dogruluyor. `MoveList.DefaultCapacity` artik
+`AfterStateList.DefaultCapacity`'a takma ad.
+
+**Durustluk notlari.**
+
+* 2139 bir **alt sinirdir**, teorik ust sinir degil. Daha uzun bir arama daha
+  yuksek bir deger bulabilir. 4096 ~1,9 kat pay birakiyor; bu bir **muhendislik
+  tercihi**, kanit degil.
+* Ilk tepe-tirmanma kosusu tas sayisini korumuyordu ve 13'e 13 taslik **gecersiz**
+  bir tahta uretti (1284). O sayi gecersizdir; yukaridaki 2139 gecerli
+  mutasyonla elde edilmistir.
+* Rastgele orneklemede 576 cikmasi, "gercek oyunda 2048'e yaklasilmaz"
+  beklentisini dogrular; ama arama tabanli bir motor **dusman** pozisyonlar
+  uretebilir, bu yuzden en kotu durum onemlidir.
+
+## F7-27 — AddPass: bayat hash Debug'da dogrulanir
+
+**Soru.** `AddPass` `s.hash`'i dogrulamadan kopyalarsa ne olur?
+
+**Sonuc.** Bayat hash transpozisyon tablosunda **yanlis eslesmeye** yol acar:
+iki farkli pozisyon ayni anahtarla eslesir ve arama yanlis degeri dondurur.
+Sessiz bir hatadir.
+
+**Duzeltme.** `AfterStateList` icine `[Conditional("DEBUG")] VerifyHash(s)`
+eklendi; `AddPass` basinda cagrilir, hash'i yeniden hesaplar ve uyusmazsa
+`InvalidOperationException` atar.
+
+**Neden yalnizca Debug?** `AddPass` arama icinde **dugum basina** cagrilir
+(`BackgammonSearch.cs:342`). Her cagride 26 hanelik hash yeniden hesaplamak
+sicak yolda gercek bir maliyettir. `[Conditional("DEBUG")]` sayesinde Release
+derlemesinde **sifir** maliyet, Debug'da tam koruma. Test
+(`AddPass_StaleHash_ThrowsInDebug`) `#if DEBUG` altindadir ve Release
+kosusunda **calismaz** — bu bilincli bir tercihtir.
+
+## F7-28 — _gen: int sayaci tasma korumasi hic ateslenmiyordu
+
+**Soru.** `if (_gen == 0)` korumasi `int` sayacla calisir mi?
+
+**Sonuc: hayir.** C# isaretli tamsayi tasmasi **tanimsiz degildir**; `int.MaxValue
++ 1 == int.MinValue`. Yani sayac 0'a **hic** donmez ve `if (_gen == 0)` korumasi
+**asla** ateslenmez. 2^31 cagridan sonra `_dedupGen` icindeki eski nesil
+degerleri yeni nesille **cakisir** ve tekillestirme yanlis kayitlari eler.
+
+**Duzeltme.** `_gen` ve `_dedupGen` `int` -> **`uint`**; karsilastirma
+`== 0u`. `uint` tasmasi 2^32'de 0'a **duser**, yani koruma gercekten calisir.
+
+**Not.** 2^32 cagri pratikte ulasilamaz (olculen ~340K cagri/sn ile ~3,5 saat
+kesintisiz), ama korumanin **dogru** olmasi maliyetsizdir.
+
+## F7-29 — Seq buffer / afterstate listesi kapasite iliskisi
+
+**Soru.** `SeqBufCapacity = 65536` ile `AfterStateList.DefaultCapacity` (2048)
+arasindaki uyumsuzluk bir hata mi?
+
+**Sonuc: yon guvenli.** 65536 > 2048 (ve > 4096). Yani seq buffer, afterstate
+listesinden **once** tasmaz; liste dolarsa liste istisna atar. Promptun
+"uyumsuzluk" tespiti teknik olarak dogru, ama **tehlikeli yon degil**.
+
+**Duzeltme.** `LegalMoveGenerator.SequenceBufferCapacity` ozelligi eklendi ve
+`SequenceBuffer_CoversAfterStateListCapacity` testi
+`SequenceBufferCapacity >= AfterStateList.DefaultCapacity` degismezini
+kilitliyor. Boylece gelecekte kapasite buyutulurse test kirilir.
+
+## F7-30 — Varsayilan model yolu: fikstur modeline sessiz dusus
+
+**Soru.** `DefaultModelPath()` egitilmis model bulamazsa ne olur?
+
+**Sonuc.** Sessizce `ml/artifacts/model_v2.onnx` (test fiksturu) donuyordu.
+Bu modelin gucu **olculmemistir**; onunla uretilen ER/GA sayilari olcum olarak
+kullanilamaz. F7-10'un (yanlis ONNX surumu) tekrari riski.
+
+**Duzeltme.** Fiksture dusuldugunde `Console.Error`'a iki satir uyari yazilir:
+modelin bulunamadigi ve sonuclarin olcum olarak kullanilamayacagi. Yol
+**degistirilmedi** — fikstur hala son care, ama artik **sessiz degil**.
+
+## F7-31 — DiceAveragedEquity: her cagride yeni SearchWorkspace
+
+**Soru.** `DiceAveragedEquity` her cagride `new SearchWorkspace()` +
+`new BackgammonState()` ayiriyor mu?
+
+**Sonuc: evet.** Pozisyon basina 21 kez cagriliyor; her cagri yeni bir
+workspace (istatistik + cache + transpozisyon tablosu) ve yeni bir durum
+ayiriyordu.
+
+**Duzeltme.** Iki `[ThreadStatic]` alan (`_diceAvgWorkspace`,
+`_diceAvgScratch`) eklendi; her arama oncesi `workspace.Reset()` cagriliyor.
+`Reset()` istatistik, cache ve transpozisyon tablosunu temizler, yani
+kiralama ile ayni baslangic durumu garanti edilir.
+
+**Neden `[ThreadStatic]`?** `SearchWorkspace` ve `BackgammonState` thread-safe
+degildir; paylasilan tek bir alan paralel olcumde veri yarisina yol acardi.
+
+## F7-32 — ResultPoints cubeValue ile carpilmiyor (dogrulandi)
+
+**Soru.** `AfterStateList.ResultPoints` kup degerini iceriyor mu?
+
+**Sonuc: hayir, dogru.** `IsGameOver` mars/backgammon puanini (1/2/3) dondurur;
+`cubeValue` ile **carpilmaz**. `GenerateAfterStates` bu degeri dogrudan yazar.
+
+**Test.** `GenerateAfterStates_TerminalResultPoints_ExcludesCubeValue` ayni
+terminal pozisyonu `cubeValue` 1, 2, 4, 8 icin kurar ve her durumda
+`ResultPoints == 1`, `ResultType == Single` bekler. **Gecti.**
+
+**Neden onemli.** Puan kup degeriyle carpilsaydi ayni terminal pozisyon farkli
+kup degerlerinde farkli hedef uretir ve deger hedefi (F6-07) bozulurdu.
+
+## F7-33 — SelfPlayAgent: StatePool gerekmiyor (iddia dogrulanmadi)
+
+**Soru.** `SelfPlayAgent` her arama icin yeni `BackgammonState` ayiriyor mu?
+
+**Sonuc: hayir.** `SelfPlayAgent` yalnizca `SearchWorkspace` ve
+`OnnxPolicyValueEvaluator` tutar; **hic** `BackgammonState` olusturmaz.
+Durumlar `SelfPlayRunner` icinde **alan** olarak tutulur ve yeniden kullanilir
+(`_state`, `_scratch`, satir 40-41). `EvalBench` ise oyun basina bir kez ayirir
+(satir 130-133), arama basina degil.
+
+**Ek kanit.** `SearchTests.Test10_ZeroAllocation` isinma sonrasi
+`BackgammonSearch.Search` icin `GC.GetAllocatedBytesForCurrentThread` farkinin
+**0** oldugunu zaten dogruluyor.
+
+**Karar: degisiklik yapilmadi.** `StatePool` eklemek, olculmus bir kazanci
+olmayan bir soyutlama eklemek olurdu (F7-25 zaten havuzun uretimde **kullanilmadigini**
+gosteriyor). Bu, "basitlik once" kuralinin dogrudan uygulamasidir.
+
+## F7-34 — BuildBenchList: sabit 4096 yerine varsayilan kapasite
+
+**Soru.** `BuildBenchList` neden `new AfterStateList(4096)` kullaniyordu?
+
+**Sonuc.** Sabit bir sayi, `DefaultCapacity`'in tek dogru kaynak olmasini
+engelliyordu. Kapasite 2048 iken 4096 "tutarsiz" gorunuyordu; 4096'ya
+cikarildiktan sonra tesadufen tutarli hale geldi.
+
+**Duzeltme.** `new AfterStateList()` — varsayilan kapasite kullanilir. Boylece
+kapasite tek yerden yonetilir.
+
+## F7-35 — Crawford senaryolari gercek modelle de kosulur
+
+**Soru.** `RunCrawford` sabit 0,9 equity kullaniyor; bu yeterli mi?
+
+**Degerlendirme.** Senaryolar **kup kurali** testleridir (Crawford oyununda kup
+yok, post-Crawford'da 1-away teklif edemez, olu kup). Sabit equity bu kurallari
+**deterministik** ve modelden bagimsiz test etmeyi saglar; bu dogru bir
+tercihtir, hata degil.
+
+**Duzeltme (eklemeli).** `crawford` komutuna `--model <yol>` secenegi eklendi.
+Verildiginde ayni senaryolar gercek `OnnxPolicyValueEvaluator` ile de kosulur ve
+JSON'a `modelScenarios` + `modelCorrect` yazilir. Varsayilan davranis
+**degismedi** (sabit equity, deterministik).
+
+**Onemli — onceden var olan basarisizlik.** Sabit equity ile kosu **5/6**
+dogru: `normal-double-pass` senaryosu (5-away/5-away, E = 0,9 ⇒ ciftle)
+beklenen `shouldDouble = true` yerine `false` donduruyor. Bu, `git stash` ile
+**HEAD'de de ayni** oldugu dogrulandi; bu gorevin kapsamindaki 15 maddeden
+**biri degildir** ve duzeltilmedi. `EquityCubeAdvisor` icin ayri bir is
+acilmalidir.
+
+## F7-36 — Swap / BoardOf sozlesmesi (belgeleme)
+
+**Soru.** `Swap` manuel tahta takasi yapiyor, `BoardOf` ise `ReadOnlySpan`
+donduruyor; bu tutarsiz mi?
+
+**Sonuc: kod dogru, sozlesme yazili degildi.** Kayitlar paralel dizilerde
+tutulur; `Swap` **hepsini** birlikte takas eder. `BoardOf` yalnizca okuma
+icindir. Tehlike, gelecekte birinin `BoardOf`'u yazma icin kullanmasi veya
+`Swap`'a yeni bir paralel dizi ekleyip takasa eklemeyi unutmasidir.
+
+**Duzeltme.** `Swap` uzerine `<remarks>` eklendi: (a) takas **tum** paralel
+dizilerde birlikte yapilmalidir, (b) `BoardOf` yalnizca okuma icindir, yazma
+icin `Boards` kullanilmalidir. Davranis degismedi.
+
+## F7-37 — StepBuf derinlik siniri
+
+**Soru.** `StepBuf` boyutu `MaxSteps + 1 = 5`; `depth > 4` olursa
+`IndexOutOfRangeException` olur mu?
+
+**Sonuc: ulasilamaz, ama korumasizdi.** `remainingCount` en fazla 4'tur
+(`SetDice` dublede 4, aksi halde 2; `ApplyStep` azaltir), yani `depth` en fazla
+4 olur. `MaxSequenceLength` zaten `depth > MoveSequence.MaxSteps` icin 0 doner.
+Ancak `Collect` ve `Emit` **guard'siz** olarak `StepBuf[depth]` indeksliyordu;
+ileride zar sayisi artarsa sessiz degil, **gec** ve anlasilmasi zor bir istisna
+alinirdi.
+
+**Duzeltme.** `Collect` ve `Emit` basina acik sinir denetimi eklendi
+(`depth > MoveSequence.MaxSteps` ⇒ `InvalidOperationException`). Sicak yolda
+tek bir karsilastirma. `StepBuf` ozelligine boyut degismezini aciklayan yorum
+eklendi. `StepBuffer_DepthBound_MatchesMaxSteps` testi 1-1 dublesinde tum
+dizilerin uzunlugunun `<= MaxSteps` oldugunu dogruluyor.

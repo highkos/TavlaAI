@@ -88,11 +88,42 @@ namespace Backgammon.Tests
         }
 
         [Test]
-        public void MoveList_DefaultCapacity_Is2048()
+        public void MoveList_DefaultCapacity_Is4096()
         {
             var list = new MoveList();
             Assert.That(list.Capacity, Is.EqualTo(MoveList.DefaultCapacity));
-            Assert.That(MoveList.DefaultCapacity, Is.EqualTo(2048));
+            Assert.That(MoveList.DefaultCapacity, Is.EqualTo(4096));
+            Assert.That(MoveList.DefaultCapacity, Is.EqualTo(AfterStateList.DefaultCapacity));
+        }
+
+        [Test]
+        public void SequenceBuffer_CoversAfterStateListCapacity()
+        {
+            // F7-29: seq buffer, afterstate listesinden küçük olmamalı. Küçük olsaydı
+            // GenerateAfterStates liste hâlâ yer varken buffer'da taşardı.
+            Assert.That(LegalMoveGenerator.SequenceBufferCapacity,
+                        Is.GreaterThanOrEqualTo(AfterStateList.DefaultCapacity));
+        }
+
+        [Test]
+        public void StepBuffer_DepthBound_MatchesMaxSteps()
+        {
+            // F7-37: StepBuf indeksi 0..MaxSteps. 1-1 dublesi 4 adıma kadar çıkar;
+            // bu sınırda taşma olmamalı.
+            Assert.That(MoveSequence.MaxSteps, Is.EqualTo(4));
+
+            var s = new BackgammonState();
+            s.Reset();
+            BackgammonEngine.SetDice(s, 1, 1);
+
+            var list = new AfterStateList();
+            Assert.DoesNotThrow(() => LegalMoveGenerator.GenerateAfterStates(s, EngineSettings.Default, list));
+            Assert.That(list.Count, Is.GreaterThan(0));
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                Assert.That(list.Sequences[i].Count, Is.LessThanOrEqualTo(MoveSequence.MaxSteps));
+            }
         }
 
         [Test]

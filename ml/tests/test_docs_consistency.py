@@ -29,7 +29,7 @@ COUNT_DOCS = [
 EXPECTED_COUNTS = {
     "pytest": 1142,
     "inference": 100,
-    "core": 285,
+    "core": 297,
     "ui": 88,
 }
 

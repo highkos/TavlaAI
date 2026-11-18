@@ -6,11 +6,48 @@ namespace Backgammon.Tests
     public class AfterStateListTests
     {
         [Test]
-        public void DefaultCapacity_Is2048()
+        public void DefaultCapacity_Is4096()
         {
             var list = new AfterStateList();
             Assert.That(list.Capacity, Is.EqualTo(AfterStateList.DefaultCapacity));
-            Assert.That(AfterStateList.DefaultCapacity, Is.EqualTo(2048));
+            Assert.That(AfterStateList.DefaultCapacity, Is.EqualTo(4096));
+        }
+
+        [Test]
+        public void DefaultCapacity_ExceedsMeasuredMaxAfterStates()
+        {
+            // F7-26: 1-1 dublesinde 2139 afterstate ölçüldü. Varsayılan kapasite bunun
+            // üzerinde olmalı, aksi halde yasal bir pozisyon çökme üretir.
+            Assert.That(AfterStateList.MeasuredMaxAfterStates, Is.EqualTo(2139));
+            Assert.That(AfterStateList.DefaultCapacity,
+                        Is.GreaterThan(AfterStateList.MeasuredMaxAfterStates));
+        }
+
+        [Test]
+        public void WorstKnownPosition_FitsInDefaultCapacity()
+        {
+            // F7-26: tepe-tırmanma aramasıyla bulunan en kötü pozisyon (15'e 15 taş, 1-1).
+            // Eski 2048 kapasitesi burada taşıyordu; varsayılan kapasite artık yetmeli.
+            sbyte[] board =
+            {
+                0, -10, 1, 1, 1, -1, 1, 1, 1, -1, 1, 1, -1, 1, 1, 0, 1, 1, 0, 1, 1, -1, 1, 0, -1, 0,
+            };
+
+            var s = new BackgammonState();
+            s.Reset();
+            Array.Copy(board, s.board, BackgammonState.BoardSize);
+            s.turn = 1;
+            s.phase = GamePhase.PreRoll;
+            s.hash = BackgammonEngine.ComputeZobristHash(s);
+
+            Assert.That(s.CountPieces(1), Is.EqualTo(15), "pozisyon geçerli olmalı");
+            Assert.That(s.CountPieces(-1), Is.EqualTo(15), "pozisyon geçerli olmalı");
+
+            BackgammonEngine.SetDice(s, 1, 1);
+
+            var list = new AfterStateList();
+            Assert.DoesNotThrow(() => LegalMoveGenerator.GenerateAfterStates(s, EngineSettings.Default, list));
+            Assert.That(list.Count, Is.EqualTo(AfterStateList.MeasuredMaxAfterStates));
         }
 
         [Test]
@@ -45,6 +82,20 @@ namespace Backgammon.Tests
 
             Assert.Throws<InvalidOperationException>(() => list.AddPass(new BackgammonState()));
         }
+
+#if DEBUG
+        [Test]
+        public void AddPass_StaleHash_ThrowsInDebug()
+        {
+            // F7-27: bayat hash transpozisyon tablosunda yanlış eşleşmeye yol açar.
+            // Doğrulama yalnızca Debug derlemelerinde yapılır (Release'de sıfır maliyet).
+            var s = new BackgammonState();
+            s.hash ^= 1UL;
+
+            var list = new AfterStateList(4);
+            Assert.Throws<InvalidOperationException>(() => list.AddPass(s));
+        }
+#endif
 
         [Test]
         public void BoardOf_OutOfRange_Throws()

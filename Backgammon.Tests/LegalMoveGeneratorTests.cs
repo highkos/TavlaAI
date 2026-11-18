@@ -946,6 +946,57 @@ namespace Backgammon.Tests
             return false;
         }
 
+        /// <summary>
+        /// F7-32: <see cref="AfterStateList.ResultPoints"/> Jacoby uygulanmış puanı taşır ama
+        /// <c>cubeValue</c> ile <b>çarpılmaz</b>. Aksi halde aynı terminal pozisyon farklı
+        /// küp değerlerinde farklı hedef üretir ve değer hedefi bozulur.
+        /// </summary>
+        [Test]
+        public void GenerateAfterStates_TerminalResultPoints_ExcludesCubeValue()
+        {
+            foreach (int cubeValue in new[] { 1, 2, 4, 8 })
+            {
+                var s = new BackgammonState();
+                s.Reset();
+                s.turn = 1;
+                s.phase = GamePhase.PreRoll;
+                s.cubeValue = (byte)cubeValue;
+
+                // White'ın son taşı 24 hanesinde (kendi evi 19..24), 14 taş toplanmış.
+                // 1-1 ile bu taş çıkmalı → hamle sonrası terminal (single).
+                // Siyah 1 taş toplamış → mars değil, tek puan.
+                System.Array.Clear(s.board, 0, BackgammonState.BoardSize);
+                s.board[24] = 1;
+                s.board[1] = -14;
+                s.whiteBorneOff = 14;
+                s.blackBorneOff = 1;
+                s.hash = BackgammonEngine.ComputeZobristHash(s);
+
+                BackgammonEngine.SetDice(s, 1, 1);
+
+                var list = new AfterStateList();
+                LegalMoveGenerator.GenerateAfterStates(s, EngineSettings.Default, list);
+
+                Assert.That(list.Count, Is.GreaterThan(0), "küp " + cubeValue + ": hamle üretilmeli");
+
+                bool sawTerminal = false;
+                for (int i = 0; i < list.Count; i++)
+                {
+                    if (!list.IsTerminal[i])
+                    {
+                        continue;
+                    }
+
+                    sawTerminal = true;
+                    Assert.That(list.ResultPoints[i], Is.EqualTo(1),
+                        "küp " + cubeValue + ": ResultPoints cubeValue ile çarpılmamalı");
+                    Assert.That(list.ResultType[i], Is.EqualTo((byte)GameResultType.Single));
+                }
+
+                Assert.That(sawTerminal, Is.True, "küp " + cubeValue + ": terminal kayıt beklenirdi");
+            }
+        }
+
         private static string BoardKeyOf(BackgammonState s)
         {
             var sb = new System.Text.StringBuilder(64);
