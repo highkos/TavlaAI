@@ -3712,3 +3712,425 @@ alinirdi.
 tek bir karsilastirma. `StepBuf` ozelligine boyut degismezini aciklayan yorum
 eklendi. `StepBuffer_DepthBound_MatchesMaxSteps` testi 1-1 dublesinde tum
 dizilerin uzunlugunun `<= MaxSteps` oldugunu dogruluyor.
+
+## F7-38 — Faz 7-R denetimi: R-01…R-17 (doğrulama kaydı)
+
+**Kaynak.** `faz 7 v2.5.md` (Faz 7-R), §3 bulgu tablosu. Bu bölüm 17 bulgunun
+**kaynak koda karşı** doğrulama sonucunu taşır. Kural 1 ("önce doğrula, sonra
+düzelt") gereği her satır bir **kanıt** (dosya:satır veya ölçüm) taşır.
+Sonuç etiketleri: `doğrulandı` / `çürütüldü` / `kısmen`.
+
+| ID | Sonuç | Kanıt |
+|---|---|---|
+| R-01 | **doğrulandı** | `ml/artifacts/stage_b_er_medium.json` mean 0,063957; `stage_b_er_large.json` mean 0,066414; SE 0,011948 / 0,011991. Fark **+0,002457**, `stage_b_capacity.json` `noiseThreshold` **0,002535** → fark eşiğin **altında**. Test 68 (PHASES §16.7) ters yönde: `medium` 0,3535 ± 0,0712 vs `large` 0,2651 ± 0,0594. |
+| R-02 | **doğrulandı** | `ml/gnubg_distill.py:157` `label_positions` → `vector=gnubg_er.vectorize(board, wo, bo, perspective=int(turn))` (**zar yok**, hamle öncesi tahta); etiket `equity=float(best.equity)` ve `best` `referee.hint(board, turn, dice)`'dan gelir (**zara bağlı**). Etiket girdinin fonksiyonu değil. |
+| R-03 | **doğrulandı** | `ml/gnubg_distill.py:258` `train_value_head` sonunda `out = model(x)` **tüm** veri kümesi üzerinde; `finalMse`/`finalMae`/`correlation`/`slope` buradan. Held-out bölme yok. |
+| R-04 | **doğrulandı** | `ml/gnubg_distill.py:602` `train_policy_head` → `F.cross_entropy(logits, bt[idx])` (sert top-1). `PolicyPosition` yalnızca `best_index` + `best_equity` taşır; aday başına equity atılıyor. |
+| R-05 | **doğrulandı** | `DEFAULT_STEPS=2000`, `DEFAULT_BATCH=256`, `DEFAULT_LR=1e-3`. 2 000 pozisyon ⇒ ~256 epoch; 10 000 pozisyon ⇒ ~51 epoch. Veri artışı eğitim süresi **azalmasıyla** karışmış. Ayrıca `ckpt_v30` üzerine lr=1e-3 fine-tune. |
+| R-06 | **doğrulandı** | `train_policy_head` sonunda `top1` **eğitim kümesi** (`xt`/`bt`) üzerinde hesaplanıyor. |
+| R-07 | **doğrulandı** | `ml/gnubg_distill.py:773` `distill_verdict`: `if er_after <= target: return VERDICT_PIPELINE` **eşleştirilmiş testten önce**. `VERDICT_CAPACITY` kazanç `min_gain` altındaysa döner — GA yok, n denetimi yok. |
+| R-08 | **doğrulandı** | `ml/pipeline_health.py:172` `gate_target_std_ratio` → `float(ratio) > TARGET_STD_RATIO_MIN` (**tek taraflı, üst sınır yok**). Mekanizma: `spread_from_shards` hedefleri **işaretli** (`td_lambda_targets_masked`), terminal değerleri **işaretsiz** (`replay.terminal_value` = `resultPoints/cubeValue`, F6-07) karşılaştırıyor. λ=1'de hedef = ±z, terminal = +z ⇒ oran ≈ √E[z²]/std(z) > 1 **yapısal olarak**. Ölçülen 3,0227 bir çökme değil, **birim uyumsuzluğu**. |
+| R-09 | **doğrulandı** | `ml/pipeline_health.py:71-72` `STD_RATIO_MIN=0.85`, `STD_RATIO_MAX=1.15`. `Faz 6 v3.md:389` ve `:852` orijinal bant **0,7 ≤ oran ≤ 1,4**. 1,3371 eski bantta **geçerdi**. Daraltma gerekçesiz. |
+| R-10 | **doğrulandı** | `pipeline_health.diagnose` yalnızca G1–G7 kalibrasyon kapılarına bakar; **öğrenme eğrisi** (veri ↔ ER) ölçen hiçbir kod yok. "pipeline" teşhisi ölçek hipotezini **test etmiyor**. |
+| R-11 | **doğrulandı** | `Backgammon.Core/Search/SearchSettings.cs:21` `ProductionDepthPly = 1`; ER ise `gnubg_er.score_afterstates(criterion="policy")` → `OnnxScorer.logits` → `argmax` ile ölçülüyor. Ürünün gerçek hamle kalitesi (depth-1 + değer) **ölçülmüyor**. |
+| R-12 | **doğrulandı** | `ml/artifacts/reference_corpus_v1.json`: 200 vaka, faz dağılımı `closed 44 / race 40 / bar 40 / contact 39 / bearoff 37` ⇒ **contact %19,5**. Üretici `er_harness._candidate_positions` **rastgele oyun** (`rng.choice(sorted(states))`) + 3 sentetik aile (`_closed_positions`, `_race_positions`, `_bearoff_positions`). Bölme **pozisyona** göre (`assign_splits`), oyuna göre değil. |
+| R-13 | **doğrulandı** | `ml/gnubg_distill.py:145` `generate_positions` → `refgen.random_positions(rng, count, max_plies)`; korpusla **aynı** üretici ailesi. Korpus tahtalarını dışlayan hiçbir filtre yok. |
+| R-14 | **doğrulandı** | `er_harness.TARGET_POSITIONS=200`, `SPLIT_RATIOS=(("cal",0.30),("val",0.35),("test",0.35))` ⇒ VAL **n=70**. "264 pozisyon" sayısı gözlenen farktan (0,0176) hesaplanmıştı — Kural 4 ihlali. |
+| R-15 | **doğrulandı** | `faz 7.md` §4.4 merdiveni "~0,10 / ~0,08 / ~0,05 / ~0,03 / ~0,02" **tahmin** taşıyordu; 4. satır (hakem 4-ply iken 4-ply ER'si) **tanım gereği 0**'dır. Şampiyon satırı (0,002–0,003) **literatür** ve farklı dağılım/hakem. |
+| R-16 | **doğrulandı** | `faz 7.md` §4.4 kanıt kriteri 2. koşulu "kazanma oranı > %50, p < 0,05" — bir **üstünlük** testi. Şampiyon seviyesi iddiası **eşdeğerlik/aşağı-olmama** testi gerektirir. |
+| R-17 | **kısmen doğrulandı** | `ml/gnubg_hint.py` `HINT_MOVE_CAP = 10` (F7-03) ⇒ >10 adaylı pozisyonda adaylar etiketsiz kalır. `gnubg_distill.label_policy_positions:458` `map_hints` başarısızlıklarını `mapping_failures` olarak **sayıyor** ama `train_policy_head` maskesi yalnızca `mask[i, :k] = True` (aday **varlığına** göre); "gnubg bu adayı etiketledi mi" maskesi **yok**. Etiketsiz adaylar CE paydasından çıkarılmıyor — yani "negatif sayılıyor" tespiti **doğru**, ama mekanizma "hiç hedef olmamak" biçiminde. |
+
+**Sonuç.** 17 bulgunun **16'sı doğrulandı**, **1'i kısmen** (R-17), **0'ı çürütüldü**.
+R-08'in mekanizması (işaretli hedef vs işaretsiz terminal) bulgu metninde
+"birim uyumsuzluğu olabilir" diye **hipotez** olarak geçiyordu; burada **kanıtlandı**.
+
+## F7-39 — B3 kararı askıya alındı
+
+**Soru.** §5.1.8'deki B3 kararı (üretim profili `medium`, ER hedefi ≤ 0,02,
+şampiyon iddiası düşürüldü) yürürlükte kalmalı mı?
+
+**Sonuç: hayır, askıya alındı.** Dayanağı olan `large` −%3,7 farkı kendi standart
+hatasının (0,0120) **altında** ve Aşama B'nin kendi `noiseThreshold` değerinin
+(0,002535) de altında (gözlenen 0,002457). Test 68 ise **ters yönde** ölçüm
+vermişti (`large` 0,2651 vs `medium` 0,3535). İki ölçüm çelişiyor ve ikisi de
+gürültü içinde ⇒ karar **ölçüme değil gürültüye** dayanıyordu.
+
+**Kapsam.** B3'ün altı kaleminden **1, 2, 5, 6** askıda; **3** (Test 98 onarımı)
+ve **4** (kalibrasyon önceliği) **askıda değil** — kendi ölçümlerine dayanırlar.
+
+**Yeniden açma koşulu.** Aşama R-E (≥ 3 seed, korpus v2, eşleştirilmiş test)
+`large` aleyhine **GA alt sınırı > 0** olan bir fark üretirse B3 yeniden
+onaylanabilir. O zamana kadar üretim profili `medium` kalır; bu bir **kanıt**
+değil, **kanıtlanmamış varsayılan**dır ve öyle yazılır.
+
+## F7-40 — Hedef ikiye ayrıldı: Hedef-1 (hamle) ve Hedef-2 (oyun gücü)
+
+**Soru.** Tek bir "ER ≤ X" hedefi neden yetmiyor?
+
+**Sonuç: iki farklı şeyi karıştırıyordu.** (i) modelin **hamle** kalitesi ve
+(ii) modelin **oyun** gücü (küp + maç). İkincisi birincisinden türetilemez
+(Ek B: maç equity'sinin önemli kısmı küp kararlarından gelir). Ayrıca ER hedefinin
+**sayısal değeri** kendine referanslıydı: hakem 4-ply iken "4-ply ER ≤ 0,005"
+demek, hakemin kendi seviyesini ölçmesini istemektir (R-15).
+
+**Yeni tanım.** Hedef-1 = **rollout tabanlı** referansa göre ER, eşiği R-F'de
+ölçülen **çözünürlük tabanından** türetilir. Hedef-2 = gnubg 2-ply ve 4-ply'a
+karşı **ppg eşdeğerliği** (aşağı-olmama, `H0: ppg_fark ≤ −m`, m = 0,02, %95).
+Üstünlük sonucu varsa **bonus**, kapı değil.
+
+## F7-41 — İnsan merdivenindeki tahmini sayılar kaldırıldı
+
+**Soru.** §4.4 merdivenindeki "~0,10 / ~0,08 / ~0,05 / ~0,03 / ~0,02" nereden geliyor?
+
+**Sonuç: hiçbir ölçümden.** Uydurma tahminlerdi ve 4. satır **yapısal olarak
+yanlıştı** (hakem kendi seviyesini ölçemez). Satırlar "R-F'de ölçülecek" olarak
+değiştirildi; 4. satır için daha derin referans (5-ply veya rollout) şartı
+yazıldı, yoksa "ölçülemez" işaretlenir. Literatür satırları (şampiyon insan,
+gnubg 4-ply + büyük ağ) **korundu** ama "farklı dağılım, kıyaslanamaz" etiketiyle.
+
+## F7-42 — Kanıt türü: üstünlük değil eşdeğerlik
+
+**Soru.** "gnubg 4-ply'a karşı > %50, p < 0,05" hedefi kanıtlar mı?
+
+**Sonuç: hayır.** Bu bir **üstünlük** (superiority) testidir. Reddedilememesi
+"eşitiz" demek değil, "fark gösteremedik" demektir. Şampiyon seviyesi iddiası
+bir **eşdeğerlik / aşağı-olmama** iddiasıdır ve **marjlı** bir test gerektirir.
+§4.4 ve Ek B buna göre düzeltildi; üstünlük sonucu **bonus** olarak ayrıldı.
+
+## F7-43 — G7 oranı yapısal olarak 1'den büyük (birim uyumsuzluğu)
+
+**Soru.** G7 = 3,0227 "GEÇTİ" — bu bir çökme mi, bir hata mı?
+
+**Sonuç: hata.** `pipeline_health.spread_from_shards` hedefleri **işaretli**
+(`td_lambda_targets_masked` işareti kendisi çevirir), terminal değerleri ise
+**işaretsiz** (`replay.terminal_value` = `resultPoints/cubeValue`, F6-07) alıyor.
+λ = 1'de hedef tam olarak ±z, terminal +z olur ⇒ oran ≈ √E[z²] / std(z) ve
+E[z] > 0 olduğu sürece **1'den büyüktür**. Ölçülen 3,0227 bu formülle uyumlu
+(hedef std 1,3542, terminal std 0,4480). Yani G7 **hiçbir zaman** "hedef
+çökmedi" demiyor; **her zaman** geçiyor. Kapı bilgi taşımıyor.
+
+**Düzeltme (Aşama R-C).** G7 iki taraflı olacak ve terminal değerler **işaretli**
+hale getirilecek; önerilen bant **[0,5; 1,5]** — **onay bekliyor** (Kural 2).
+
+## F7-44 — G5 bandı gerekçesiz daraltılmış
+
+**Soru.** `STD_RATIO_MIN/MAX = 0,85/1,15` nereden geliyor?
+
+**Sonuç: gerekçesiz.** `Faz 6 v3.md:389` ve `:852` orijinal bandı
+**0,7 ≤ oran ≤ 1,4** olarak veriyor. Ölçülen 1,3371 **eski bantta geçerdi**.
+Daraltma hiçbir belgede gerekçelendirilmemiş. Aşama R-C'de ya Faz 6 bandına
+dönülecek ya da gerekçe yazılıp **onay** alınacak; o zamana kadar rapor
+**iki bant altında** yazılır.
+
+## F7-45 — "pipeline" teşhisi ölçek hipotezini test etmiyor
+
+**Soru.** `pipeline_health` "pipeline" dediğinde "sorun ölçek değil" demiş olur mu?
+
+**Sonuç: hayır.** `diagnose` yalnızca G1–G7 **kalibrasyon** kapılarına bakıyor.
+Öğrenme eğrisi (veri ↔ ER) ölçen hiçbir kod yok. "pipeline" teşhisi
+"kalibrasyon bozuk" demektir; "ölçek yeterli" demek **değildir**. Aşama R-C'de
+`learning_curve` modulu eklenecek ve `pipeline_health`'e `scaling_evidence`
+alanı (`yok | eğim<ε | eğim≥ε`) girecek.
+
+## F7-46 — ER yanlış oynama yolunda ölçülüyor
+
+**Soru.** Ölçülen ER ürünün gerçek hamle kalitesini mi gösteriyor?
+
+**Sonuç: hayır.** ER `score_afterstates(criterion="policy")` → `logits.argmax`
+ile ölçülüyor (0-ply, politika kafası). Ürün ise `ProductionDepthPly = 1`
+arama + değer kafası kullanıyor. İkisi **farklı** şeyler. Aşama R-B'de ER
+**üç yol** için ayrı raporlanacak: politika argmax / değer 0-ply / depth-1 arama.
+
+## F7-47 — Korpus v1 dağılımı gerçek oyunu temsil etmiyor
+
+**Soru.** 200 pozisyonluk korpus gerçek oyun dağılımını temsil ediyor mu?
+
+**Sonuç: hayır.** Ölçülen dağılım: `closed 44 / race 40 / bar 40 / contact 39 /
+bearoff 37`. **Contact %19,5** — gerçek oyunda bu oran çok daha yüksektir.
+Ayrıca 37 bearoff pozisyonu üründe **tam veritabanı** ile çözülüyor (ölçüm
+gücü katmıyor), 44 closed pozisyon gerçek oyunda **nadir**. Üretici **rastgele
+oyun** (`rng.choice`) + 3 sentetik aile. Bölme **pozisyona** göre yapılmış,
+**oyuna** göre değil ⇒ aynı oyunun pozisyonları CAL ve TEST'e düşebilir (sızıntı).
+
+**Düzeltme (Aşama R-B).** Korpus v2: ≥ 1 000 pozisyon, **contact ≥ %60**,
+kaynak (a) gnubg 2-ply self-play, (b) kendi model self-play, (c) rastgele ≤ %10;
+bearoff/closed ayrı `diagnostic_*` kümesine; bölme **oyuna göre**; sızıntı
+filtresi (ayna/perspektif-kanonik tahta hash'i).
+
+## F7-48 — Damıtma verisi korpusla aynı üreticiden, sızıntı filtresi yok
+
+**Soru.** Damıtma pozisyonları ölçüm korpusuyla çakışıyor mu?
+
+**Sonuç: evet, filtresiz.** `gnubg_distill.generate_positions` →
+`refgen.random_positions`, korpusla **aynı** üretici ailesi. Korpus tahtalarını
+dışlayan hiçbir filtre yok. Aşama R-B'de ayna/perspektif-kanonik tahta hash'i
+ile sızıntı filtresi eklenecek ve **çıkarılan tahta sayısı raporlanacak**.
+
+## F7-49 — Damıtma "başarı" sayıları in-sample
+
+**Soru.** §25'teki MAE 0,0072 / corr 0,9996 / top1 değerleri neyi kanıtlıyor?
+
+**Sonuç: hiçbir şeyi.** `train_value_head` ve `train_policy_head` bu metrikleri
+**eğitim kümesinin tamamı** üzerinde hesaplıyor. Model 2 000 pozisyonu ezberlese
+de bu sayılar mükemmel çıkar. Held-out ölçüm yok. Aşama R-D'de tüm metrikler
+**held-out** raporlanacak; in-sample ayrı `inSample: true` alanında duracak
+(Kural 5).
+
+## F7-50 — Damıtma deneyinde veri ve eğitim süresi karışmış
+
+**Soru.** 2 000 → 10 000 pozisyon karşılaştırması temiz mi?
+
+**Sonuç: değil.** `DEFAULT_STEPS = 2000`, `DEFAULT_BATCH = 256` sabitken
+2 000 pozisyon ~256 epoch, 10 000 pozisyon ~51 epoch eğitim demek. Yani veri
+**5×** artarken eğitim süresi **5×** azaldı. Ayrıca `ckpt_v30` üzerine
+lr = 1e-3 fine-tune yapıldı. Aşama R-D'de **epoch-sabit / veri-değişken** deney
+zorunlu; "step-sabit" kol yalnızca karıştırıcıyı **göstermek** için koşulacak.
+
+## F7-51 — Damıtma kararı eşleştirilmiş testten önce veriliyor
+
+**Soru.** `distill_verdict` "pipeline" derken GA'ya bakıyor mu?
+
+**Sonuç: hayır.** `if er_after <= target: return VERDICT_PIPELINE` **eşleştirilmiş
+testten önce** çalışıyor; GA hesaplanmadan "pipeline" dönebiliyor. `VERDICT_CAPACITY`
+ise kazanç `min_gain` altındaysa dönüyor — GA yok, n denetimi yok. "ER 0,03'ün
+altına inmiyorsa kapasite sorunudur" çıkarımı **geçersiz** (veri 2–10 bin
+pozisyon mertebesinde). Aşama R-C'de `distill_verdict` yeniden yazılacak:
+önce eşleştirilmiş fark + bootstrap GA, `pipeline` yalnızca GA **üst** sınırı
+hedefin altındaysa, `kapasite` çıkarımı **kaldırılacak**, n < gerekli n iken
+`veri-yetersiz` durumu eklenecek.
+
+## F7-52 — Damıtma girdisi hamle öncesi, etiketi zara bağlı
+
+**Soru.** Değer damıtma hattı doğru mu tasarlanmış?
+
+**Sonuç: hayır, tasarım hatası.** Girdi `vectorize(board, wo, bo, perspective)`
+— **zar yok**, hamle öncesi tahta. Etiket `hints[0].equity` — **zara bağlı**.
+Etiket, girdinin fonksiyonu değil ⇒ öğrenilemez bir hedef. Ürün ise değer
+kafasını **afterstate** üzerinde kullanıyor. Aşama R-D'de bu hat **kaldırılacak**;
+yerine afterstate vektörleri + `probs @ EQUITY_WEIGHTS ≈ equity_gnubg` (MSE)
+gelecek. Eski hattın testleri "yanlış tasarım" notuyla silinecek/yeniden yazılacak.
+
+## F7-53 — Politika damıtma aday equity'lerini atıyor
+
+**Soru.** gnubg her adayın equity'sini verirken neden yalnızca top-1 öğreniliyor?
+
+**Sonuç: tasarım eksikliği.** `train_policy_head` sert top-1 çapraz entropi
+kullanıyor (`F.cross_entropy(logits, bt[idx])`); `PolicyPosition` yalnızca
+`best_index` + `best_equity` taşıyor, aday başına equity **atılıyor**. gnubg'nin
+verdiği bilgi miktarı %90 kullanılmıyor. Aşama R-D'de **liste tabanlı** kayıp:
+`KL(softmax(equity_gnubg/T) ‖ softmax(logits))`, maskeleme ile, T doğrulama
+kümesinde seçilecek.
+
+## F7-54 — Etiketsiz adaylar negatif sayılıyor
+
+**Soru.** `hint` en fazla 10 hamle yazdırıyorsa (F7-03), 10'dan fazla adaylı
+pozisyonlarda ne oluyor?
+
+**Sonuç: etiketsiz adaylar CE paydasında kalıyor.** `label_policy_positions`
+`map_hints` başarısızlıklarını `mapping_failures` olarak sayıyor, ama
+`train_policy_head` maskesi yalnızca `mask[i, :k] = True` (aday **varlığına**
+göre). "gnubg bu adayı etiketledi mi" maskesi yok ⇒ etiketsiz aday hiç hedef
+olmuyor ama **negatif** gibi davranıyor. Aşama R-D'de etiketsiz adaylar
+maskelenecek ve **maskelenen pay** raporlanacak.
+
+
+## F7-55 — R-Q3: vektörleştirici ayna-tutarlı, **model değil**
+
+`gnubg_er.vectorize` ayna tutarlılığı **ölçüldü**: 40 rastgele pozisyonda
+`vectorize(board, wo, bo, perspective=+1)` ile
+`vectorize(mirror(board), bo, wo, perspective=-1)` **40/40 aynı**. Yani
+vektörleştirici doğru; F6-31 sınıfı bir hata **yok**.
+
+Ama modelin **değer çıktısı antisimetrik değil**. Aynı fiziksel tahta iki
+perspektiften sorulduğunda `e(+1) = -e(-1)` olması gerekir (Beyaz'ın equity'si
+Siyah'ınkinin negatifidir). Ölçüm (300 pozisyon, `model_v30`):
+
+| Ölçüm | Değer | Beklenen |
+|---|---|---|
+| `corr(e(+1), e(-1))` | **−0,7019** | −1,0000 |
+| ortalama `\|e(+1)+e(-1)\|` | **1,0044** | 0,0000 |
+| `\|hata\| < 0,05` | **1/300** | 300/300 |
+| `\|hata\| < 0,10` | 7/300 | 300/300 |
+| politika argmax iki perspektifte aynı | **1/59** | 59/59 |
+| başlangıç pozisyonu `e(+1)`, `e(-1)` | −0,0486, −0,0486 | 0, 0 |
+| simetrik pozisyon `e(+1)`, `e(-1)` | +0,5479, +0,5479 | 0, 0 |
+
+Başlangıç ve simetrik pozisyonda iki perspektif **aynı** değeri veriyor
+(negatifini değil). Yani model ayna-**değişmez**, ayna-**ters** olması
+gerekirken.
+
+**Neden:** eğitim verisi hiçbir zaman aynalanmış tahtayı göstermiyor.
+`ml/train_v2.py`'de `flip_exclusive` yalnızca TD(λ) **hedef zincirinde**
+kullanılıyor (satır 97, 136, 138); girdi vektörü için perspektif artırımı
+(augmentation) **yok**. Öğrenen her zaman hamle yapan taraftır, dolayısıyla
+ağ simetriyi öğrenecek bir sinyal görmez.
+
+**Sonuç:** ER zaten bu asimetriyi **içeriyor** (ölçüm `perspective=turn` ile
+yapılıyor), yani ER sayıları bu kusuru cezalandırıyor. Ama kusur giderilirse
+ER'nin düşmesi beklenir. Bu, R-D'nin (öğretmen yeniden tasarımı) **girdi
+artırımı** maddesi için somut bir gerekçedir.
+
+**Naif düzeltme denemesi başarısız:** iki perspektifin politika logit'lerini
+ortalamak ER'yi **kötüleştirdi** (120 vakada 0,0500 → 0,1674). Logit
+ortalaması geçerli bir simetrizasyon değil (iki farklı skorlama fonksiyonunu
+karıştırıyor). Doğru yol eğitimde artırımdır; çıkarımda yama değil.
+
+## F7-56 — R-Q4: `random_positions` hamle seçimi ve erken-oyun ağırlığı
+
+`tools/reference_gen.py` icindeki `random_positions` hamleyi `rng.choice(sorted(states))` ile
+seçiyor, yani yasal afterstate'ler üzerinde **tekdüze**. Bu "rastgele oyun"
+tanımına uygun; hile yok.
+
+İki ölçülmüş kusur var:
+
+1. **Erken ply aşırı temsil.** Örnekleme her ply'de `p = 0,5` ile yapılıyor,
+   yani oyunun her adımında %50 ihtimalle pozisyon toplanıyor. Oyunlar
+   `max_plies` ile kesildiği için erken ply'ler daha çok oyun tarafından
+   görülüyor. v2'de ölçülen ply dağılımı: `ply < 5` **%5,7**, `ply < 10`
+   **%14,0**, `ply < 20` **%29,3**, `ply < 40` **%58,2**; medyan 34, maksimum
+   118.
+2. **v1 ile damıtma örtüşmesi ölçüldü:** v1'in 200 benzersiz tahtasından
+   **yalnızca 1'i** (`%0,50`) `gnubg_distill.generate_positions(10000, seed=7)`
+   çıktısında var. Yani R-13'ün "aynı üretici ailesi" tespiti **doğru ama
+   etkisi küçük**: sızıntı aynı tahtalar üzerinden değil, aynı **dağılım**
+   üzerinden. v2'de sızıntı filtresi 26 tahta çıkardı (F7-57).
+
+## F7-57 — Korpus v2 üretildi ve doğrulandı
+
+`ml/corpus2.py` (yeni modül) korpus v2'yi üretir. Ölçülen içerik:
+
+| Alan | Değer |
+|---|---|
+| Pozisyon | **1000** |
+| Faz | contact **600** (%60,0), bar 250, race 150, bearoff 0, closed 0 |
+| Kaynak | gnubg 2-ply self-play **664**, kendi model self-play **286**, rastgele **50** (%5,0) |
+| Oyun sayısı | 43 |
+| Bölünme (oyun düzeyinde) | cal 300 / val 350 / test 350 |
+| Sızıntı filtresi | 9 652 eğitim hash'i tarandı, **26 tahta çıkarıldı** |
+| Tekrar atılan | 76 |
+| Teşhis kümesi | 1 566 (bearoff 266, closed 1, artık contact/bar/race) |
+| Özet (digest) | `e0466b9e673dca6cbdd05d8246730deea9371fa9a425055db715e8390e4a97b8` |
+| Doğrulama | `verify_corpus2` → **ihlal yok** |
+
+Gerçek oyun faz payları **oyunlardan ölçüldü** (varsayılmadı): contact
+**0,5564**, bar **0,3706**, race **0,0730**. Ağırlıklı ER bu paylarla
+hesaplanır; böylece %60 contact katmanlaştırmasının yanlılığı düzeltilir.
+
+**Bölünme hatası bulundu ve düzeltildi:** ilk sürüm bölünmeyi *faz içinde*
+yapıyordu; bir oyun birden çok fazda pozisyon taşıdığı için aynı oyun hem CAL
+hem TEST'e düşüyordu (`verify_corpus2` 300+ ihlal verdi). Düzeltme: bölünme
+**tek seferde, oyun düzeyinde**, oyunlar pozisyon sayısına göre büyükten
+küçüğe yerleştirilerek yapılır. Sonuç: 300/350/350, ihlal yok.
+
+## F7-58 — ER üç oynanış yolu için ölçüldü
+
+`ml/er_paths.py` (yeni modül) ER'yi üç yol için ayrı ölçer. Hakem her vakada
+**bir kez** çalışır (gnubg `eval` 2-ply); yollar arasındaki fark yalnızca
+**seçim** farkıdır (Kural 7).
+
+`model_v30`, gnubg `eval` 2-ply hakem, bootstrap 20 000:
+
+| Korpus | Yol | n | Ortalama | Medyan | %95 GA | σ | σ üst |
+|---|---|---|---|---|---|---|---|
+| v2 | `policy` | 1000 | **0,0402** | 0,0000 | [0,0350; 0,0457] | 0,0867 | 0,1025 |
+| v2 | `value` | 1000 | **0,0442** | 0,0000 | [0,0384; 0,0504] | 0,0957 | 0,1130 |
+| v2 | `search1` | 1000 | **0,0210** | 0,0000 | [0,0181; 0,0240] | 0,0477 | 0,0540 |
+| v1 | `policy` | 200 | 0,0740 | 0,0160 | [0,0594; 0,0893] | 0,1091 | 0,1241 |
+| v1 | `value` | 200 | 0,0746 | 0,0190 | [0,0594; 0,0909] | 0,1145 | 0,1318 |
+| v1 | `search1` | 200 | 0,0515 | 0,0000 | [0,0382; 0,0659] | 0,1000 | 0,1180 |
+
+**v1 `policy` = 0,0740**, tarihsel `stage_h_er_2ply.json` değeri **0,073970**
+ile birebir aynı. Yani yeni harness eski ölçümü **yeniden üretiyor**; sapma
+yok.
+
+Gerçek oyun frekansıyla ağırlıklı ER (v2): `policy` **0,0434**, `value`
+**0,0478**, `search1` **0,0221**.
+
+Faz kırılımı (v2): `policy` contact 0,0448 / bar 0,0480 / race 0,0086;
+`search1` contact 0,0229 / bar 0,0235 / race 0,0091. Race her yolda en kolay
+faz.
+
+**Üretim yolu `search1`'dir** (`SearchSettings.ProductionDepthPly = 1`) ve
+ölçülen ER **0,0210** — yani ürün, bugüne kadar raporlanan 0,0533/0,0617'den
+**belirgin biçimde iyi**. Bu, F7-46'nın (ER yanlış oynanış yolunda ölçülüyor)
+nicel sonucudur.
+
+## F7-59 — v1 korpusu ER'yi **abartıyormuş**
+
+v1 ile v2 arasındaki fark, aynı model ve aynı hakemle (eşleşmemiş, farklı
+korpuslar):
+
+| Yol | v1 | v2 | Fark | SE | z | %95 GA | Sıfır dışı |
+|---|---|---|---|---|---|---|---|
+| `policy` | 0,0740 | 0,0402 | **−0,0338** | 0,0082 | −4,13 | [−0,0498; −0,0178] | **evet** |
+| `value` | 0,0746 | 0,0442 | **−0,0304** | 0,0086 | −3,52 | [−0,0473; −0,0135] | **evet** |
+| `search1` | 0,0515 | 0,0210 | **−0,0305** | 0,0072 | −4,22 | [−0,0447; −0,0163] | **evet** |
+
+Yani v1 korpusu ER'yi `policy` yolunda **%84 göreli** abartıyordu. Bu, "sorun
+ölçek değil pipeline" tezinin bir parçası olarak **ölçüm hattının** da bozuk
+olduğunu gösterir: model, temsil edici olmayan bir korpusta ölçüldüğü için
+olduğundan kötü görünüyordu.
+
+**Uyarı (Kural 7):** bu karşılaştırma eşleşmemiş ve iki korpus farklı faz
+karışımına sahip. Fark, korpus değişimi ile faz karışımı değişimini
+**ayırmıyor**. Ayrıştırma için v2'nin faz paylarını v1'e uygulayan bir kol
+gerekir; bu R-C'ye bırakıldı.
+
+## F7-60 — Gereken n, σ'nin **üst** güven sınırından
+
+Kural 4 gereği güç hesabı nokta tahmininden yapılmaz. `corpus2.power_table` ve
+`er_paths.power_rows` yalnızca `sigmaCiHigh` kullanır.
+
+| Korpus | Yol | σ üst | n (Δ=0,01, tek yön) | n (Δ=0,02, tek yön) | mevcut n | Δ=0,01 için yeterli |
+|---|---|---|---|---|---|---|
+| v2 | `policy` | 0,1025 | **285** | 72 | 1000 | **evet** |
+| v2 | `value` | 0,1130 | **346** | 87 | 1000 | **evet** |
+| v2 | `search1` | 0,0540 | **79** | 20 | 1000 | **evet** |
+| v1 | `policy` | 0,1241 | 418 | 105 | 200 | **hayır** |
+| v1 | `value` | 0,1318 | 471 | 118 | 200 | **hayır** |
+| v1 | `search1` | 0,1180 | 377 | 95 | 200 | **hayır** |
+
+v1'in 200 pozisyonu Δ=0,01 için **hiçbir yolda yeterli değildi**. v2'nin 1000
+pozisyonu üç yolda da yeterli. Bu, R-14'ün ("264 pozisyon gözlenen etkiden
+hesaplandı") düzeltilmiş halidir: doğru sayı **285** (`policy`, Δ=0,01, tek
+yönlü, σ üst sınırı).
+
+## F7-61 — gnubg 2-ply etiketleme maliyeti ölçüldü
+
+Tek çekirdek, 2-ply `hint`, 6 pozisyon: ortalama **0,562 s**, medyan 0,535,
+min 0,282, maks 0,865. 24 pozisyon: 1 süreç **1,803 poz/s**; 4 süreç
+**4,696 poz/s** (2,6× ölçekleme, 4× değil).
+
+R-D için önerilen hacimler (4 süreç, **kestirim**):
+
+| Pozisyon | Süre |
+|---|---|
+| 2 000 | ~7 dk |
+| 5 000 | ~18 dk |
+| 10 000 | ~36 dk |
+| 20 000 | ~71 dk |
+| 50 000 | ~3,0 sa |
+
+**Düzeltme:** `faz 7.md` §5.1.1'deki "12 iş parçacığında 8× hızlanma"
+varsayımı ölçümle **desteklenmiyor**; 4 süreçte 2,6× görüldü. Bütçe
+hesapları bu daha düşük sayıyla yeniden yapılmalıdır.
+
+## F7-62 — v2'nin `self` kaynağı on-policy sızıntı taşır
+
+v2'nin 1000 pozisyonunun **286'sı** `model_v30`'un kendi oynadığı oyunlardan
+geliyor. Bu pozisyonlar modelin **kendi dağılımında**; tahta düzeyinde sızıntı
+filtresi 26 tanesini çıkardı ama dağılım düzeyinde bir yakınlık kalıyor. Bu,
+ER'yi **iyimser** gösterebilir.
+
+**Ölçüldü** (v2 VAL, n=350, `ml/artifacts/er_paths_v2_val.json`):
+
+| Yol | gnubg2 | self | self/gnubg2 |
+|---|---|---|---|
+| `policy` | 0,0484 | 0,0433 | 0,90 |
+| `value` | 0,0637 | 0,0382 | **0,60** |
+| `search1` | 0,0227 | 0,0096 | **0,42** |
+
+`self` her yolda daha düşük ER veriyor; `search1`'de fark **2,4×**. On-policy
+dağılımın ER'yi iyimser gösterdiği **doğrudan kanıtlandı**. Başlık ER'si bir
+**alt sınır** olarak okunmalı; `gnubg2` sütunu muhafazakâr referanstır.
+`er_paths` artık `sourceMeans`/`sourceCounts` alanlarını üretiyor.

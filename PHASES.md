@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1142** | ~8 dk 30 s | ✅ 1142/1142 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1627** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1159** | ~8 dk 30 s | ✅ 1159/1159 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **1644** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -2479,7 +2479,7 @@ Bölüm 5.1.6 üç yol tanımlar ve **kullanıcı onayı** ister. Ölçüm sonra
 ### 21.9 Doğrulama
 
 ```
-ml/tests                     1142/1142  (3 yavaş/koşullu test atlanır)
+ml/tests                     1159/1159  (3 yavaş/koşullu test atlanır)
 Backgammon.Tests             285/285
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
@@ -2930,7 +2930,131 @@ Ayrı bir `EquityCubeAdvisor` işi gerektirir.
 Backgammon.Tests             297/297   (29 dk 56 s)
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
-ml/tests                    1142/1142  (3 yavaş/koşullu test atlanır)
+ml/tests                    1159/1159  (3 yavaş/koşullu test atlanır)
 ```
 
-Toplam **1627**. Derleme 0 uyarı / 0 hata.
+Toplam **1644**. Derleme 0 uyarı / 0 hata.
+
+
+## 30. Faz 7-R Aşama R-B — ölçüm altyapısı (F7-55 – F7-62)
+
+`faz 7 v2.5.md` §8 yalnızca R-A ve R-B'yi istiyor; R-C onay alınmadan
+başlamayacak. Ayrıntılı rapor: `ml/artifacts/stage_r_b_report.md`.
+
+### 30.1 Ne değişti
+
+| Yol | Tür | Ne yapar |
+|---|---|---|
+| `ml/corpus2.py` | yeni | Korpus v2: katmanlı faz seçimi, **oyun düzeyinde** bölünme, ayna-kanonik sızıntı filtresi, `gameId`/`ply`/`source`, gerçek oyun faz payları, güç tablosu |
+| `ml/er_paths.py` | yeni | ER'yi **üç oynanış yolu** için ayrı ölçer; bootstrap %95 GA, faz ve kaynak kırılımı, ağırlıklı ER, σ üst sınırından güç tablosu |
+| `ml/tests/test_corpus2.py` | yeni | Test 127–132 (17 test) |
+| `ml/artifacts/reference_corpus_v2.json` | yeni | 1000 pozisyon, digest `e0466b9e…` |
+| `ml/artifacts/er_paths_v1.json` / `er_paths_v2.json` / `er_paths_v2_val.json` | yeni | Üç yol ölçümleri |
+
+### 30.2 Korpus v2
+
+| Alan | Değer |
+|---|---|
+| Pozisyon | **1000** |
+| Faz | contact **600** (%60,0) · bar 250 · race 150 · bearoff 0 · closed 0 |
+| Kaynak | gnubg 2-ply self-play **664** · kendi model self-play **286** · rastgele **50** (%5,0) |
+| Oyun | 43 |
+| Bölünme (oyun düzeyinde) | cal 300 / val 350 / test 350 |
+| Sızıntı filtresi | 9 652 eğitim hash'i → **26 tahta çıkarıldı** |
+| Teşhis kümesi | 1 566 (başlık ER'sine girmez) |
+| Digest | `e0466b9e673dca6cbdd05d8246730deea9371fa9a425055db715e8390e4a97b8` |
+
+Gerçek oyun faz payları **ölçüldü**: contact 0,5564 · bar 0,3706 · race 0,0730.
+
+**Bulunan hata:** ilk sürüm bölünmeyi faz içinde yapıyordu; bir oyun birden çok
+fazda pozisyon taşıdığı için aynı oyun hem CAL hem TEST'e düşüyordu
+(`verify_corpus2` 300+ ihlal). Düzeltme: bölünme tek seferde, oyun düzeyinde.
+
+### 30.3 ER — üç yol (model_v30, gnubg eval 2-ply, bootstrap 20 000)
+
+| Korpus | Yol | n | Ortalama | %95 GA | σ üst | Ağırlıklı |
+|---|---|---|---|---|---|---|
+| **v2** | `policy` | 1000 | **0,0402** | [0,0350; 0,0457] | 0,1025 | 0,0434 |
+| **v2** | `value` | 1000 | **0,0442** | [0,0384; 0,0504] | 0,1130 | 0,0478 |
+| **v2** | `search1` | 1000 | **0,0210** | [0,0181; 0,0240] | 0,0540 | 0,0221 |
+| v1 | `policy` | 200 | 0,0740 | [0,0594; 0,0893] | 0,1241 | — |
+| v1 | `search1` | 200 | 0,0515 | [0,0382; 0,0659] | 0,1180 | — |
+
+v1 `policy` = **0,0740**, tarihsel `stage_h_er_2ply.json` değeri **0,073970**
+ile aynı — yeni harness eski ölçümü birebir yeniden üretiyor.
+
+**Üretim yolu `search1`** (`ProductionDepthPly = 1`) ve ER **0,0210**; bugüne
+kadar raporlanan 0,0533/0,0617'den belirgin biçimde iyi (F7-46'nın nicel
+sonucu).
+
+### 30.4 v1 ↔ v2
+
+| Yol | v1 | v2 | Fark | z | %95 GA | Sıfır dışı |
+|---|---|---|---|---|---|---|
+| `policy` | 0,0740 | 0,0402 | **−0,0338** | −4,13 | [−0,0498; −0,0178] | evet |
+| `value` | 0,0746 | 0,0442 | **−0,0304** | −3,52 | [−0,0473; −0,0135] | evet |
+| `search1` | 0,0515 | 0,0210 | **−0,0305** | −4,22 | [−0,0447; −0,0163] | evet |
+
+v1 korpusu ER'yi `policy` yolunda **%84 göreli** abartıyordu. Karşılaştırma
+eşleşmemiş ve faz karışımı farklı; ayrıştırma R-C'ye bırakıldı (Kural 7).
+
+### 30.5 Güç tablosu (σ **üst** sınırından, Kural 4)
+
+| Korpus | Yol | σ üst | n (Δ=0,01) | n (Δ=0,02) | mevcut n | Δ=0,01 yeterli |
+|---|---|---|---|---|---|---|
+| v2 | `policy` | 0,1025 | **285** | 72 | 1000 | evet |
+| v2 | `value` | 0,1130 | **346** | 87 | 1000 | evet |
+| v2 | `search1` | 0,0540 | **79** | 20 | 1000 | evet |
+| v1 | `policy` | 0,1241 | 418 | 105 | 200 | **hayır** |
+
+v1'in 200 pozisyonu Δ=0,01 için hiçbir yolda yeterli değildi. R-14'ün
+düzeltilmiş hali: doğru sayı **285** — "264" değil.
+
+### 30.6 R-Q3 — vektörleştirici tutarlı, **model değil**
+
+`gnubg_er.vectorize` ayna tutarlılığı **40/40 doğru**; F6-31 sınıfı hata yok.
+Ama modelin değer çıktısı **antisimetrik değil**:
+
+| Ölçüm | Değer | Beklenen |
+|---|---|---|
+| `corr(e(+1), e(−1))` | **−0,7019** | −1,0000 |
+| ortalama `\|e(+1)+e(−1)\|` | **1,0044** | 0,0000 |
+| politika argmax iki perspektifte aynı | **1/59** | 59/59 |
+
+Neden: `ml/train_v2.py`'de `flip_exclusive` yalnızca TD(λ) hedef zincirinde
+kullanılıyor; girdi vektörü için perspektif artırımı **yok**. Naif düzeltme
+(logit ortalaması) ER'yi kötüleştirdi (0,0500 → 0,1674); doğru yol eğitimde
+artırımdır → R-D maddesi.
+
+### 30.7 R-Q4 — `random_positions`
+
+Hamle seçimi `rng.choice(sorted(states))` → yasal afterstate'ler üzerinde
+**tekdüze**. İki ölçülmüş kusur: (1) her ply'de `p = 0,5` örnekleme erken
+ply'leri aşırı temsil ediyor (`ply < 10` %14,0, medyan 34); (2) v1'in 200
+benzersiz tahtasından **yalnızca 1'i** (%0,50) damıtma çıktısında — R-13 doğru
+ama etkisi küçük, sızıntı aynı **dağılım** üzerinden.
+
+### 30.8 On-policy iyimserlik ölçüldü (v2 VAL, n=350)
+
+| Yol | gnubg2 | self | self/gnubg2 |
+|---|---|---|---|
+| `policy` | 0,0484 | 0,0433 | 0,90 |
+| `value` | 0,0637 | 0,0382 | **0,60** |
+| `search1` | 0,0227 | 0,0096 | **0,42** |
+
+`self` her yolda daha düşük ER veriyor; `search1`'de fark **2,4×**. Başlık
+ER'si bir **alt sınır** olarak okunmalı; `gnubg2` sütunu muhafazakâr referans.
+
+### 30.9 gnubg etiketleme maliyeti
+
+Tek çekirdek 2-ply `hint`: ortalama **0,562 s**/pozisyon. 4 süreçte
+**4,696 poz/s** (2,6× ölçekleme). 10 000 pozisyon ≈ 36 dk; 50 000 ≈ 3,0 sa.
+`faz 7.md` §5.1.1'deki "8× hızlanma" varsayımı **desteklenmiyor**.
+
+### 30.10 Doğrulama
+
+```
+ml/tests                    1159/1159  (3 yavaş/koşullu test atlanır)
+```
+
+Test 127–132 yeşil. `test_docs_consistency.py` 21/21 yeşil.

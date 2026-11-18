@@ -1,0 +1,111 @@
+{
+ "model": "ml/runs/stage_d_l2/onnx/model_v30.onnx",
+ "referee": {
+  "command": "eval",
+  "column": "2",
+  "plies": 2,
+  "prob": "equity"
+ },
+ "caseCount": 200,
+ "skipped": [],
+ "phaseWeights": {},
+ "paths": {
+  "policy": {
+   "path": "policy",
+   "label": "politika kafasi argmax (0-ply)",
+   "count": 200,
+   "mean": 0.07397,
+   "median": 0.016,
+   "maximum": 0.469,
+   "exactMatchRate": 0.365,
+   "sigma": 0.109072,
+   "sigmaCiLow": 0.092323,
+   "sigmaCiHigh": 0.124145,
+   "ciLow": 0.0594,
+   "ciHigh": 0.089345,
+   "standardError": 0.007713,
+   "phaseMeans": {
+    "bar": 0.04805,
+    "bearoff": 0.013919,
+    "closed": 0.147932,
+    "contact": 0.022513,
+    "race": 0.12425
+   },
+   "phaseCounts": {
+    "bar": 40,
+    "bearoff": 37,
+    "closed": 44,
+    "contact": 39,
+    "race": 40
+   },
+   "weightedMean": 0.07397,
+   "terminalCandidates": 0
+  },
+  "value": {
+   "path": "value",
+   "label": "deger kafasi argmax (0-ply)",
+   "count": 200,
+   "mean": 0.0746,
+   "median": 0.019,
+   "maximum": 0.552,
+   "exactMatchRate": 0.345,
+   "sigma": 0.114491,
+   "sigmaCiLow": 0.09543,
+   "sigmaCiHigh": 0.131816,
+   "ciLow": 0.059445,
+   "ciHigh": 0.090915,
+   "standardError": 0.008096,
+   "phaseMeans": {
+    "bar": 0.06005,
+    "bearoff": 0.015649,
+    "closed": 0.152455,
+    "contact": 0.034077,
+    "race": 0.09755
+   },
+   "phaseCounts": {
+    "bar": 40,
+    "bearoff": 37,
+    "closed": 44,
+    "contact": 39,
+    "race": 40
+   },
+   "weightedMean": 0.0746,
+   "terminalCandidates": 0
+  },
+  "search1": {
+   "path": "search1",
+   "label": "1-ply expectiminimax (deger kafasi)",
+   "count": 200,
+   "mean": 0.05146,
+   "median": 0.0,
+   "maximum": 0.481,
+   "exactMatchRate": 0.545,
+   "sigma": 0.100039,
+   "sigmaCiLow": 0.07934,
+   "sigmaCiHigh": 0.117986,
+   "ciLow": 0.03825,
+   "ciHigh": 0.065905,
+   "standardError": 0.007074,
+   "phaseMeans": {
+    "bar": 0.02085,
+    "bearoff": 0.004324,
+    "closed": 0.067227,
+    "contact": 0.00941,
+    "race": 0.149325
+   },
+   "phaseCounts": {
+    "bar": 40,
+    "bearoff": 37,
+    "closed": 44,
+    "contact": 39,
+    "race": 40
+   },
+   "weightedMean": 0.05146,
+   "terminalCandidates": 0
+  }
+ },
+ "corpus": "legacy-v1",
+ "split": "all",
+ "elapsedSeconds": 521.6,
+ "corpusDigest": "ad85265177515b41fb5e95b3904c231966ececd6928db178be0d84473469d072"
+}

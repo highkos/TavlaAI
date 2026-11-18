@@ -1,0 +1,126 @@
+{
+ "model": "ml/runs/stage_d_l2/onnx/model_v30.onnx",
+ "referee": {
+  "command": "eval",
+  "column": "2",
+  "plies": 2,
+  "prob": "equity"
+ },
+ "caseCount": 350,
+ "skipped": [],
+ "phaseWeights": {
+  "bar": 0.370558,
+  "contact": 0.556423,
+  "race": 0.073018
+ },
+ "paths": {
+  "policy": {
+   "path": "policy",
+   "label": "politika kafasi argmax (0-ply)",
+   "count": 350,
+   "mean": 0.046846,
+   "median": 0.0,
+   "maximum": 1.025,
+   "exactMatchRate": 0.5,
+   "sigma": 0.110414,
+   "sigmaCiLow": 0.077652,
+   "sigmaCiHigh": 0.14219,
+   "ciLow": 0.036166,
+   "ciHigh": 0.059063,
+   "standardError": 0.005902,
+   "phaseMeans": {
+    "bar": 0.049681,
+    "contact": 0.054112,
+    "race": 0.005477
+   },
+   "phaseCounts": {
+    "bar": 91,
+    "contact": 215,
+    "race": 44
+   },
+   "weightedMean": 0.048919,
+   "terminalCandidates": 0,
+   "sourceMeans": {
+    "gnubg2": 0.048377,
+    "self": 0.043321
+   },
+   "sourceCounts": {
+    "gnubg2": 244,
+    "self": 106
+   }
+  },
+  "value": {
+   "path": "value",
+   "label": "deger kafasi argmax (0-ply)",
+   "count": 350,
+   "mean": 0.05596,
+   "median": 0.0,
+   "maximum": 1.025,
+   "exactMatchRate": 0.485714,
+   "sigma": 0.129938,
+   "sigmaCiLow": 0.09311,
+   "sigmaCiHigh": 0.163936,
+   "ciLow": 0.043146,
+   "ciHigh": 0.070143,
+   "standardError": 0.006945,
+   "phaseMeans": {
+    "bar": 0.060385,
+    "contact": 0.064423,
+    "race": 0.005455
+   },
+   "phaseCounts": {
+    "bar": 91,
+    "contact": 215,
+    "race": 44
+   },
+   "weightedMean": 0.058621,
+   "terminalCandidates": 0,
+   "sourceMeans": {
+    "gnubg2": 0.06366,
+    "self": 0.038236
+   },
+   "sourceCounts": {
+    "gnubg2": 244,
+    "self": 106
+   }
+  },
+  "search1": {
+   "path": "search1",
+   "label": "1-ply expectiminimax (deger kafasi)",
+   "count": 350,
+   "mean": 0.01874,
+   "median": 0.0,
+   "maximum": 0.267,
+   "exactMatchRate": 0.608571,
+   "sigma": 0.04247,
+   "sigmaCiLow": 0.03394,
+   "sigmaCiHigh": 0.050507,
+   "ciLow": 0.014457,
+   "ciHigh": 0.023377,
+   "standardError": 0.00227,
+   "phaseMeans": {
+    "bar": 0.022407,
+    "contact": 0.020498,
+    "race": 0.002568
+   },
+   "phaseCounts": {
+    "bar": 91,
+    "contact": 215,
+    "race": 44
+   },
+   "weightedMean": 0.019896,
+   "terminalCandidates": 0,
+   "sourceMeans": {
+    "gnubg2": 0.022701,
+    "self": 0.009623
+   },
+   "sourceCounts": {
+    "gnubg2": 244,
+    "self": 106
+   }
+  }
+ },
+ "corpus": "v2",
+ "split": "val",
+ "elapsedSeconds": 777.5
+}

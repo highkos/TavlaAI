@@ -1,0 +1,103 @@
+{
+ "model": "ml/runs/stage_d_l2/onnx/model_v30.onnx",
+ "referee": {
+  "command": "eval",
+  "column": "2",
+  "plies": 2,
+  "prob": "equity"
+ },
+ "caseCount": 1000,
+ "skipped": [],
+ "phaseWeights": {
+  "bar": 0.370558,
+  "contact": 0.556423,
+  "race": 0.073018
+ },
+ "paths": {
+  "policy": {
+   "path": "policy",
+   "label": "politika kafasi argmax (0-ply)",
+   "count": 1000,
+   "mean": 0.040174,
+   "median": 0.0,
+   "maximum": 1.025,
+   "exactMatchRate": 0.484,
+   "sigma": 0.086727,
+   "sigmaCiLow": 0.071559,
+   "sigmaCiHigh": 0.102453,
+   "ciLow": 0.035017,
+   "ciHigh": 0.045683,
+   "standardError": 0.002743,
+   "phaseMeans": {
+    "bar": 0.04804,
+    "contact": 0.044795,
+    "race": 0.00858
+   },
+   "phaseCounts": {
+    "bar": 250,
+    "contact": 600,
+    "race": 150
+   },
+   "weightedMean": 0.043353,
+   "terminalCandidates": 0
+  },
+  "value": {
+   "path": "value",
+   "label": "deger kafasi argmax (0-ply)",
+   "count": 1000,
+   "mean": 0.044199,
+   "median": 0.0,
+   "maximum": 1.025,
+   "exactMatchRate": 0.48,
+   "sigma": 0.095736,
+   "sigmaCiLow": 0.078218,
+   "sigmaCiHigh": 0.113037,
+   "ciLow": 0.038445,
+   "ciHigh": 0.050356,
+   "standardError": 0.003027,
+   "phaseMeans": {
+    "bar": 0.053748,
+    "contact": 0.048823,
+    "race": 0.009787
+   },
+   "phaseCounts": {
+    "bar": 250,
+    "contact": 600,
+    "race": 150
+   },
+   "weightedMean": 0.047798,
+   "terminalCandidates": 0
+  },
+  "search1": {
+   "path": "search1",
+   "label": "1-ply expectiminimax (deger kafasi)",
+   "count": 1000,
+   "mean": 0.020962,
+   "median": 0.0,
+   "maximum": 0.417,
+   "exactMatchRate": 0.58,
+   "sigma": 0.04769,
+   "sigmaCiLow": 0.041479,
+   "sigmaCiHigh": 0.053968,
+   "ciLow": 0.018109,
+   "ciHigh": 0.023963,
+   "standardError": 0.001508,
+   "phaseMeans": {
+    "bar": 0.023544,
+    "contact": 0.022855,
+    "race": 0.009087
+   },
+   "phaseCounts": {
+    "bar": 250,
+    "contact": 600,
+    "race": 150
+   },
+   "weightedMean": 0.022105,
+   "terminalCandidates": 0
+  }
+ },
+ "corpus": "v2",
+ "split": "all",
+ "elapsedSeconds": 2119.8,
+ "corpusDigest": "e0466b9e673dca6cbdd05d8246730deea9371fa9a425055db715e8390e4a97b8"
+}
