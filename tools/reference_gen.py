@@ -219,7 +219,7 @@ def random_positions(rng, count, max_plies=40):
             dice = [d1, d1, d1, d1] if d1 == d2 else [d1, d2]
 
             max_steps, states = legal_after_states(board, turn, dice, wo, bo)
-            if max_steps == 0:
+            if max_steps == 0 or not states:
                 turn = -turn
                 continue
 

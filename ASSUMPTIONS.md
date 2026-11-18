@@ -3143,3 +3143,331 @@ göstergesi değil, farklı hedefin farklı ölçeğidir. Karşılaştırma yaln
 **Ders.** Bir kayıp fonksiyonunu değiştirdiğinizde, o kaybın **tanı sütunları**
 da anlamını değiştirir. Rapor, "hangi sayı hangi kayıpla üretildi" bilgisini
 taşımadıkça yanlış okunur.
+
+## F7-19 — λ-return formülü **doğrudur**; "sıfıra çöküyor" iddiası ödül tabanlı formülle karıştırmadır
+
+**Tarih:** 2026-11-17 (Faz 7, dış inceleme yanıtı)
+
+**İddia.** Bir dış inceleme, TD(λ) hedeflerinin şu formülle hesaplandığını ve bu
+yüzden sıfıra çöktüğünü öne sürdü:
+
+```
+(1-λ) * Σ_k λ^k r_k + λ^(T-t) * z_T
+```
+
+Ara ödül olmadığı için bu ifade `λ^(T-t) * z_T`'ye indirgenir; yani hedefler
+terminal değerin sönümlü bir kopyası olur. İnceleme, bunu F4-41'deki "hedefler
+sıfıra çöküyor" bulgusuyla ilişkilendirdi.
+
+**Doğrulama.** `ml/td_lambda.py` ve `ml/train_v2.py` bu formülü **kullanmıyor**.
+Gerçek özyineleme:
+
+```python
+y[n-1] = -z
+y[t]   = -((1-lam) * v[t+1] + lam * y[t+1])
+```
+
+Bu, **değer tabanlı** λ-return'dür ve bootstrap değerlerini (`v[t+1]`) içerir.
+Kapalı formu (`u[t] = -y[t]`):
+
+```
+u[t] = (1-λ) * Σ_{k=0}^{n-2-t} (-λ)^k * V[t+1+k] + (-λ)^(n-1-t) * z
+```
+
+`(-λ)^k` işaret değişimi, `mover` bakış açısının her kararda değişmesinden gelir.
+İddia edilen formülde bu terim **yoktur**; dolayısıyla iddia edilen formül bu
+problemin formülü değildir.
+
+**Kanıt.** `ml/tests/test_lambda_return_closed_form.py` (Test 125, **50 test**)
+her iki fonksiyonu (`td_lambda_targets`, `td_lambda_targets_exclusive`) yedi
+farklı λ için kapalı forma karşı doğrular; maksimum sapma **0,0** (birebir).
+Ayrıca:
+
+| Test | Ne kanıtlıyor |
+|---|---|
+| `test_125a_bootstrap_term_is_present` | `V_hat` değişince hedef değişiyor → bootstrap var |
+| `test_125a_scalar_does_not_collapse_to_zero` | Ara ödül sıfır olsa da hedef sıfıra çökmüyor |
+| `test_125a_reward_only_formula_would_collapse` | İddia edilen formül gerçekten çöküyor (karşı örnek) |
+| `test_125b_exclusive_matches_closed_form` | 6 sınıflı dağılımda `flip` permütasyonu doğru açılıyor |
+
+**Sonuç.** F4-41'in kök nedeni λ-return formülü **değildi**. O bulgu, `λ = 0,7`
+ile başlangıçta yanlı `V_hat`'in hedefe girmesiydi; düzeltme `λ = 1,0` (saf
+Monte Carlo) varsayılanına geçmek oldu ve bu zaten yapıldı (`DEFAULT_LAMBDA`).
+
+**Ders.** Bir formülü "hatalı" ilan etmeden önce, **hangi formülün** kodda
+olduğunu okumak gerekir. Ödül tabanlı ve değer tabanlı λ-return farklı
+nesnelerdir; ara ödül olmayan bir problemde ilki dejenere olur, ikincisi olmaz.
+Bu, projede beşinci "sessizce yanlış şeyi ölçme" vakasının **tersi**: burada
+doğru olan şey yanlış sanıldı. Aynı disiplin iki yönde de gerekli.
+
+---
+
+## F7-20 — Teşhis: sorun ölçek değil, pipeline (ölçüldü)
+
+**İddia (dış inceleme, madde 1.1).** Model basit bir sezgisel bottan (PipBot)
+kötü; bu bir **ölçek** değil **pipeline** sorunudur. Ölçek büyütmek bunu
+düzeltmez.
+
+**Neden ölçüm gerekti.** "Model kötü" tek bir sayı değildir. Bir model PipBot'u
+%99,5 yenip yine de bozuk bir değer kafasına sahip olabilir. Bu ikisi aynı anda
+doğruysa, daha büyük ağ **daha emin bir şekilde yanlış** olur. Bu yüzden iddia
+tek bir metrikle değil, **yedi bağımsız kapıyla** sınanır.
+
+**Araç.** `ml/pipeline_health.py` (Test 126, **117 test**). Kapılar:
+
+| Kapı | Ölçüt | Eşik |
+|---|---|---|
+| `G1` | PipBot'a karşı kazanma oranı | `>= 0,90` |
+| `G2` | Kalibrasyon eğimi | `[0,85; 1,15]` |
+| `G3` | Kalibrasyon MAE | `< 0,15` |
+| `G4` | Korelasyon | `> 0,90` |
+| `G5` | Std oranı | `[0,85; 1,15]` |
+| `G6` | 2-ply ER | `< 0,02` |
+| `G7` | `std(hedef) / std(terminal)` | `> 0,5` |
+
+**Ölçülen sonuç** (`ml/artifacts/pipeline_health.json`):
+
+| Kapı | Değer | Sonuç |
+|---|---|---|
+| `G1` | 0,9950 | **GEÇTİ** |
+| `G2` | 0,6743 | **DÜŞTÜ** |
+| `G3` | 0,2683 | **DÜŞTÜ** |
+| `G4` | 0,9016 | **GEÇTİ** |
+| `G5` | 1,3371 | **DÜŞTÜ** |
+| `G6` | 0,0740 | **DÜŞTÜ** |
+| `G7` | 3,0227 | **GEÇTİ** |
+
+**Teşhis: `pipeline`.** Model PipBot'u %99,5 yeniyor (`G1`), hedefleri
+çökmüyor (`G7` = 3,02), sıralaması doğru (`G4` = 0,90) — ama değer kafası
+**kalibre değil**: eğim 0,67 (olması gereken 1,0), MAE 0,27 (tavan 0,15), std
+oranı 1,34 (bant 0,85–1,15). Yani model doğru yönü biliyor, **yanlış büyüklükte**
+puanlıyor.
+
+**Karar kuralı (yazılı).** `G1` düşerse teşhis `temel` (model hiç oynamıyor).
+`G1` geçip `G2`/`G3`/`G4`/`G5`/`G7`'den biri düşerse teşhis `pipeline`. Hepsi
+geçerse `saglikli` ve ölçek büyütmek anlamlıdır. **`G1`–`G5` ve `G7`'nin hepsi
+ölçülmüş ve geçmiş olmadan `saglikli` denmez** — ölçülmemiş kapı varken
+"saglikli" demek sahte bir güvencedir; o durumda teşhis `bilinmiyor`dur. `G6`
+(ER) bu kuralın dışındadır: ER bir **güç** ölçümüdür, pipeline sağlığının
+önkoşulu değildir. Yalnızca `G6` düşerse `strength_gap` işareti konur ve
+teşhis `saglikli` kalır.
+
+**Sonuç ve sonraki adım.** Ölçek (large profile, 10⁵ oyun) bu teşhis altında
+**yanlış kaldıraçtır**. Önce hedef/kayıp/kalibrasyon hattı onarılmalıdır. Bu,
+F7-13'ün (post-hoc onarım eğimi düzeltir, MAE'yi düzeltmez) doğal devamıdır:
+eğim hatası çıkarımda onarılabilir, MAE hatası **eğitimde** onarılmalıdır.
+
+**Ders.** "Model kötü" ifadesi bir teşhis değil, bir şikâyettir. Teşhis, hangi
+kapının düştüğünü söyleyen ölçümdür. Bu projede altıncı kez aynı desen: ölçmeden
+önce yapılan yorum yanlış yönlendiriyordu — ama bu kez iddia **doğru** çıktı ve
+bunu kanıtlayan şey yine ölçüm oldu.
+
+## F7-21 — gnubg öğretmen deneyi: ER'yi değiştiren tek şey **politika** hedefidir
+
+**Soru (dış inceleme madde 1.3).** En büyük kaldıraç kendi aramamızın bilgisini
+damıtmak değil, **gnubg 2-ply etiketlerini öğretmen olarak kullanmak** mıdır?
+Etiketlerle ER 0,03'ün altına iniyorsa dar boğaz **pipeline**; inmiyorsa
+**kapasite**.
+
+**İlk deneme yanlış kurgulandı ve bunu ölçüm gösterdi.** `ml/gnubg_distill.py`
+ilk sürümü yalnızca **değer kafasını** eğitiyordu (MSE, `probs @ EQUITY_WEIGHTS ~
+hints[0].equity`). 1 200 pozisyon, 2-ply, 2 000 adım sonucu: eğitim kümesinde
+MAE **0,0072**, korelasyon **0,9996**, eğim **1,0026** — neredeyse kusursuz.
+Ama `er_harness` ile ölçülen ER **0,0708** (öncesi 0,0740). Yani **%4** iyileşme.
+
+**Neden?** ER, **politika** başı argmax ile ölçülür
+(`er_harness` → `gnubg_er.score_afterstates` → `criterion="policy"`). Değer
+kafası bu karar yolunda **hiç okunmaz**. Değer kafasını mükemmel eğitmek ER'yi
+tanımı gereği değiştiremez. Bu, F7-17'nin (damıtma değer hedefi skalerdir, 6
+sınıflı dağılım değil) doğal sonucudur ve **ölçümle** doğrulandı.
+
+**Düzeltme: politika damıtma.** `label-policy` / `train-policy` alt komutları
+eklendi. Her pozisyon için **yasal afterstate kümesi** üretilir, gnubg `hint`
+hamleleri bu kümeye eşlenir (`gnubg_hint.map_hints`), en iyi hamlenin indeksi
+**politika hedefi** olur. Kayıp:
+`CE(logits, best) + 0,5 · MSE(equity(best), best_equity)`.
+
+**Kritik ayrıntı — determinizm.** `tools.reference_gen.legal_after_states` bir
+**küme** döndürür; Python küme sırası koşular arası değişebilir. Sıralanmazsa
+`best_index` etiketleri koşudan koşuya kayar ve eğitim **sessizce** bozulur.
+`afterstate_case` bu yüzden `sorted(keys)` kullanır; `test_127j_afterstate_case_sorted`
+bunu kilitler.
+
+**Ölçülen sonuç (2 000 pozisyon, 4 000 adım, lr 3e-4, batch 64).** Eğitim
+kümesinde top-1 **1,0000**, kayıp 0,564 → 0,00055. VAL-ER **0,0533**
+(öncesi 0,0740) → **%28,0** iyileşme, standart hata 0,0108.
+
+**Karar: `belirsiz` (F7-24 ile düzeltildi).** Nokta tahmini %28 iyileşme
+gösteriyor, ama **eşleştirilmiş test** (aynı 70 pozisyon) GA95'i
+[−0,0062; +0,0414] veriyor: **sıfırı dışlamıyor** (t = +1,45). Bu yüzden ne
+"etiketler işe yaradı" ne "etiketler işe yaramadı" denebilir. İlk yazılan
+`kismi` kararı, nokta tahminini kanıt sayan bir hataydı; F7-24 bunu düzeltir.
+
+**Dürüstlük notları.**
+
+* Eğitim kümesinde top-1 = 1,0000 **ezberdir**, genelleme değil. 2 000 pozisyon
+  `medium` profilin (156 423 parametre) kapasitesinin altındadır. Gerçek
+  genelleme ölçüsü VAL-ER'dir (0,0533), eğitim top-1'i değil.
+* VAL-ER 70 pozisyonda ölçüldü; standart hata 0,0108. 0,0740 → 0,0533 farkı
+  (0,0207) SE'nin ~1,9 katıdır; **ama** eşleştirilmiş test (F7-24) GA95'i
+  [−0,0062; +0,0414] veriyor ve sıfırı dışlamıyor. "SE'nin 1,9 katı" tek başına
+  kanıt değildir: iki ölçüm aynı pozisyonlarda yapıldığı için doğru test
+  eşleştirilmiş olandır.
+* gnubg **GPL**'dir. Etiketler yalnızca araştırma/ölçüm içindir; ürün dağıtımı
+  öncesi lisans netleştirilmelidir (`LICENSE_NOTE`).
+* `tools/reference_gen.py` içindeki `random_positions` içinde **gerçek bir hata** bulundu ve
+  düzeltildi: `legal_after_states` "büyük zar kuralı" dalında `max_steps > 0`
+  ama `states` **boş** dönebiliyor; `rng.choice(sorted(states))` bu durumda
+  `IndexError` atıyordu. 10 000 pozisyonluk koşu bunu ortaya çıkardı. Düzeltme:
+  `if max_steps == 0 or not states`.
+
+**Ders.** "Etiketler sorunu çözer" iddiası, **hangi kafayı** eğittiğinize
+bağlıdır. Ölçüm hattı politika argmax'ı okuyorsa, değer kafasını eğitmek
+ölçülen metriği **tanımı gereği** değiştirmez. Bu, F6-31/F6-32'nin yedinci
+tekrarı: ölçülen şey ile iyileştirilen şey **aynı** olmalıdır.
+
+Çıktılar: `ml/artifacts/gnubg_distill_er.json` (değer kafası, 0,0708),
+`ml/artifacts/gnubg_policy_er.json` (politika 2 000, 0,0533),
+`ml/artifacts/gnubg_policy_er_10k.json` (politika 10 000, 0,0617),
+`ml/artifacts/gnubg_distill_verdict.json`, `ml/artifacts/gnubg_distill.md`.
+
+## F7-22 — Maç gücü: 400 oyun bir iddiayı kanıtlamaya yetmez
+
+**Soru (dış inceleme madde 1.4).** Faz 6'da 400 oyunla "2-away %40,0 vs %39,5"
+gibi ifadeler yazıldı. Bu bir **ölçüm** mü, **gürültü** mü? Ayrıca ppg
+(puan/oyun) hiç ölçülmedi.
+
+**Yöntem.** `ml/match_power.py` her iddiayı iki sayıya çevirir: **gerekli n** ve
+**saptanabilir en küçük fark**. Hiçbir sayı iddia değildir.
+
+**Ölçülen sonuçlar (p = 0,55, σ_ppg = 2,4, n = 400).**
+
+| İddia | Gereken n |
+|---|---|
+| Kazanma oranı ±0,05 (tek örnek) | **381** |
+| ppg ±0,10 | **2 213** |
+| ppg ±0,05 | **8 851** |
+| Şampiyonu yenme iddiası (kol başına, %50 → %55) | **1 565** |
+| ppg farkı iddiası (kol başına, Δ = 0,10) | **9 042** |
+| Maç kazanma oranı ±0,05 | **381** |
+
+**400 oyunun gerçeği.** p = 0,55'te yarım genişlik **0,0488**; p = 0,50'de
+**0,0490**. İncelemenin örneği olan **0,005**'lik fark, 400 oyunda saptanabilir
+en küçük farkın **~1/10'u**dur (oran **9,8×**). Yani "2-away %40,0 vs %39,5"
+ifadesi **ölçülemez**; yazılırsa gürültüyü ölçüm diye sunmak olur.
+
+**ppg neden zorunlu.** Aynı kazanma oranıyla mars oranını artıran bir model
+**daha güçlüdür**, ama kazanma oranı bunu göstermez. ppg gösterir. Bedeli
+ağırdır: σ_ppg ≈ 2,4 iken ±0,05 hassasiyet **8 851 oyun** ister — kazanma
+oranının ±0,05'i için gereken 381'in **23 katı**. Bu yüzden ppg iddiası
+**yalnızca** yeterli bütçe ayrıldığında yazılır.
+
+**Karar kuralı (yazılı).** Bir fark, yarım genişlikten **küçükse** rapor
+edilemez; "ölçüldü" denemez. `build_report` bunu `notes` içinde açıkça yazar
+(`olculemez`, oran `x`). Sessizce yazmak yasaktır.
+
+**Dürüstlük notları.**
+
+* σ_ppg = 2,4 **tahmindir** (Faz 6 `meanPoints` ölçümlerinden kaba türetme),
+  ölçüm değildir. Gerçek değer `--sigma` ile verilmelidir; ppg için gereken n
+  σ ile **doğrusal** ölçeklenir, yani bu sayı bir **alt sınırdır** eğer gerçek
+  σ daha büyükse.
+* MET okuması (`mwc_from_met`) Rockwell-Kazaross tablosunu kullanır ve
+  simetriyi (`a+b = 1`) ile monotonluğu test eder. Ancak maç **stratejisi**
+  (küp kararları) bu modülde ölçülmez; yalnızca MWC **okunur**.
+* `required_games_two_proportions` iki bağımsız örnek varsayar. Aynı rakibe
+  karşı oynanan oyunlar bağımsız değildir (seri korelasyon); gerçek gerekli n
+  bu sayıdan **büyüktür**. Bu bir alt sınırdır.
+
+Çıktılar: `ml/artifacts/match_power.json`, `ml/artifacts/match_power.md`.
+
+## F7-23 — Kapsam ayrımı: Faz 7 güç, Faz 8 ürün
+
+**Soru (dış inceleme madde 1.5).** Faz 7'de 8 ürün özelliği (Aşama G) ile güç
+hedefi aynı fazda. Güç tutmazsa ürün bekler — ama bu **yazılı değildi**.
+
+**Karar.** `faz 7.md` kural 16 ve §8.0 eklendi:
+
+* **Faz 7 kapsamı:** yalnızca güç (ölçüm hattı, kapasite, damıtma,
+  kalibrasyon, arama, küp/maç).
+* **Faz 7 kapsam dışı:** Aşama G'nin 8 özelliğinin **tamamı** (Test 111–118).
+* **Faz 8 kapsamı:** Aşama G + ürünleştirme, **Faz 7 güç kapısı geçildikten
+  sonra**.
+* **Bloke etme kuralı:** güç hedefi tutmazsa ürün **başlamaz**.
+* **Test numaraları:** 111–118 **rezerve**; Faz 7'de koşulmaz.
+* **Bütçe etkisi:** Aşama G'nin **5 günü** Faz 7 toplamından düşüldü →
+  **~45 → ~40 gün** (`medium`), **~96 → ~91 gün** (`large`).
+
+**Neden bu doğru.** Ürün özellikleri **kesin bitiş noktalarıdır**; güç hedefi
+**belirsiz süreli** bir aramadır. Aynı fazda yarışırlarsa güç hedefi kaybeder,
+çünkü ürün "bitti" diyebilir, güç diyemez. Ürünü ertelemek şampiyon iddiasını
+**zayıflatmaz**: ürün gücü artırmaz, yalnızca mevcut gücü kullanılabilir kılar.
+Tersi doğrudur — güç tutmadan yazılan ürün, **ölçülmemiş bir modeli** paketler.
+
+**Dürüstlük notu.** Bu ayrım, Faz 6 §11'in "ürünü Faz 7'ye taşıdık" taahhüdünü
+**kapatmaz**; Faz 8'e **devreder**. Taahhüt açık kalır ve Faz 8'in girdisidir.
+
+## F7-24 — Eşleştirilmiş test: %28'lik "iyileşme" gürültüden ayırt edilemiyor
+
+**Soru.** F7-21'de politika damıtma VAL-ER'yi 0,0740 → 0,0533'e indirdi ve bu
+"%28,0 iyileşme" olarak yazıldı. Bu bir **kanıt** mı, bir **nokta tahmini** mi?
+
+**Yöntem.** İki ölçüm **aynı 70 pozisyonda** yapıldı (`er_harness measure
+--split val`). Bu, eşleştirilmiş (paired) test yapmayı mümkün kılar ve
+pozisyon zorluğundan gelen varyansı eler. `ml/gnubg_distill.py` içine
+`load_er_losses` + `paired_loss_test` eklendi; `distill_verdict` artık
+`paired` parametresi alır.
+
+**Ölçülen sonuç (n = 70, aynı pozisyonlar).**
+
+| Karşılaştırma | Ortalama fark | GA95 | t | Sıfırı dışlıyor |
+|---|---|---|---|---|
+| değer kafası → politika 2 000 | +0,0176 | [−0,0062; +0,0414] | +1,45 | **hayır** |
+| değer kafası → politika 10 000 | +0,0091 | [−0,0209; +0,0392] | +0,59 | **hayır** |
+| politika 2 000 → politika 10 000 | −0,0084 | [−0,0318; +0,0149] | −0,71 | **hayır** |
+
+**Karar: `belirsiz`.** `distill_verdict(0,0708, 0,0533, paired=...)` →
+`belirsiz`. Yeni karar etiketi eklendi (`VERDICT_UNPROVEN`, CLI çıkış kodu 4).
+Kural: `paired` verildiğinde ve GA95 sıfırı dışlamıyorsa, nokta tahmini
+**kanıt sayılmaz**; `kismi`/`kapasite` kararı verilmez.
+
+**İkinci bulgu — veri hacmi işe yaramadı.** 2 000 → 10 000 pozisyon (5×),
+aynı epoch sayısı (128) ile ER **0,0533 → 0,0617** oldu: daha **kötü**.
+Fark anlamlı değil (t = −0,71), ama **monoton iyileşme de yok**. Yani
+"kapasite payı" iddiası bu ölçekte veriyle desteklenmiyor. 10 000 pozisyon
+5 064 s'de etiketlendi (0 atlandı, aday ortalaması 22,8).
+
+**Neden bu önemli.** F7-21'in ilk hâli, %28'lik nokta tahminini kanıt gibi
+sundu ve `kismi` kararı verdi. Bu, projenin kendi kuralını (F6-31/F6-32)
+ihlal ediyordu: **ölçülen fark, gürültüden ayrılmadan iddia edilemez.**
+Eşleştirilmiş test bunu yakaladı. Doğru ifade: "politika damıtma umut verici
+bir yön, ama 70 pozisyonda kanıtlanmadı."
+
+**Gereken n.** Gözlenen fark (0,0176) ve eşleştirilmiş SD (0,1016) ile %80 güç
+için gereken n ≈ **264** pozisyon (tek yönlü, α = 0,05). Mevcut 70, bunun
+%27'si. Yani karar için **en az 264**, güvenli olması için ~400 pozisyon
+gerekir. Bu, `ml/er_power.py` ile aynı hesaptır.
+
+**Dürüstlük notları.**
+
+* Eşleştirilmiş test normal yaklaşım kullanır (n = 70 için t dağılımı yerine
+  z = 1,96). Kritik değer farkı (2,00 vs 1,96) sonucu değiştirmez: t = 1,45
+  her iki durumda da anlamsızdır.
+* 70 pozisyon `reference_positions.json`'dan gelir ve **sabit**tir; yeni
+  pozisyon eklemek korpusu değiştirir ve önceki ölçümlerle karşılaştırmayı
+  bozar. Bu yüzden n artırmak, korpusu büyütmek demektir — ayrı bir iştir.
+* 10 000 pozisyonluk koşu, 2 000'lik koşunun **üst kümesidir** (aynı seed 11,
+  aynı `random_positions` sırası). Yani iki kol arasındaki tek fark hacim ve
+  adım sayısıdır (ikisi de 128 epoch).
+* Eğitim top-1 her iki kolda da 1,0000: her iki model de eğitim kümesini
+  ezberliyor. Bu, `medium` profilin 10 000 pozisyon için bile fazla kapasiteli
+  olduğunu gösterir — yani darboğaz kapasite **değil**.
+
+**Ders.** Aynı veri üzerinde iki ölçüm yapıldığında **eşleştirilmiş** test
+kullanılmalıdır; bağımsız iki örnek testi hem güçsüz hem de yanıltıcıdır.
+Nokta tahmini + standart hata, "SE'nin 1,9 katı" gibi bir argüman **kanıt
+değildir**.
+
+Çıktılar: `ml/artifacts/gnubg_distill_verdict.json` (karar `belirsiz`),
+`ml/artifacts/gnubg_distill.md` (§4.1 eşleştirilmiş test, §4.2 veri hacmi
+kolları), `ml/artifacts/gnubg_policy_er_10k.json`.

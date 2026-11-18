@@ -14,6 +14,20 @@
       "skewness": 1.7405,
       "tailShare": 0.2716,
       "measuredAt": "2026-11-17T02:06:31.884754+00:00"
+    },
+    {
+      "stage": "C+",
+      "model": "ml/runs/gnubg_distill/model_gnubg_policy.onnx",
+      "n": 70,
+      "sigma": 0.09065,
+      "sigmaCiLow": 0.063206,
+      "sigmaCiHigh": 0.113149,
+      "mean": 0.053271,
+      "ciLow": 0.033428,
+      "ciHigh": 0.075671,
+      "skewness": 2.0438,
+      "tailShare": 0.6693,
+      "measuredAt": "2026-11-17T22:46:50.338071+00:00"
     }
   ]
 }

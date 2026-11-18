@@ -3282,13 +3282,13 @@ aynı şey değildir.
 ### 51.5 Doğrulama
 
 ```
-ml/tests                     771/771  (3 yavaş/koşullu test atlanır)
+ml/tests                     1142/1142  (3 yavaş/koşullu test atlanır)
 Backgammon.Tests             285/285
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
 ```
 
-Toplam **1244**. Aşama B üç yeni pytest dosyası (`test_critical.py` 76,
+Toplam **1615**. Aşama B üç yeni pytest dosyası (`test_critical.py` 76,
 `test_capacity_bench.py` 48, `test_export_ckpt.py` 12) ve `StageBDataQualityTests` (9)
 ekledi. B3 kararı dört dosya daha ekledi: `test_distill.py` (34), `test_calibrate.py` (32),
 `test_critical.py` içindeki 20 marj testi ve `ProductionDepthTests` (10).
@@ -3410,3 +3410,230 @@ koşuda `model_v1.onnx` eğitilmemiş ağırlıktır; iki kol bu yüzden bayt ba
 dosya üretti. Doğru yol `ml/export_ckpt.py` ile `ckpt_vN.pt` → ONNX'tir. Aynı
 sınıf hata (F6-32, F7-04, F7-10, bu) **dördüncü** kez görüldü: ölçüm hattının
 hangi dosyayı okuduğu açıkça yazılmadıkça sessizce yanlış sayı üretiliyor.
+
+---
+
+## 54. Pipeline sağlığı teşhisi (`ml/pipeline_health.py`)
+
+### 54.1 Amaç
+
+"Model kötü" tek bir sayı değildir. Bir model PipBot'u %99,5 yenip yine de
+bozuk bir değer kafasına sahip olabilir. Bu ikisi aynı anda doğruysa, daha
+büyük ağ **daha emin bir şekilde yanlış** olur. `ml/pipeline_health.py` bu
+ayrımı ölçülebilir kılar: yedi bağımsız kapı, tek teşhis.
+
+### 54.2 Yapı
+
+| Öğe | Görev |
+|---|---|
+| `Gate` | Tek kapının değeri, geçti/düştü, notu |
+| `TargetSpread` | TD hedefi vs terminal değer saçılımı (`G7`) |
+| `HealthReport` | Kapı listesi + `verdict` + `strength_gap` |
+| `gate_*` | Yedi saf fonksiyon (her biri `None` → `olculmedi`) |
+| `target_spread` | İki diziden saçılım özeti |
+| `spread_from_shards` | Shard → `V_hat` → TD(λ) hedefi → `TargetSpread` |
+| `calibration_from_artifact` | Düz ve `before`/`after` biçimlerini okur |
+| `pip_win_rate_from_artifact` | `--eval-json` çıktısından PipBot oranı |
+| `er_from_artifact` | ER ölçüm JSON'undan ortalama |
+| `diagnose` | Artifact'lar → `HealthReport` |
+| `build_markdown` | İnsan-okur rapor |
+
+### 54.3 Model yükleme (F7-20)
+
+`ml/model.py::build_model` imzası `build_model(in_dim, h1, h2, *, seed,
+output_version, profile)` şeklindedir — **profil adı tek başına geçilemez**.
+`spread_from_shards` bu yüzden `CAPACITY_PROFILES[profile][:2]` ile `h1`/`h2`
+türetir ve `output_version=2` verir. Ayrıca `BackgammonNetV2` **6 sınıflı
+olasılık** döndürür; `replay._predict_values` ise **skaler** bekler. Bu yüzden
+model `_EquityValueModel` ile sarılır: `probs @ EQUITY_WEIGHTS` (F7-17 ile aynı
+kural). `--model` verilmezse `_ZeroValueModel` kullanılır (`V_hat = 0`).
+
+### 54.4 Teşhis kuralı
+
+`G1` düşerse `temel`; `G1` geçip `G2`/`G3`/`G4`/`G5`/`G7`'den biri düşerse
+`pipeline`; hepsi ölçülmüş ve geçmişse `saglikli`; aksi halde `bilinmiyor`.
+`G6` (ER) yalnızca `strength_gap` işaretini etkiler. CLI çıkış kodları:
+0 `saglikli`, 1 `pipeline`, 2 `temel`, 3 `bilinmiyor`.
+
+### 54.5 Ölçülen sonuç
+
+`G1` 0,9950 **geçti**; `G2` 0,6743, `G3` 0,2683, `G5` 1,3371 **düştü**;
+`G4` 0,9016 ve `G7` 3,0227 **geçti**; `G6` 0,0740 **düştü** → teşhis
+**`pipeline`**. Ölçek büyütmek bu teşhis altında yanlış kaldıraçtır.
+
+## 55. gnubg öğretmen hattı — politika damıtma
+
+### 55.1 Neden değer kafası yetmez
+
+ER **politika** başı argmax ile ölçülür:
+`er_harness` → `gnubg_er.score_afterstates(criterion="policy")` →
+`OnnxScorer.logits` → `argmax`. Değer kafası (`probs @ EQUITY_WEIGHTS`) bu
+karar yolunda **hiç okunmaz**. Bu yüzden değer kafasını eğitmek ölçülen ER'yi
+tanımı gereği değiştirmez. Ölçüm bunu doğruladı: değer kafası MAE 0,0072 /
+korelasyon 0,9996 ile eğitildi, ER 0,0740 → 0,0708 (%4).
+
+### 55.2 Hat
+
+```
+refgen.random_positions  ->  (board, turn, dice, wo, bo)
+        |
+        v
+afterstate_case()        ->  yasal afterstate'ler, SIRALI (deterministik)
+        |
+        v
+HintReferee.hint()       ->  gnubg 2-ply hamle listesi
+        |
+        v
+gnubg_hint.map_hints()   ->  hamle -> afterstate indeksi
+        |
+        v
+best_index = argmax(equity)  ->  POLITIKA HEDEFI
+        |
+        v
+train_policy_head()      ->  CE(logits, best) + 0,5 * MSE(equity(best), y)
+```
+
+### 55.3 Determinizm sözleşmesi
+
+`tools.reference_gen.legal_after_states` bir **küme** döndürür. Küme sırası
+koşular arası değişebilir; sıralanmazsa `best_index` etiketleri kayar ve eğitim
+**sessizce** bozulur. `afterstate_case` bu yüzden `sorted(keys)` kullanır ve
+`test_127j_afterstate_case_sorted` bunu kilitler. Bu, F6-31/F6-32 sınıfındaki
+sessiz hataların önlenmesidir.
+
+### 55.4 Veri yapıları
+
+| Tip | Alanlar | Not |
+|---|---|---|
+| `PolicyPosition` | `vectors`, `best_index`, `best_equity`, `turn`, `dice`, `best_move`, `candidates`, `mapping_failures` | Tek pozisyonun aday kümesi |
+| `PolicyDataset` | `x` [M, 221], `offsets` [N+1], `best` [N], `y` [N], `meta` | Ragged; `candidates(i)` dilim döndürür |
+| `_pad_policy` | `x` [N, L, 221], `mask` [N, L], `width` | Eğitim için doldurma |
+
+`offsets` şeması seçildi çünkü aday sayısı pozisyondan pozisyona değişir
+(ölçümde ortalama 22,4, en fazla 346). Sabit genişlikli doldurma bellek
+israfı olurdu; `offsets` + `mask` hem kompakt hem geri alınabilir.
+
+### 55.5 Kayıp
+
+`L = CE(logits_masked, best) + value_weight * MSE(equity(best_probs), y)`
+
+`logits` maske ile `-1e9`'a çekilir (yasal olmayan adaylar). `value_weight`
+varsayılan **0,5**: politika ana hedeftir, değer yalnızca destek olur. Değer
+terimi tamamen kaldırılsaydı `probs` kafası serbest kalır ve `equity` çıktısı
+anlamsızlaşırdı; bu yüzden küçük ama sıfır olmayan bir ağırlık kullanılır.
+
+### 55.6 Ölçülen sonuç
+
+2 000 pozisyon / 4 000 adım / lr 3e-4 / batch 64 → eğitim top-1 1,0000
+(**ezber**), VAL-ER **0,0740 → 0,0533** (%28,0 nokta tahmini, SE 0,0108).
+Eşleştirilmiş test (§57) GA95'i [−0,0062; +0,0414] verir: sıfırı dışlamıyor.
+Karar **`belirsiz`** — nokta tahmini kanıt değildir.
+
+### 55.7 Lisans
+
+gnubg **GPL**'dir. Etiketler yalnızca araştırma/ölçüm içindir; ürün dağıtımı
+öncesi lisans netleştirilmelidir (`gnubg_distill.LICENSE_NOTE`).
+
+## 56. Maç gücü analizi
+
+### 56.1 Amaç
+
+Her iddiayı **gerekli n** ve **saptanabilir en küçük fark** olarak yazmak.
+Hiçbir sayı iddia değildir.
+
+### 56.2 Formüller
+
+| Ölçüm | Formül |
+|---|---|
+| Kazanma oranı yarım genişlik | `z * sqrt(p(1-p)/n)` |
+| Gereken n (tek örnek) | `ceil(z^2 p(1-p) / hw^2)` |
+| İki oran testi (kol başına) | `(z_a sqrt(2 p̄(1-p̄)) + z_b sqrt(p0(1-p0)+p1(1-p1)))^2 / Δ^2` |
+| ppg yarım genişlik | `z σ / sqrt(n)` |
+| Gereken n (ppg) | `ceil((z σ / hw)^2)` |
+| İki ortalama testi (kol başına) | `2 (z_a + z_b)^2 σ^2 / Δ^2` |
+
+### 56.3 Ölçülen sonuçlar (p = 0,55, σ = 2,4, n = 400)
+
+| İddia | Gereken n |
+|---|---|
+| Kazanma oranı ±0,05 | 381 |
+| ppg ±0,10 | 2 213 |
+| ppg ±0,05 | 8 851 |
+| Şampiyonu yenme (kol başına) | 1 565 |
+| ppg farkı (kol başına) | 9 042 |
+
+400 oyunda yarım genişlik **0,0488** (p = 0,55) / **0,0490** (p = 0,50).
+İncelemenin örneği olan 0,005'lik fark bunun **1/10'u** → **ölçülemez**.
+
+### 56.4 Karar kuralı
+
+`hw > claimed_delta` ise rapor `notes` içinde `olculemez` ve oran `x` yazar.
+Sessizce yazmak yasaktır. `CLAIMED_DELTA = 0,005` (incelemenin örneği).
+
+### 56.5 Sınırlar
+
+* σ_ppg = 2,4 **tahmindir**; `--sigma` ile gerçek değer verilmelidir.
+* İki oran/ortalama testleri **bağımsız** örnek varsayar; seri korelasyon
+  gerçek gerekli n'i büyütür → sayı bir **alt sınırdır**.
+* MET (`mwc_from_met`) yalnızca **okunur**; küp stratejisi ölçülmez.
+
+## 57. Eşleştirilmiş ER testi
+
+### 57.1 Neden
+
+`er_harness measure` iki farklı modeli **aynı** korpus üzerinde ölçer. Bu,
+eşleştirilmiş (paired) test yapmayı mümkün kılar: pozisyon zorluğundan gelen
+varyans farkta **sadeleşir**. Bağımsız iki örnek testi bu varyansı taşır ve
+gereksiz yere güçsüzdür.
+
+### 57.2 API
+
+| Fonksiyon | İmza | Döndürdüğü |
+|---|---|---|
+| `load_er_losses` | `(path: Path) -> dict[str, float]` | pozisyon adı → `equityLoss` |
+| `paired_loss_test` | `(before, after, *, z=1.96) -> dict` | `n`, `meanDiff`, `sd`, `se`, `t`, `ciLow`, `ciHigh`, `excludesZero` |
+| `parse_arm` | `(text: str) -> (str, Path)` | `"etiket=yol"` ayrıştırma |
+| `distill_verdict` | `(..., paired=None) -> str` | `paired` sıfırı dışlamıyorsa `belirsiz` |
+
+`meanDiff = mean(before − after)`; **pozitif** değer iyileşme demektir.
+`excludesZero` yalnızca %95 GA sıfırı dışlıyorsa `True` olur.
+
+### 57.3 Karar kuralı
+
+```
+er_after <= target                      -> pipeline
+paired verildi ve !excludesZero         -> belirsiz   (VERDICT_UNPROVEN, çıkış 4)
+er_after <= er_before * (1 - min_gain)  -> kismi
+aksi halde                              -> kapasite
+```
+
+`paired` verilmediğinde eski nokta-tahmini kuralı geçerlidir; bu geriye dönük
+uyumluluk içindir, **tercih edilen yol `paired` vermektir**.
+
+### 57.4 Rapor bölümleri
+
+`build_markdown` iki yeni bölüm üretir:
+
+* **§4.1 Eşleştirilmiş test** — n, ortalama fark, SE, t, GA95, sıfırı dışlıyor mu.
+* **§4.2 Veri hacmi kolları** — `--arm ETIKET=YOL` ile verilen her kol için
+  ER ve (varsa) `erBefore`'a göre eşleştirilmiş fark.
+
+### 57.5 Ölçülen sonuç (n = 70)
+
+| Karşılaştırma | Ortalama fark | GA95 | t | Sıfırı dışlıyor |
+|---|---|---|---|---|
+| değer kafası → politika 2 000 | +0,0176 | [−0,0062; +0,0414] | +1,45 | hayır |
+| değer kafası → politika 10 000 | +0,0091 | [−0,0209; +0,0392] | +0,59 | hayır |
+| politika 2 000 → politika 10 000 | −0,0084 | [−0,0318; +0,0149] | −0,71 | hayır |
+
+Hiçbiri anlamlı değil. Ayrıca 5× veri ER'yi **kötüleştirdi** (0,0533 →
+0,0617): monoton iyileşme yok, yani darboğaz kapasite değil.
+
+### 57.6 Sınırlar
+
+* Normal yaklaşım kullanılır (z = 1,96); n = 70 için t kritik değeri 2,00'dir.
+  Sonuç değişmez (t = 1,45), ama n < 30 için bu yaklaşım zayıftır.
+* Korpus sabittir (70 pozisyon). n artırmak korpusu büyütmek demektir.
+* Eşleştirme yalnızca **aynı** korpus ve **aynı** hakem derinliği için
+  geçerlidir; farklı derinliklerde ölçüm yapıldıysa eşleştirme anlamsızdır
+  (F7-04).

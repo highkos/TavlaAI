@@ -1,0 +1,59 @@
+{
+  "games": 200,
+  "noiseFloor": [
+    {
+      "games": 100,
+      "ppgHalfWidth": 0.470391356289613,
+      "winRateHalfWidth": 0.09750697708993936
+    },
+    {
+      "games": 200,
+      "ppgHalfWidth": 0.33261691784392267,
+      "winRateHalfWidth": 0.06894784471329746
+    },
+    {
+      "games": 400,
+      "ppgHalfWidth": 0.2351956781448065,
+      "winRateHalfWidth": 0.04875348854496968
+    },
+    {
+      "games": 1000,
+      "ppgHalfWidth": 0.1487508077530948,
+      "winRateHalfWidth": 0.030834413536206525
+    },
+    {
+      "games": 5000,
+      "ppgHalfWidth": 0.06652338356878454,
+      "winRateHalfWidth": 0.01378956894265949
+    },
+    {
+      "games": 20000,
+      "ppgHalfWidth": 0.03326169178439227,
+      "winRateHalfWidth": 0.006894784471329745
+    },
+    {
+      "games": 100000,
+      "ppgHalfWidth": 0.014875080775309477,
+      "winRateHalfWidth": 0.0030834413536206524
+    }
+  ],
+  "notes": [
+    "200 oyunda kazanma orani icin GA yari genisligi 0.0689 (incelemenin isaret ettigi gurultu esigi 0.05).",
+    "200 oyunda ppg icin GA yari genisligi 0.3326 (sigma = 2.40).",
+    "ppg olculmeden yalnizca kazanma oranina bakmak, mars oranini artiran bir modeli oldugundan **zayif** gosterir.",
+    "200 oyun gurultu esigi esiginin ALTINDA: bu hacimde '%40,0 vs %39,5' gibi bir fark **gurultudur**, olcum degil.",
+    "Iddia edilen fark 0.0050, 200 oyunda saptanabilir en kucuk fark 0.0689: oran 13.8x. Bu fark bu hacimde **olculemez**; gucu yetmiyor."
+  ],
+  "ppgHalfWidth": 0.33261691784392267,
+  "ppgSigma": 2.4,
+  "required": {
+    "gamesForPpgHalfWidth0_05": 8851,
+    "gamesForPpgHalfWidth0_10": 2213,
+    "gamesForWinRateHalfWidth5pct": 381,
+    "gamesPerArmPpgVsChampion": 9042,
+    "gamesPerArmWinRateVsChampion": 1565,
+    "matchesForMatchWinRateHalfWidth5pct": 381
+  },
+  "winRate": 0.55,
+  "winRateHalfWidth": 0.06894784471329746
+}

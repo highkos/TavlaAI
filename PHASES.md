@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **285** | ~30 dk 38 s | ✅ 285/285 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **771** | ~8 dk 40 s | ✅ 771/771 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1244** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1142** | ~8 dk 30 s | ✅ 1142/1142 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **1615** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -2479,13 +2479,13 @@ Bölüm 5.1.6 üç yol tanımlar ve **kullanıcı onayı** ister. Ölçüm sonra
 ### 21.9 Doğrulama
 
 ```
-ml/tests                     771/771  (3 yavaş/koşullu test atlanır)
+ml/tests                     1142/1142  (3 yavaş/koşullu test atlanır)
 Backgammon.Tests             285/285
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
 ```
 
-Toplam **1244**. Aşama B üç yeni pytest dosyası (`test_critical.py` 76,
+Toplam **1615**. Aşama B üç yeni pytest dosyası (`test_critical.py` 76,
 `test_capacity_bench.py` 48, `test_export_ckpt.py` 12) ve `StageBDataQualityTests` (9)
 ekledi. B3 kararı dört dosya daha ekledi: `test_distill.py` (34), `test_calibrate.py` (32),
 `test_critical.py` içindeki 20 marj testi ve `ProductionDepthTests` (10).
@@ -2626,3 +2626,239 @@ yazar. Doğru yol `ml/export_ckpt.py` ile checkpoint'ten aktarmaktır.
   değilse pozisyon **sansürlü** sayılır; kapsama ~%80,5. F-A9 kapısı %99 ister.
 - **F7-04 yöntem değişimi.** 2-ply hakemi `eval`, 3/4-ply hakemi `hint`; her
   rapor `methodNote` taşımalı.
+
+---
+
+## 24. Aşama C+ — Pipeline sağlığı teşhisi (F7-20)
+
+Dış incelemenin 1.1 maddesi ("sorun ölçek değil, pipeline") **ölçüldü**.
+`ml/pipeline_health.py` yedi bağımsız kapı tanımlar ve mevcut artifact'lardan
+tek bir teşhis üretir. Test 126 (`ml/tests/test_pipeline_health.py`, **117
+test**) her kapı sınırını, dört teşhis sonucunu ve CLI çıkış kodlarını doğrular.
+
+### 24.1 Kapılar ve ölçülen değerler
+
+| Kapı | Ölçüt | Değer | Sonuç |
+|---|---|---|---|
+| `G1` | PipBot kazanma oranı ≥ 0,90 | 0,9950 | **GEÇTİ** |
+| `G2` | Kalibrasyon eğimi [0,85; 1,15] | 0,6743 | **DÜŞTÜ** |
+| `G3` | Kalibrasyon MAE < 0,15 | 0,2683 | **DÜŞTÜ** |
+| `G4` | Korelasyon > 0,90 | 0,9016 | **GEÇTİ** |
+| `G5` | Std oranı [0,85; 1,15] | 1,3371 | **DÜŞTÜ** |
+| `G6` | 2-ply ER < 0,02 | 0,0740 | **DÜŞTÜ** |
+| `G7` | `std(hedef)/std(terminal)` > 0,5 | 3,0227 | **GEÇTİ** |
+
+**Teşhis: `pipeline`.** Model PipBot'u %99,5 yeniyor, hedefleri çökmüyor
+(`G7` = 3,02), sıralaması doğru (`G4` = 0,90) — ama değer kafası kalibre
+değil. Yani model doğru yönü biliyor, **yanlış büyüklükte** puanlıyor.
+
+### 24.2 Karar kuralı
+
+`G1` düşerse `temel`. `G1` geçip `G2`/`G3`/`G4`/`G5`/`G7`'den biri düşerse
+`pipeline`. Hepsi geçerse `saglikli`. **`G1`–`G5` ve `G7`'nin hepsi ölçülmüş ve
+geçmiş olmadan `saglikli` denmez** — ölçülmemiş kapı varken "sağlıklı" demek
+sahte bir güvencedir; o durumda teşhis `bilinmiyor`dur. `G6` (ER) bu kuralın
+dışındadır: ER bir **güç** ölçümüdür. Yalnızca `G6` düşerse `strength_gap`
+işareti konur ve teşhis `saglikli` kalır.
+
+### 24.3 G7'nin ölçülmesi
+
+`G7` shard'lardan hesaplanır: `replay.build_value_samples` ile TD(λ) hedefleri
+üretilir, aynı kararların terminal değerleriyle karşılaştırılır. `V_hat`
+verilmezse hedefler tam olarak `±z` olur ve oran yapısal olarak 1 çıkar — yani
+**bilgi taşımaz**. Bu yüzden `--model` zorunludur. Ölçümde
+`ml/runs/stage_d_l2/checkpoints/ckpt_v30.pt` kullanıldı: 1 108 karar, hedef std
+1,3542, terminal std 0,4480, oran **3,0227**.
+
+### 24.4 Sonuç
+
+Ölçek (large profil, 10⁵ oyun) bu teşhis altında **yanlış kaldıraçtır**. Önce
+hedef/kayıp/kalibrasyon hattı onarılmalıdır. Bu, F7-13'ün doğal devamıdır:
+eğim hatası çıkarımda onarılabilir, MAE hatası **eğitimde** onarılmalıdır.
+
+Çıktılar: `ml/artifacts/pipeline_health.json`, `ml/artifacts/pipeline_health.md`.
+
+## 25. Aşama C+ — gnubg öğretmen deneyi (F7-21)
+
+### 25.1 Soru
+
+Dış inceleme (madde 1.3) en büyük kaldıracın **gnubg 2-ply etiketleri** olduğunu
+öne sürdü: etiketlerle ER 0,03'ün altına iniyorsa dar boğaz **pipeline**,
+inmiyorsa **kapasite**. Bu, §24'ün (`pipeline` teşhisi) doğal devamıdır.
+
+### 25.2 İlk kurgu ve neden yanlıştı
+
+`ml/gnubg_distill.py` ilk sürümü yalnızca **değer kafasını** eğitti. 1 200
+pozisyon, 2-ply, 2 000 adım: eğitim MAE **0,0072**, korelasyon **0,9996**,
+eğim **1,0026**. Ölçülen ER: **0,0708** (öncesi 0,0740) — %4.
+
+**Neden:** ER **politika** başı argmax ile ölçülür
+(`gnubg_er.score_afterstates`, `criterion="policy"`). Değer kafası bu yolda
+okunmaz. Değer kafasını mükemmel eğitmek ER'yi **tanımı gereği** değiştirmez.
+
+### 25.3 Düzeltme — politika damıtma
+
+`label-policy` / `train-policy` alt komutları eklendi:
+
+1. `afterstate_case` yasal afterstate kümesini **sıralı** üretir (küme sırası
+   koşular arası değişirse `best_index` kayar ve eğitim sessizce bozulur).
+2. gnubg `hint` hamleleri `gnubg_hint.map_hints` ile bu kümeye eşlenir.
+3. En iyi hamlenin indeksi **politika hedefi** olur.
+4. Kayıp: `CE(logits, best) + 0,5 · MSE(equity(best), best_equity)`.
+
+### 25.4 Ölçülen sonuç
+
+| Ölçüm | Değer |
+|---|---|
+| Pozisyon | 2 000 (2-ply, seed 7) |
+| Aday ortalaması | 22,4 |
+| Adım / lr / batch | 4 000 / 3e-4 / 64 |
+| Eğitim top-1 | 1,0000 (**ezber**) |
+| Kayıp | 0,564 → 0,00055 |
+| **VAL-ER (öncesi)** | **0,0740** |
+| **VAL-ER (sonrası)** | **0,0533** |
+| İyileşme | **%28,0** |
+| Standart hata | 0,0108 |
+
+### 25.5 Karar
+
+`distill_verdict(0,0740, 0,0533)` → **`kismi`** (nokta tahmini kuralı). Bu
+karar §28'de **`belirsiz`** olarak düzeltildi: eşleştirilmiş test GA95'i
+sıfırı dışlamıyor. Aşağıdaki tablo nokta tahminleridir, kanıt değildir.
+
+### 25.6 Yan bulgu — `random_positions` hatası
+
+10 000 pozisyonluk koşu `IndexError` ile düştü:
+`tools/reference_gen.py` içindeki `random_positions` içinde `legal_after_states` "büyük zar
+kuralı" dalında `max_steps > 0` ama `states` **boş** dönebiliyor, ve
+`rng.choice(sorted(states))` boş listede patlıyor. Düzeltme:
+`if max_steps == 0 or not states`. Bu, 2 000 pozisyonluk koşuda **görünmedi**
+(şans); 10 000'de ortaya çıktı.
+
+### 25.7 Çıktılar
+
+`ml/artifacts/gnubg_distill_er.json`, `ml/artifacts/gnubg_policy_er.json`,
+`ml/artifacts/gnubg_policy_er_10k.json`,
+`ml/artifacts/gnubg_distill_verdict.json`, `ml/artifacts/gnubg_distill.md`.
+
+## 26. Maç gücü analizi (F7-22)
+
+### 26.1 Soru
+
+Faz 6'da 400 oyunla "2-away %40,0 vs %39,5" gibi ifadeler yazıldı. Bu ölçüm
+mü, gürültü mü? ppg neden yok?
+
+### 26.2 Yöntem
+
+`ml/match_power.py` her iddiayı **gerekli n** ve **saptanabilir en küçük fark**
+olarak yazar. Hiçbir sayı iddia değildir.
+
+### 26.3 Ölçülen sonuçlar (p = 0,55, σ_ppg = 2,4, n = 400)
+
+| İddia | Gereken n |
+|---|---|
+| Kazanma oranı ±0,05 | 381 |
+| ppg ±0,10 | 2 213 |
+| ppg ±0,05 | 8 851 |
+| Şampiyonu yenme (kol başına) | 1 565 |
+| ppg farkı (kol başına, Δ = 0,10) | 9 042 |
+| Maç kazanma oranı ±0,05 | 381 |
+
+400 oyunda yarım genişlik p = 0,55'te **0,0488**, p = 0,50'de **0,0490**.
+İncelemenin örneği olan **0,005**'lik fark bunun **~1/10'u** (oran 9,8×):
+**ölçülemez**.
+
+### 26.4 Karar kuralı
+
+Bir fark yarım genişlikten küçükse **rapor edilemez**. `build_report` bunu
+`notes` içinde `olculemez` ve oran `x` olarak yazar. Sessizce yazmak yasaktır.
+
+### 26.5 Dürüstlük notları
+
+* σ_ppg = 2,4 **tahmindir**; gerçek değer `--sigma` ile verilmelidir.
+* İki oran testi **bağımsız** örnek varsayar; aynı rakibe karşı seri korelasyon
+  gerçek gerekli n'i **büyütür** — sayı bir **alt sınırdır**.
+* MET yalnızca **okunur**; maç stratejisi (küp) ölçülmez.
+
+### 26.6 Çıktılar
+
+`ml/artifacts/match_power.json`, `ml/artifacts/match_power.md`.
+
+## 27. Kapsam ayrımı — Faz 7 güç, Faz 8 ürün (F7-23)
+
+Dış inceleme (madde 1.5) haklıydı: 8 ürün özelliği ile güç hedefi aynı fazda
+olamaz. `faz 7.md` kural 16 ve §8.0 eklendi:
+
+| Karar | Değer |
+|---|---|
+| Faz 7 kapsamı | Yalnızca güç |
+| Faz 7 kapsam dışı | Aşama G'nin 8 özelliği (Test 111–118) |
+| Faz 8 kapsamı | Aşama G + ürünleştirme, güç kapısı sonrası |
+| Bloke etme | Güç tutmazsa ürün **başlamaz** |
+| Test 111–118 | **Rezerve**; Faz 7'de koşulmaz |
+| Bütçe | **~45 → ~40 gün** (`medium`), **~96 → ~91 gün** (`large`) |
+
+Ürün gücü **artırmaz**, yalnızca mevcut gücü kullanılabilir kılar. Bu yüzden
+ertelemek şampiyon iddiasını zayıflatmaz; tersi doğrudur — güç tutmadan yazılan
+ürün **ölçülmemiş bir modeli** paketler.
+
+## 28. Eşleştirilmiş test — %28'lik iyileşme kanıtlanmadı (F7-24)
+
+### 28.1 Soru
+
+§25'te politika damıtma VAL-ER'yi 0,0740 → 0,0533'e indirdi ve "%28,0
+iyileşme" yazıldı. Bu bir **kanıt** mı, bir **nokta tahmini** mi?
+
+### 28.2 Yöntem
+
+İki ölçüm **aynı 70 pozisyonda** yapıldı (`er_harness measure --split val`).
+Bu, eşleştirilmiş (paired) test yapmayı mümkün kılar ve pozisyon zorluğundan
+gelen varyansı eler. `ml/gnubg_distill.py` içine `load_er_losses` +
+`paired_loss_test` eklendi; `distill_verdict` artık `paired` parametresi alır.
+
+### 28.3 Ölçülen sonuç (n = 70, aynı pozisyonlar)
+
+| Karşılaştırma | Ortalama fark | GA95 | t | Sıfırı dışlıyor |
+|---|---|---|---|---|
+| değer kafası → politika 2 000 | +0,0176 | [−0,0062; +0,0414] | +1,45 | **hayır** |
+| değer kafası → politika 10 000 | +0,0091 | [−0,0209; +0,0392] | +0,59 | **hayır** |
+| politika 2 000 → politika 10 000 | −0,0084 | [−0,0318; +0,0149] | −0,71 | **hayır** |
+
+### 28.4 Karar
+
+`distill_verdict(0,0708, 0,0533, paired=...)` → **`belirsiz`**. Yeni karar
+etiketi `VERDICT_UNPROVEN` (CLI çıkış kodu 4). Kural: `paired` verildiğinde ve
+GA95 sıfırı dışlamıyorsa nokta tahmini **kanıt sayılmaz**; `kismi`/`kapasite`
+kararı verilmez.
+
+### 28.5 İkinci bulgu — veri hacmi işe yaramadı
+
+2 000 → 10 000 pozisyon (5×), aynı epoch sayısı (128) ile ER
+**0,0533 → 0,0617**: daha **kötü**. Fark anlamlı değil (t = −0,71) ama
+**monoton iyileşme de yok**. "Kapasite payı" iddiası bu ölçekte veriyle
+desteklenmiyor. 10 000 pozisyon 5 064 s'de etiketlendi (0 atlandı, aday
+ortalaması 22,8). Eğitim top-1 her iki kolda da 1,0000: darboğaz kapasite
+**değil**.
+
+### 28.6 Gereken n
+
+Gözlenen fark (0,0176) ve eşleştirilmiş SD (0,1016) ile %80 güç için gereken
+n ≈ **264** pozisyon (tek yönlü, α = 0,05). Mevcut 70, bunun %27'si. Karar
+için en az 264, güvenli olması için ~400 pozisyon gerekir.
+
+### 28.7 Dürüstlük notları
+
+* Eşleştirilmiş test normal yaklaşım kullanır (z = 1,96). t dağılımı kritik
+  değeri 2,00'dir; t = 1,45 her iki durumda da anlamsızdır.
+* 70 pozisyon `reference_positions.json`'dan gelir ve **sabittir**; n artırmak
+  korpusu büyütmek demektir, ayrı bir iştir.
+* 10 000 pozisyonluk koşu, 2 000'lik koşunun **üst kümesidir** (aynı seed 11).
+  İki kol arasındaki tek fark hacim ve adım sayısıdır (ikisi de 128 epoch).
+* §25.5'teki `kismi` kararı, nokta tahminini kanıt sayan bir hataydı. Bu
+  bölüm onu düzeltir; §25.5 artık §28'e atıf yapar.
+
+### 28.8 Çıktılar
+
+`ml/artifacts/gnubg_distill_verdict.json` (karar `belirsiz`),
+`ml/artifacts/gnubg_distill.md` (§4.1 eşleştirilmiş test, §4.2 veri hacmi
+kolları), `ml/artifacts/gnubg_policy_er_10k.json`.
