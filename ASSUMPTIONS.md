@@ -4134,3 +4134,179 @@ ER'yi **iyimser** gösterebilir.
 dağılımın ER'yi iyimser gösterdiği **doğrudan kanıtlandı**. Başlık ER'si bir
 **alt sınır** olarak okunmalı; `gnubg2` sütunu muhafazakâr referanstır.
 `er_paths` artık `sourceMeans`/`sourceCounts` alanlarını üretiyor.
+
+---
+
+## F7-63 — G7'nin 3,0227'si bir **birim uyumsuzluğuydu**, çökme değil
+
+`ml/replay.py:terminal_value` **işaretsiz** büyüklük döndürür
+(`resultPoints / cubeValue`, F6-07). `ml/td_lambda.py:td_lambda_targets` ise
+**işaretli** hedef üretir (mover perspektifi, her adımda işaret döner).
+`spread_from_shards` bu iki farklı büyüklüğü karşılaştırıyordu.
+
+λ = 1'de hedef tam olarak `(-1)^(T-1-t) · z`'dir. İşaretsiz `z` ile
+karşılaştırılırsa oran **yapısal olarak** 1'i aşar:
+
+```
+std(hedef) = √E[z²]        std(terminal) = std(z)
+oran = √(1 + (mean(z)/std(z))²) > 1
+```
+
+**Düzeltme:** `pipeline_health.signed_terminal_series(z, decision_indices,
+n_decisions)` eklendi; `spread_from_shards` artık işaretli terminal kullanır.
+Eski (hatalı) karşılaştırma `legacyRatio` alanında **kayıt için** tutulur.
+
+**Ölçüm** (`it1_0000.bgsp.gz`, 627 737 örnek, `ckpt_v15.pt`):
+
+| Mod | Oran (işaretli) | Eski oran | Hedef std | Terminal std |
+|---|---|---|---|---|
+| λ=1, model yok | **1,000000** | 2,8781 | 1,4839 | 1,4839 |
+| λ=1, model var | **1,000000** | 2,8781 | 1,4839 | 1,4839 |
+| λ=0,7, model yok | 0,176031 | 0,5066 | 0,2612 | 1,4839 |
+| λ=0,7, model var | 0,682135 | 1,9633 | 1,0122 | 1,4839 |
+
+λ=1'de oran **tam olarak 1** — hedefler terminal değerlerin kopyasıdır.
+λ=0,7 + model yok: hedefler `-(0,3·0 + 0,7·y_next)` ile sıfıra çöker → 0,176;
+kapı bunu **doğru** yakalar. λ=0,7 + model var: `V̂` hedefleri taşır → 0,682.
+
+**Sonuç:** G7 artık **1,0000 ile GEÇTİ**. Önceki 3,0227 bir arıza değil,
+ölçüm hatasıydı. `ml/artifacts/g7_modes.json` dört modu kaydeder.
+
+---
+
+## F7-64 — G7 çift taraflı oldu: bant **[0,5; 1,5]**
+
+Tek taraflı kapı (`> 0,5`) yalnızca çökmeyi yakalıyordu; oranın 1'in üzerine
+çıkması da bir arızadır (hedefler terminal değerlerden **daha geniş** → birim
+veya işaret hatası). `TARGET_STD_RATIO_MAX = 1,5` eklendi; bant kapalı aralık.
+
+> **ONAY GEREKİYOR (Kural 2).** Üst sınır yeni bir eşiktir. Gerekçe: TD(λ)
+> hedefleri terminal değerlerin yumuşatılmış hâlidir, bu yüzden oran ≤ 1
+> beklenir; 1,5 üstü ancak bir birim/işaret hatasıyla oluşur. Onaylanmazsa kapı
+> tek taraflı kalır ve 3,0227 gibi bir değer yine **gizlenir**.
+
+---
+
+## F7-65 — G5 onaylanmış Faz 6 bandına döndü: **[0,7; 1,4]**
+
+`Faz 6 v3.md` §6.3 ve §13.2: `0,7 ≤ oran ≤ 1,4`. Kodda `0,85–1,15` vardı ve
+bu bandın **hiçbir belgede gerekçesi yok** (R-09).
+
+| Bant | 1,3371 | 2,78 (Faz 5) |
+|---|---|---|
+| Faz 6: [0,7; 1,4] | **GEÇTİ** | DÜŞTÜ |
+| Faz 7 sıkı: [0,85; 1,15] | DÜŞTÜ | DÜŞTÜ |
+
+`STD_RATIO_MIN/MAX` → `0,7 / 1,4`; sıkı bant `STD_RATIO_LEGACY_MIN/MAX` olarak
+**kayıt** için durur ve her kapı notunda raporlanır
+(`sıkı bant [0,85; 1,15] ile: DÜŞTÜ`). İki bant da her raporda görünür.
+
+---
+
+## F7-66 — `distill_verdict` yeniden yazıldı: önce eşleştirilmiş GA
+
+Eski kod (R-07):
+
+```python
+if er_after <= target:      # NOKTA TAHMİNİ, GA yok  → Kural 3 ihlali
+    return VERDICT_PIPELINE
+...
+return VERDICT_CAPACITY     # "etiketler işe yaramadı" → "kapasite" (geçersiz)
+```
+
+İki kusur: (a) nokta tahmini kanıt sayılıyordu; (b) olumsuzluktan olumlu iddia
+çıkarılıyordu.
+
+**Yeni sözleşme.** `paired_er_test(before, after)` eşleştirilmiş fark **ve**
+`er_after`'ın **mutlak** bootstrap %95 GA'sını üretir (20 000 yeniden
+örnekleme). `distill_verdict` sırası:
+
+| Koşul | Etiket |
+|---|---|
+| ölçüm eksik / sonlu değil | `bilinmiyor` |
+| `paired` yok | `belirsiz` |
+| `n < required_n` | **`veri-yetersiz`** (yeni) |
+| `paired.ciHighAfter ≤ target` | `pipeline` |
+| GA sıfırı dışlıyor **ve** `meanDiff > 0` | `kısmi` |
+| aksi hâlde | `belirsiz` |
+
+CLI çıkış kodları: 0 `pipeline`/`kısmi`, 3 `bilinmiyor`, 4 `belirsiz`,
+**5 `veri-yetersiz`**.
+
+---
+
+## F7-67 — `VERDICT_CAPACITY` artık **üretilmiyor**
+
+Etiketlerin işe yaramaması, darboğazın ağ/veri olduğunu **kanıtlamaz**. Bu
+iddia ancak bir öğrenme eğrisi eğimiyle kurulabilir. Sabit, eski artifact'ları
+okuyabilmek için duruyor; metni "**Kaldırıldı (Faz 7-R R-07)**" diye başlıyor ve
+`ml/learning_curve.py`'ye yönlendiriyor. `distill_verdict_detail` ayrıca
+`capacityInference: false` alanını yazar.
+
+---
+
+## F7-68 — `ml/learning_curve.py`: öğrenme eğrisi altyapısı
+
+Aynı hat, aynı tohum, **yalnızca veri hacmi** değişir: N, 2N, 4N, 8N. Her
+noktada ER (üç yol), kalibrasyon eğimi/MAE, **in-sample** ve **held-out** kayıp
+(ayrı alanlar — Kural 5).
+
+Eğim: ER'nin `log2(veri)` başına değişimi, OLS. GA **pozisyon düzeyinde**
+yeniden örnekleme ile (20 000) — nokta düzeyinde değil, çünkü belirsizliğin
+kaynağı korpus örneklemesidir.
+
+**İşaret sözleşmesi:** `gain = -slope` (pozitif = veri arttıkça ER düşüyor).
+Karar `gain` üzerinden verilir:
+
+| Koşul | Karar |
+|---|---|
+| `gainCiLow ≥ ε` | `ölçek` |
+| `gainCiHigh < ε` | `pipeline` |
+| aksi hâlde | `belirsiz` |
+
+`ε = 0,005` (`pipeline_health.SCALING_SLOPE_EPSILON` ile aynı).
+`CurveReport.scaling_summary()` doğrudan `diagnose(scaling=...)`'e beslenir.
+
+> **Dürüstlük notu:** gerçek eğitim hattı bu modüle **henüz bağlanmadı**;
+> `main()` bilerek `SystemExit` atar. Gerçek koşum R-D'de yapılacak.
+
+---
+
+## F7-69 — `scaling_evidence` alanı: `yok | eğim<ε | eğim≥ε`
+
+`HealthReport.scaling_evidence` + `scaling_note` + `to_dict()["scalingEvidence"]`.
+CLI: `--scaling <json>`.
+
+`yok` **"ölçek işe yaramaz" demek değildir**; "ölçülmedi" demektir. Markdown
+raporu bunu açıkça yazar. GA ε'yu kesiyorsa `scaling_note` "karar **belirsiz**"
+diye ekler.
+
+---
+
+## F7-70 — Onarılmış teşhis: üç gerçek arıza, iki ölçüm hatası
+
+`ml/artifacts/pipeline_health_r_c.json`:
+
+| Kapı | Etiket | Değer | Sonuç | Önce |
+|---|---|---|---|---|
+| G1 | PipBot kazanma oranı ≥ 0,90 | 0,9950 | GEÇTİ | GEÇTİ |
+| G2 | Kalibrasyon eğimi [0,85; 1,15] | 0,6743 | **DÜŞTÜ** | DÜŞTÜ |
+| G3 | Kalibrasyon MAE < 0,15 | 0,2683 | **DÜŞTÜ** | DÜŞTÜ |
+| G4 | Korelasyon > 0,90 | 0,9016 | GEÇTİ | GEÇTİ |
+| G5 | Std oranı [0,7; 1,4] (Faz 6) | 1,3371 | **GEÇTİ** | DÜŞTÜ (yanlış bant) |
+| G6 | 2-ply ER < 0,02 | 0,0740 | **DÜŞTÜ** | DÜŞTÜ |
+| G7 | Hedef saçılımı [0,5; 1,5] | 1,0000 | **GEÇTİ** | GEÇTİ (yanlış ölçüm) |
+
+Teşhis **`pipeline`** (değişmedi), ama artık **üç** gerçek arıza var:
+kalibrasyon eğimi, kalibrasyon MAE, ER. Önceki raporda G5 ve G7 de "düşen"
+görünüyordu; ikisi de **ölçüm hatasıydı**, gerçek arıza değil.
+
+---
+
+## F7-71 — Test numarası çakışması düzeltildi: R-T1 = **128**
+
+R-B'de `test_corpus2.py` Test 127–132 olarak numaralandı. Ancak
+`ml/tests/test_gnubg_distill.py` **zaten** "Test 127" başlığını taşıyor
+(`f8b9917`'de eklendi). Yani son test numarası 127'ydi ve R-T1 = **128**
+olmalıydı. Düzeltildi: `test_corpus2.py` → Test 128–133, R-C testleri →
+Test 134–138.

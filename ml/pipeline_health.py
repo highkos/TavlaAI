@@ -67,13 +67,31 @@ SLOPE_MAX = 1.15
 MAE_MAX = 0.15
 #: G4: korelasyon alt siniri.
 CORRELATION_MIN = 0.90
-#: G5: std orani alt/ust siniri.
-STD_RATIO_MIN = 0.85
-STD_RATIO_MAX = 1.15
+#: G5: std orani alt/ust siniri. **Faz 6 bandi** (``Faz 6 v3.md`` Bolum 6.3 ve
+#: 13.2: ``0,7 <= oran <= 1,4``).
+#:
+#: Faz 7-R (R-09): kodda 0,85-1,15 bandi vardi; bu bandin **hicbir belgede
+#: gerekcesi yok**. Olculen 1,3371 Faz 6 bandinda **gecer**, siki bandda
+#: duser. Onaylanmis band Faz 6'nin bandidir; siki bandin gerekcesi
+#: yazilmadigi icin geri alindi. Iki bant da raporlanir.
+STD_RATIO_MIN = 0.7
+STD_RATIO_MAX = 1.4
+#: Faz 7'de kullanilan (gerekcesi yazilmamis) siki bant - yalnizca **kayit**
+#: icin; kapi bu bandi kullanmaz.
+STD_RATIO_LEGACY_MIN = 0.85
+STD_RATIO_LEGACY_MAX = 1.15
 #: G6: sampiyon ER hedefi (2-ply gnubg).
 ER_MAX = 0.02
-#: G7: hedef saciliminin terminal sacilimina orani.
+#: G7: hedef saciliminin terminal sacilimina orani. **Cift tarafli** bant.
+#:
+#: Faz 7-R (R-08/R-09): eski kapi tek tarafliydi (``> 0,5``) ve bu yuzden
+#: 3,0227 gibi **yapisal olarak bozuk** bir orani "gecti" sayiyordu. Oranin
+#: 1'den buyuk olmasi, hedeflerin terminal degerlerden **daha genis** oldugu
+#: anlamina gelir; TD(lam) hedefleri terminal degerlerin yumusatilmis hali
+#: oldugu icin bu beklenmez. Ust sinir olmadan kapi, birim uyusmazligini
+#: (isaretli hedef vs isaretsiz terminal) gizler.
 TARGET_STD_RATIO_MIN = 0.5
+TARGET_STD_RATIO_MAX = 1.5
 
 GATE_IDS = ("G1", "G2", "G3", "G4", "G5", "G6", "G7")
 
@@ -82,10 +100,28 @@ GATE_LABELS = {
     "G2": "Kalibrasyon egimi [0,85; 1,15]",
     "G3": "Kalibrasyon MAE < 0,15",
     "G4": "Korelasyon > 0,90",
-    "G5": "Std orani [0,85; 1,15]",
+    "G5": "Std orani [0,7; 1,4] (Faz 6)",
     "G6": "2-ply ER < 0,02",
-    "G7": "Hedef sacilimi cokmemis (> 0,5)",
+    "G7": "Hedef sacilimi [0,5; 1,5]",
 }
+
+#: Olcekleme kaniti esigi: ER'nin **log2(veri)** basina **dususu** (kazanc).
+#:
+#: Faz 7-R (R-10): "olcek mi pipeline mi" sorusu bir **ogrenme egrisi**
+#: egimiyle yanitlanir. ``epsilon`` altindaki kazanc, veri ikiye katlandiginda
+#: ER'nin olculebilir bicimde iyilesmedigi anlamina gelir; o durumda olcek
+#: buyutmek dogru kaldirac degildir.
+#:
+#: **Isaret sozlesmesi:** ``scaling["slope"]`` bir **kazanctir** - pozitif
+#: deger ER'nin veriyle dustugunu gosterir. Ham OLS egimi negatiftir;
+#: ``ml/learning_curve.py`` her ikisini de raporlar.
+SCALING_SLOPE_EPSILON = 0.005
+
+#: ``scaling_evidence`` durumlari (Faz 7-R Asama R-C, madde 5).
+SCALING_NONE = "yok"
+SCALING_BELOW = "egim<eps"
+SCALING_AT_OR_ABOVE = "egim>=eps"
+SCALING_STATES = (SCALING_NONE, SCALING_BELOW, SCALING_AT_OR_ABOVE)
 
 #: Teshis etiketleri.
 VERDICT_HEALTHY = "saglikli"
@@ -152,10 +188,18 @@ def gate_correlation(correlation: float | None) -> Gate:
 
 
 def gate_std_ratio(std_ratio: float | None) -> Gate:
-    """G5: std orani."""
+    """G5: std orani, **Faz 6 bandinda** (0,7-1,4).
+
+    Faz 7'de kullanilan siki bant (0,85-1,15) gerekcesi yazilmadigi icin geri
+    alindi (Faz 7-R R-09). Iki bandin sonucu da ``note`` alaninda raporlanir.
+    """
     if std_ratio is None:
         return _gate("G5", None, None, "olculmedi")
-    return _gate("G5", float(std_ratio), STD_RATIO_MIN <= float(std_ratio) <= STD_RATIO_MAX)
+    value = float(std_ratio)
+    ok = STD_RATIO_MIN <= value <= STD_RATIO_MAX
+    legacy_ok = STD_RATIO_LEGACY_MIN <= value <= STD_RATIO_LEGACY_MAX
+    note = "siki bant [0,85; 1,15] ile: " + ("GECTI" if legacy_ok else "DUSTU")
+    return _gate("G5", value, ok, note)
 
 
 def gate_er(er: float | None) -> Gate:
@@ -166,10 +210,24 @@ def gate_er(er: float | None) -> Gate:
 
 
 def gate_target_std_ratio(ratio: float | None) -> Gate:
-    """G7: hedef sacilimi cokmemis mi."""
+    """G7: hedef sacilimi **cift tarafli** bantta mi.
+
+    Tek tarafli kapi (Faz 7-R oncesi) yalnizca cokmeyi yakaliyordu; oranin
+    1'in uzerine cikmasi da bir arizadir (hedefler terminal degerlerden daha
+    genis -> birim/isaret uyusmazligi). Bu yuzden ust sinir zorunludur.
+    """
     if ratio is None:
         return _gate("G7", None, None, "olculmedi")
-    return _gate("G7", float(ratio), float(ratio) > TARGET_STD_RATIO_MIN)
+    value = float(ratio)
+    if not math.isfinite(value):
+        return _gate("G7", value, False, "oran hesaplanamadi (terminal std = 0)")
+    ok = TARGET_STD_RATIO_MIN <= value <= TARGET_STD_RATIO_MAX
+    note = ""
+    if value > TARGET_STD_RATIO_MAX:
+        note = "ust sinir asildi: hedefler terminal degerlerden daha genis"
+    elif value < TARGET_STD_RATIO_MIN:
+        note = "hedefler coktu"
+    return _gate("G7", value, ok, note)
 
 
 # ----------------------------------------------------------------------
@@ -179,7 +237,15 @@ def gate_target_std_ratio(ratio: float | None) -> Gate:
 
 @dataclass
 class TargetSpread:
-    """TD hedeflerinin sacilimi vs terminal degerlerin sacilimi."""
+    """TD hedeflerinin sacilimi vs terminal degerlerin sacilimi.
+
+    ``signed`` alani karsilastirmanin **dogru** yapildigini kaydeder. Faz 7-R
+    oncesi ``terminals`` **isaretsiz** buyukluktu (``resultPoints/cubeValue``,
+    F6-07) ve hedefler **isaretli** (mover perspektifi) idi; bu iki farkli
+    buyukluk karsilastirildigi icin oran yapisal olarak 1'den buyuk cikiyordu
+    (olculen 3,0227). ``legacy_ratio`` o hatali karsilastirmanin degerini
+    **kayit icin** tutar; kapi artik onu kullanmaz.
+    """
 
     count: int
     target_std: float
@@ -187,12 +253,21 @@ class TargetSpread:
     target_mean: float
     terminal_mean: float
     zero_share: float
+    signed: bool = True
+    legacy_terminal_std: float = 0.0
 
     @property
     def ratio(self) -> float:
         if self.terminal_std <= 0.0:
             return float("nan")
         return self.target_std / self.terminal_std
+
+    @property
+    def legacy_ratio(self) -> float:
+        """Isaretsiz terminal std ile oran (Faz 7-R oncesi hatali olcum)."""
+        if self.legacy_terminal_std <= 0.0:
+            return float("nan")
+        return self.target_std / self.legacy_terminal_std
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -203,25 +278,43 @@ class TargetSpread:
             "terminalMean": self.terminal_mean,
             "zeroShare": self.zero_share,
             "ratio": self.ratio,
+            "signed": self.signed,
+            "legacyTerminalStd": self.legacy_terminal_std,
+            "legacyRatio": self.legacy_ratio,
         }
 
 
-def target_spread(targets: Iterable[float], terminals: Iterable[float]) -> TargetSpread:
+def target_spread(
+    targets: Iterable[float],
+    terminals: Iterable[float],
+    *,
+    signed: bool = True,
+    legacy_terminals: Iterable[float] | None = None,
+) -> TargetSpread:
     """Hedef ve terminal dizilerinden sacilim ozeti.
 
-    ``targets``: TD(lam) hedefleri (equity, mover perspektifi).
-    ``terminals``: ayni kararlarin terminal degerleri (mover perspektifi).
+    ``targets``: TD(lam) hedefleri (equity, **mover perspektifi**, isaretli).
+    ``terminals``: ayni kararlarin terminal degerleri, **ayni perspektifte ve
+    ayni isaretle**. Isaretsiz buyukluk vermek orani yapisal olarak bozar
+    (Faz 7-R R-08).
 
     Hedefler terminal degerlerin **kopyasi** ise ``ratio ~ 1``; hedefler sifira
     coktuyse ``ratio ~ 0``. Bootstrap kullanildiginda ``ratio`` 1'den kucuk
     olabilir (hedef yumusatilmis), ama 0,5'in altina inmesi cokme isaretidir.
+    ``legacy_terminals`` verilirse eski (isaretsiz) karsilastirma da kaydedilir.
     """
     t = np.asarray(list(targets), dtype=np.float64).reshape(-1)
     z = np.asarray(list(terminals), dtype=np.float64).reshape(-1)
     if t.shape[0] != z.shape[0]:
         raise ValueError("targets ve terminals ayni uzunlukta olmali")
     if t.shape[0] == 0:
-        return TargetSpread(0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        return TargetSpread(0, 0.0, 0.0, 0.0, 0.0, 0.0, signed=signed)
+    legacy_std = 0.0
+    if legacy_terminals is not None:
+        lz = np.asarray(list(legacy_terminals), dtype=np.float64).reshape(-1)
+        if lz.shape[0] != t.shape[0]:
+            raise ValueError("legacy_terminals ayni uzunlukta olmali")
+        legacy_std = float(np.std(lz))
     return TargetSpread(
         count=int(t.shape[0]),
         target_std=float(np.std(t)),
@@ -229,7 +322,27 @@ def target_spread(targets: Iterable[float], terminals: Iterable[float]) -> Targe
         target_mean=float(np.mean(t)),
         terminal_mean=float(np.mean(z)),
         zero_share=float(np.mean(np.abs(t) < 1e-9)),
+        signed=signed,
+        legacy_terminal_std=legacy_std,
     )
+
+
+def signed_terminal_series(z: float, decision_indices: Iterable[int], n_decisions: int) -> np.ndarray:
+    """Bir oyunun terminal degerini **karar basina isaretli** hale getirir.
+
+    ``td_lambda_targets`` zinciri ``y[T-2] = -z`` ile baslar ve her adimda
+    isareti cevirir; yani ``t`` kararinin terminal degeri
+    ``(-1)**(n_decisions - t) * z`` olur. G7 karsilastirmasi bu **isaretli**
+    diziyle yapilmalidir; isaretsiz ``z`` ile yapilirsa oran yapisal olarak
+    ``sqrt(1 + (mean/std)**2) > 1`` cikar (Faz 7-R R-08).
+    """
+    idx = np.asarray(list(decision_indices), dtype=np.int64).reshape(-1)
+    if idx.size == 0:
+        return np.zeros(0, dtype=np.float64)
+    if idx.min() < 0 or idx.max() >= n_decisions:
+        raise ValueError("karar indeksi aralik disinda")
+    sign = np.where((n_decisions - idx) % 2 == 0, 1.0, -1.0)
+    return sign * float(z)
 
 
 class _ZeroValueModel:
@@ -338,14 +451,23 @@ def spread_from_shards(
     samples = replay.build_value_samples(model, games, lam=lam, device=device)
     targets = np.asarray(samples.y, dtype=np.float64)
 
-    # Ayni orneklerin terminal degerleri: her ornek kendi oyununun z'si.
+    # Ayni orneklerin terminal degerleri. Iki dizi de **mover perspektifinde ve
+    # isaretli** olmalidir; isaretsiz z ile karsilastirmak orani yapisal olarak
+    # 1'in uzerine cikarir (Faz 7-R R-08, olculen 3,0227).
     terminals = np.empty_like(targets)
+    legacy = np.empty_like(targets)
     usable = [g for g in games if replay.is_usable_game(g)]
     for k, g in enumerate(usable):
         z = replay.terminal_value(g.result_points, g.cube_value, g.winner)
         sel = samples.game_index == k
-        terminals[sel] = z
-    return target_spread(targets, terminals)
+        if not np.any(sel):
+            continue
+        n_decisions = len(g.decisions) - 1  # terminal karar vektor tasimaz
+        terminals[sel] = signed_terminal_series(
+            z, samples.decision_index[sel], n_decisions
+        )
+        legacy[sel] = z
+    return target_spread(targets, terminals, signed=True, legacy_terminals=legacy)
 
 
 # ----------------------------------------------------------------------
@@ -419,6 +541,7 @@ class HealthReport:
     gates: list[Gate] = field(default_factory=list)
     spread: TargetSpread | None = None
     sources: dict[str, str] = field(default_factory=dict)
+    scaling: dict[str, Any] | None = None
 
     def by_id(self, gate_id: str) -> Gate | None:
         for g in self.gates:
@@ -471,6 +594,47 @@ class HealthReport:
         return VERDICT_HEALTHY
 
     @property
+    def scaling_evidence(self) -> str:
+        """``yok`` / ``egim<eps`` / ``egim>=eps`` (Faz 7-R R-10).
+
+        ``scaling["slope"]`` ER'nin ``log2(veri)`` basina **dususudur**
+        (pozitif = veri arttikca ER iyilesiyor). Olcum yoksa ``yok``; kazanc
+        ``epsilon``un altindaysa ``egim<eps``; aksi halde ``egim>=eps``.
+
+        **Kural 3 notu:** etiket nokta tahmininden uretilir; GA ``scaling``
+        sozlugunde ayrica raporlanir ve GA ``epsilon``u kesiyorsa
+        ``scalingNote`` bunu acikca soyler.
+        """
+        if not self.scaling:
+            return SCALING_NONE
+        slope = self.scaling.get("slope")
+        if slope is None:
+            return SCALING_NONE
+        try:
+            value = float(slope)
+        except (TypeError, ValueError):
+            return SCALING_NONE
+        if not math.isfinite(value):
+            return SCALING_NONE
+        return SCALING_AT_OR_ABOVE if value >= SCALING_SLOPE_EPSILON else SCALING_BELOW
+
+    @property
+    def scaling_note(self) -> str:
+        """``scaling_evidence`` icin kisa gerekce (GA kesismesi dahil)."""
+        state = self.scaling_evidence
+        if state == SCALING_NONE:
+            return "ogrenme egrisi olculmedi"
+        slope = float(self.scaling["slope"])
+        low = self.scaling.get("ciLow")
+        high = self.scaling.get("ciHigh")
+        text = "kazanc %+.4f (esik %.4f)" % (slope, SCALING_SLOPE_EPSILON)
+        if low is not None and high is not None:
+            text += "; %%95 GA [%+.4f; %+.4f]" % (float(low), float(high))
+            if float(low) < SCALING_SLOPE_EPSILON <= float(high):
+                text += " -- GA esigi kesiyor, karar **belirsiz**"
+        return text
+
+    @property
     def strength_gap(self) -> bool:
         """G1..G5,G7 gecti ama G6 dustu: pipeline saglikli, guc yetersiz."""
         g6 = self.by_id("G6")
@@ -488,6 +652,9 @@ class HealthReport:
             "measured": self.measured,
             "spread": self.spread.to_dict() if self.spread else None,
             "sources": self.sources,
+            "scalingEvidence": self.scaling_evidence,
+            "scalingNote": self.scaling_note,
+            "scaling": self.scaling,
             "thresholds": {
                 "pipWinRateMin": PIP_WIN_RATE_MIN,
                 "slopeMin": SLOPE_MIN,
@@ -496,8 +663,12 @@ class HealthReport:
                 "correlationMin": CORRELATION_MIN,
                 "stdRatioMin": STD_RATIO_MIN,
                 "stdRatioMax": STD_RATIO_MAX,
+                "stdRatioLegacyMin": STD_RATIO_LEGACY_MIN,
+                "stdRatioLegacyMax": STD_RATIO_LEGACY_MAX,
                 "erMax": ER_MAX,
                 "targetStdRatioMin": TARGET_STD_RATIO_MIN,
+                "targetStdRatioMax": TARGET_STD_RATIO_MAX,
+                "scalingSlopeEpsilon": SCALING_SLOPE_EPSILON,
             },
         }
 
@@ -509,8 +680,15 @@ def diagnose(
     er_report: dict[str, Any] | None = None,
     spread: TargetSpread | None = None,
     sources: dict[str, str] | None = None,
+    scaling: dict[str, Any] | None = None,
 ) -> HealthReport:
-    """Artifact'lardan kapi listesi ve teshis uretir."""
+    """Artifact'lardan kapi listesi ve teshis uretir.
+
+    ``scaling``: ``ml/learning_curve.py`` ciktisinin ozeti
+    (``{"slope":..., "ciLow":..., "ciHigh":..., "points":...}``). Verilmezse
+    ``scaling_evidence`` ``yok`` olur - bu bir **eksik olcum**dur, "olcek
+    ise yaramaz" demek degildir.
+    """
     cal = calibration_from_artifact(calibration)
     gates = [
         gate_pip_win_rate(pip_win_rate_from_artifact(eval_report)),
@@ -521,7 +699,12 @@ def diagnose(
         gate_er(er_from_artifact(er_report)),
         gate_target_std_ratio(spread.ratio if spread is not None else None),
     ]
-    return HealthReport(gates=gates, spread=spread, sources=dict(sources or {}))
+    return HealthReport(
+        gates=gates,
+        spread=spread,
+        sources=dict(sources or {}),
+        scaling=dict(scaling) if scaling else None,
+    )
 
 
 # ----------------------------------------------------------------------
@@ -611,9 +794,48 @@ def build_markdown(report: HealthReport, *, title: str = "Faz 7 - Pipeline sagli
         lines.append("| Hedef ortalamasi | %s |" % _fmt(s.target_mean))
         lines.append("| Terminal ortalamasi | %s |" % _fmt(s.terminal_mean))
         lines.append("| Sifir hedef orani | %s |" % _fmt(s.zero_share))
+        lines.append("| Isaretli karsilastirma | %s |" % ("evet" if s.signed else "**hayir**"))
+        if s.legacy_terminal_std > 0.0:
+            lines.append(
+                "| Eski (isaretsiz) oran | %s |" % _fmt(s.legacy_ratio)
+            )
+        lines.append("")
+        if s.legacy_terminal_std > 0.0 and abs(s.legacy_ratio - s.ratio) > 1e-9:
+            lines.append(
+                "> **R-08 kapatildi.** Eski olcum isaretsiz terminal degeri "
+                "(`resultPoints/cubeValue`) isaretli TD hedefleriyle "
+                "karsilastiriyordu; oran bu yuzden yapisal olarak 1'in uzerine "
+                "cikiyordu. Isaretli karsilastirmada oran %s." % _fmt(s.ratio)
+            )
+            lines.append("")
+    lines.append("## 4. Olcekleme kaniti (R-10)")
+    lines.append("")
+    lines.append("| Olcum | Deger |")
+    lines.append("|---|---|")
+    lines.append("| Durum | **`%s`** |" % report.scaling_evidence)
+    lines.append("| Gerekce | %s |" % report.scaling_note)
+    lines.append("")
+    if report.scaling_evidence == SCALING_NONE:
+        lines.append(
+            "> Ogrenme egrisi **olculmedi**. Bu, \"olcek ise yaramaz\" demek "
+            "degildir; karar icin `ml/learning_curve.py` kosulmalidir."
+        )
+        lines.append("")
+    elif report.scaling_evidence == SCALING_BELOW:
+        lines.append(
+            "> Egim esigin altinda: veri ikiye katlandiginda ER olculebilir "
+            "bicimde iyilesmiyor. Bu durumda olcek buyutmek dogru kaldirac "
+            "**degildir**; once pipeline onarilmalidir."
+        )
+        lines.append("")
+    else:
+        lines.append(
+            "> Egim esigin uzerinde: veri arttikca ER dusuyor. Olcek buyutmek "
+            "**anlamli** bir kaldiractir."
+        )
         lines.append("")
     if report.sources:
-        lines.append("## 4. Kaynaklar")
+        lines.append("## 5. Kaynaklar")
         lines.append("")
         lines.append("| Rol | Dosya |")
         lines.append("|---|---|")
@@ -641,6 +863,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--shards", type=Path, nargs="+", default=None, help="shard dosyalari (G7)")
     p.add_argument("--model", type=Path, default=None, help="V_hat icin checkpoint (.pt)")
     p.add_argument("--lam", type=float, default=1.0, help="TD lambda (G7)")
+    p.add_argument(
+        "--scaling",
+        type=Path,
+        default=None,
+        help="learning_curve ciktisi JSON (R-10 olcekleme kaniti)",
+    )
     p.add_argument("--json", type=Path, default=None, help="cikti JSON")
     p.add_argument("--markdown", type=Path, default=None, help="cikti Markdown")
     p.add_argument("--quiet", action="store_true")
@@ -676,12 +904,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         if path is not None:
             sources[role] = str(path)
 
+    scaling_data = _read_json(args.scaling)
+    if scaling_data is not None:
+        sources["scaling"] = str(args.scaling)
+
     report = diagnose(
         calibration=_read_json(args.calibration),
         eval_report=_read_json(args.eval_path),
         er_report=_read_json(args.er_path),
         spread=spread,
         sources=sources,
+        scaling=scaling_data,
     )
 
     if args.json is not None:
@@ -699,6 +932,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("  %s %-42s %10s  %s" % (g.gate_id, GATE_LABELS.get(g.gate_id, ""), _fmt(g.value), _mark(g.passed)))
         if report.strength_gap:
             print("  -> guc boslugu: pipeline saglikli, ER hedefi tutmuyor")
+        print("  olcekleme kaniti: %s (%s)" % (report.scaling_evidence, report.scaling_note))
 
     # Cikis kodu: 0 = saglikli, 1 = pipeline, 2 = temel, 3 = bilinmiyor
     return {

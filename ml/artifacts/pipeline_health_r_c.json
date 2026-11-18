@@ -1,0 +1,110 @@
+{
+  "failed": [
+    "G2",
+    "G3",
+    "G6"
+  ],
+  "gates": [
+    {
+      "gate": "G1",
+      "label": "PipBot kazanma orani >= 0,90",
+      "note": "",
+      "passed": true,
+      "value": 0.995
+    },
+    {
+      "gate": "G2",
+      "label": "Kalibrasyon egimi [0,85; 1,15]",
+      "note": "",
+      "passed": false,
+      "value": 0.6742853359756819
+    },
+    {
+      "gate": "G3",
+      "label": "Kalibrasyon MAE < 0,15",
+      "note": "",
+      "passed": false,
+      "value": 0.2683332163227073
+    },
+    {
+      "gate": "G4",
+      "label": "Korelasyon > 0,90",
+      "note": "",
+      "passed": true,
+      "value": 0.9016057823896512
+    },
+    {
+      "gate": "G5",
+      "label": "Std orani [0,7; 1,4] (Faz 6)",
+      "note": "siki bant [0,85; 1,15] ile: DUSTU",
+      "passed": true,
+      "value": 1.3371279698453469
+    },
+    {
+      "gate": "G6",
+      "label": "2-ply ER < 0,02",
+      "note": "",
+      "passed": false,
+      "value": 0.07397
+    },
+    {
+      "gate": "G7",
+      "label": "Hedef sacilimi [0,5; 1,5]",
+      "note": "",
+      "passed": true,
+      "value": 1.0
+    }
+  ],
+  "measured": [
+    "G1",
+    "G2",
+    "G3",
+    "G4",
+    "G5",
+    "G6",
+    "G7"
+  ],
+  "passed": [
+    "G1",
+    "G4",
+    "G5",
+    "G7"
+  ],
+  "scaling": null,
+  "scalingEvidence": "yok",
+  "scalingNote": "ogrenme egrisi olculmedi",
+  "sources": {
+    "calibration": "ml\\artifacts\\stage_h_calibration_2ply.json",
+    "er": "ml\\artifacts\\stage_h_er_2ply.json",
+    "eval": "ml\\artifacts\\stage_h_eval_pip.json"
+  },
+  "spread": {
+    "count": 627737,
+    "legacyRatio": 2.8781001806297346,
+    "legacyTerminalStd": 0.5155822063358912,
+    "ratio": 1.0,
+    "signed": true,
+    "targetMean": -0.010087026891835275,
+    "targetStd": 1.4838972411848057,
+    "terminalMean": -0.010087026891835275,
+    "terminalStd": 1.4838972411848057,
+    "zeroShare": 0.0
+  },
+  "strengthGap": false,
+  "thresholds": {
+    "correlationMin": 0.9,
+    "erMax": 0.02,
+    "maeMax": 0.15,
+    "pipWinRateMin": 0.9,
+    "scalingSlopeEpsilon": 0.005,
+    "slopeMax": 1.15,
+    "slopeMin": 0.85,
+    "stdRatioLegacyMax": 1.15,
+    "stdRatioLegacyMin": 0.85,
+    "stdRatioMax": 1.4,
+    "stdRatioMin": 0.7,
+    "targetStdRatioMax": 1.5,
+    "targetStdRatioMin": 0.5
+  },
+  "verdict": "pipeline"
+}

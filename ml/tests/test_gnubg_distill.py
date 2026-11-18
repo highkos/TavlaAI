@@ -37,8 +37,9 @@ def test_127a_verdict_labels_are_distinct() -> None:
         gd.VERDICT_CAPACITY,
         gd.VERDICT_UNPROVEN,
         gd.VERDICT_UNKNOWN,
+        gd.VERDICT_INSUFFICIENT_DATA,
     }
-    assert len(labels) == 5
+    assert len(labels) == 6
     for label in labels:
         assert label in gd.VERDICT_TEXT
 
@@ -52,36 +53,6 @@ def test_127a_license_note_mentions_gpl() -> None:
 # ----------------------------------------------------------------------
 
 
-def test_127b_verdict_pipeline_when_under_target() -> None:
-    assert gd.distill_verdict(0.0740, 0.0299) == gd.VERDICT_PIPELINE
-
-
-def test_127b_verdict_pipeline_at_exact_target() -> None:
-    assert gd.distill_verdict(0.0740, 0.03) == gd.VERDICT_PIPELINE
-
-
-def test_127b_verdict_partial_when_gain_but_above_target() -> None:
-    # 0,0740 -> 0,0500: %32 kazanc, hedefin uzerinde.
-    assert gd.distill_verdict(0.0740, 0.0500) == gd.VERDICT_PARTIAL
-
-
-def test_127b_verdict_partial_at_exact_min_gain() -> None:
-    assert gd.distill_verdict(0.10, 0.08) == gd.VERDICT_PARTIAL
-
-
-def test_127b_verdict_capacity_when_no_gain() -> None:
-    assert gd.distill_verdict(0.0740, 0.0740) == gd.VERDICT_CAPACITY
-
-
-def test_127b_verdict_capacity_when_worse() -> None:
-    assert gd.distill_verdict(0.0740, 0.0900) == gd.VERDICT_CAPACITY
-
-
-def test_127b_verdict_capacity_just_below_min_gain() -> None:
-    # 0,10 -> 0,0801: %19,9 kazanc, esigin altinda.
-    assert gd.distill_verdict(0.10, 0.0801) == gd.VERDICT_CAPACITY
-
-
 def test_127b_verdict_unknown_when_missing() -> None:
     assert gd.distill_verdict(None, 0.03) == gd.VERDICT_UNKNOWN
     assert gd.distill_verdict(0.0740, None) == gd.VERDICT_UNKNOWN
@@ -93,13 +64,75 @@ def test_127b_verdict_unknown_when_nan() -> None:
     assert gd.distill_verdict(0.0740, float("inf")) == gd.VERDICT_UNKNOWN
 
 
-def test_127b_verdict_custom_target_and_gain() -> None:
-    assert gd.distill_verdict(0.10, 0.05, target=0.06) == gd.VERDICT_PIPELINE
-    assert gd.distill_verdict(0.10, 0.09, min_gain=0.05) == gd.VERDICT_PARTIAL
+def test_127b_verdict_without_paired_is_unproven() -> None:
+    """R-07: eslesmis kanit yoksa nokta tahmini karar veremez."""
+    assert gd.distill_verdict(0.0740, 0.0299) == gd.VERDICT_UNPROVEN
+    assert gd.distill_verdict(0.0740, 0.03) == gd.VERDICT_UNPROVEN
+    assert gd.distill_verdict(0.0740, 0.0500) == gd.VERDICT_UNPROVEN
 
 
-def test_127b_verdict_zero_before_is_capacity() -> None:
-    assert gd.distill_verdict(0.0, 0.5) == gd.VERDICT_CAPACITY
+def test_127b_verdict_pipeline_requires_ci_upper_below_target() -> None:
+    paired = {"n": 300, "meanDiff": 0.02, "excludesZero": True, "ciHighAfter": 0.0299}
+    assert gd.distill_verdict(0.0740, 0.0299, paired=paired) == gd.VERDICT_PIPELINE
+
+
+def test_127b_verdict_point_estimate_below_target_is_not_pipeline() -> None:
+    """R-07'nin tam kalbi: nokta tahmini hedefin altinda ama GA ust siniri ustunde."""
+    paired = {"n": 300, "meanDiff": 0.02, "excludesZero": True, "ciHighAfter": 0.041}
+    assert gd.distill_verdict(0.0740, 0.0299, paired=paired) == gd.VERDICT_PARTIAL
+
+
+def test_127b_verdict_partial_when_gain_proven_above_target() -> None:
+    paired = {"n": 300, "meanDiff": 0.024, "excludesZero": True, "ciHighAfter": 0.06}
+    assert gd.distill_verdict(0.0740, 0.0500, paired=paired) == gd.VERDICT_PARTIAL
+
+
+def test_127b_verdict_unproven_when_ci_includes_zero() -> None:
+    paired = {"n": 300, "meanDiff": 0.0176, "excludesZero": False, "ciHighAfter": 0.07}
+    assert gd.distill_verdict(0.0740, 0.0500, paired=paired) == gd.VERDICT_UNPROVEN
+
+
+def test_127b_verdict_never_returns_capacity() -> None:
+    """R-07: kapasite cikarimi kaldirildi; etiket artik uretilmez."""
+    paired = {"n": 300, "meanDiff": 0.0, "excludesZero": False, "ciHighAfter": 0.5}
+    for before, after in ((0.0740, 0.0740), (0.0740, 0.0900), (0.10, 0.0801), (0.0, 0.5)):
+        assert gd.distill_verdict(before, after, paired=paired) != gd.VERDICT_CAPACITY
+
+
+def test_127b_verdict_insufficient_data_when_n_below_required() -> None:
+    paired = {"n": 70, "meanDiff": 0.02, "excludesZero": True, "ciHighAfter": 0.0299}
+    assert (
+        gd.distill_verdict(0.0740, 0.0299, paired=paired, required_n=285)
+        == gd.VERDICT_INSUFFICIENT_DATA
+    )
+
+
+def test_127b_verdict_sufficient_data_when_n_meets_required() -> None:
+    paired = {"n": 300, "meanDiff": 0.02, "excludesZero": True, "ciHighAfter": 0.0299}
+    assert (
+        gd.distill_verdict(0.0740, 0.0299, paired=paired, required_n=285)
+        == gd.VERDICT_PIPELINE
+    )
+
+
+def test_127b_verdict_custom_target() -> None:
+    paired = {"n": 300, "meanDiff": 0.05, "excludesZero": True, "ciHighAfter": 0.055}
+    assert gd.distill_verdict(0.10, 0.05, target=0.06, paired=paired) == gd.VERDICT_PIPELINE
+
+
+def test_127b_verdict_detail_reports_no_capacity_inference() -> None:
+    paired = {"n": 300, "meanDiff": 0.0, "excludesZero": False, "ciHighAfter": 0.5}
+    detail = gd.distill_verdict_detail(0.0740, 0.0740, paired=paired)
+    assert detail["capacityInference"] is False
+    assert detail["verdict"] == gd.VERDICT_UNPROVEN
+    assert detail["n"] == 300
+
+
+def test_127b_verdict_detail_meets_min_gain_is_reported_not_decided() -> None:
+    paired = {"n": 300, "meanDiff": 0.001, "excludesZero": True, "ciHighAfter": 0.09}
+    detail = gd.distill_verdict_detail(0.10, 0.099, paired=paired)
+    assert detail["meetsMinGain"] is False
+    assert detail["verdict"] == gd.VERDICT_PARTIAL
 
 
 # ----------------------------------------------------------------------
@@ -209,12 +242,13 @@ def test_127l_verdict_partial_when_paired_excludes_zero() -> None:
 
 def test_127l_verdict_pipeline_beats_unproven() -> None:
     paired = {"n": 70, "meanDiff": 0.0, "se": 0.01, "t": 0.0,
-              "ciLow": -0.02, "ciHigh": 0.02, "excludesZero": False}
+              "ciLow": -0.02, "ciHigh": 0.02, "excludesZero": False,
+              "ciHighAfter": 0.0299}
     assert gd.distill_verdict(0.0708, 0.0299, paired=paired) == gd.VERDICT_PIPELINE
 
 
-def test_127l_verdict_without_paired_keeps_point_estimate_rule() -> None:
-    assert gd.distill_verdict(0.0708, 0.0533) == gd.VERDICT_PARTIAL
+def test_127l_verdict_without_paired_is_unproven() -> None:
+    assert gd.distill_verdict(0.0708, 0.0533) == gd.VERDICT_UNPROVEN
 
 
 def test_127l_verdict_unproven_text_mentions_ci() -> None:
@@ -275,7 +309,8 @@ def test_127l_cli_skips_missing_arm_file(tmp_path: Path) -> None:
             "--quiet",
         ]
     )
-    assert code == 0
+    # Eslesmis kanit yok -> "belirsiz" (cikis 4). Eksik kol dosyasi hata degil.
+    assert code == 4
     assert "arms" not in json.loads(out.read_text(encoding="utf-8"))
 
 
@@ -748,17 +783,44 @@ def test_127h_cli_verdict_writes_outputs(tmp_path: Path) -> None:
             "--quiet",
         ]
     )
-    assert code == 0
+    # R-07: eslesmis kanit olmadan "pipeline" denemez -> "belirsiz" (cikis 4).
+    assert code == 4
     data = json.loads(out_json.read_text(encoding="utf-8"))
-    assert data["verdict"] == gd.VERDICT_PIPELINE
+    assert data["verdict"] == gd.VERDICT_UNPROVEN
     assert "GPL" in out_md.read_text(encoding="utf-8")
 
 
-def test_127h_cli_verdict_capacity_exit_zero(tmp_path: Path) -> None:
+def test_127h_cli_verdict_no_gain_is_unproven_exit_four(tmp_path: Path) -> None:
+    """R-07: kazanc yok -> 'kapasite' DEGIL, 'belirsiz' (cikis 4)."""
     code = gd.main(
         ["verdict", "--before", "0.0740", "--after", "0.0740", "--quiet"]
     )
-    assert code == 0
+    assert code == 4
+
+
+def test_127h_cli_verdict_insufficient_data_exit_five(tmp_path: Path) -> None:
+    before = tmp_path / "b.json"
+    after = tmp_path / "a.json"
+    before.write_text(
+        json.dumps({"positions": [{"name": "p%d" % i, "equityLoss": 0.2} for i in range(20)]}),
+        encoding="utf-8",
+    )
+    after.write_text(
+        json.dumps({"positions": [{"name": "p%d" % i, "equityLoss": 0.1} for i in range(20)]}),
+        encoding="utf-8",
+    )
+    code = gd.main(
+        [
+            "verdict",
+            "--before", "0.2",
+            "--after", "0.1",
+            "--er-before-json", str(before),
+            "--er-after-json", str(after),
+            "--required-n", "285",
+            "--quiet",
+        ]
+    )
+    assert code == 5
 
 
 def test_127h_cli_verdict_unknown_exit_three(tmp_path: Path) -> None:

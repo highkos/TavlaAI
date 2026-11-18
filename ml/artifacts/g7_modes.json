@@ -1,0 +1,54 @@
+{
+  "model_lam07": {
+    "count": 627737,
+    "legacyRatio": 1.963253815106386,
+    "legacyTerminalStd": 0.5155822063358912,
+    "ratio": 0.6821353295203303,
+    "seconds": 72.5,
+    "signed": true,
+    "targetMean": -0.007135527961357895,
+    "targetStd": 1.0122187335899064,
+    "terminalMean": -0.010087026891835275,
+    "terminalStd": 1.4838972411848057,
+    "zeroShare": 0.0
+  },
+  "model_lam1": {
+    "count": 627737,
+    "legacyRatio": 2.8781001806297346,
+    "legacyTerminalStd": 0.5155822063358912,
+    "ratio": 1.0,
+    "seconds": 50.7,
+    "signed": true,
+    "targetMean": -0.010087026891835275,
+    "targetStd": 1.4838972411848057,
+    "terminalMean": -0.010087026891835275,
+    "terminalStd": 1.4838972411848057,
+    "zeroShare": 0.0
+  },
+  "noModel_lam07": {
+    "count": 627737,
+    "legacyRatio": 0.5066360024358352,
+    "legacyTerminalStd": 0.5155822063358912,
+    "ratio": 0.17603139940909984,
+    "seconds": 68.1,
+    "signed": true,
+    "targetMean": -0.012063874310271665,
+    "targetStd": 0.2612125079450639,
+    "terminalMean": -0.010087026891835275,
+    "terminalStd": 1.4838972411848057,
+    "zeroShare": 0.1306040587061142
+  },
+  "noModel_lam1": {
+    "count": 627737,
+    "legacyRatio": 2.8781001806297346,
+    "legacyTerminalStd": 0.5155822063358912,
+    "ratio": 1.0,
+    "seconds": 70.2,
+    "signed": true,
+    "targetMean": -0.010087026891835275,
+    "targetStd": 1.4838972411848057,
+    "terminalMean": -0.010087026891835275,
+    "terminalStd": 1.4838972411848057,
+    "zeroShare": 0.0
+  }
+}

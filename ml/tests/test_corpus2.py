@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Faz 7-R Asama R-B testleri (Test 127-132).
+"""Faz 7-R Asama R-B testleri (Test 128-132).
 
 Korpus v2'nin v1'in dort kusurunu gercekten kapattigini **olcer**; iddiayi
 tekrarlamaz. Her test ``ASSUMPTIONS.md`` F7-47'deki bir kusura karsilik gelir.
@@ -68,12 +68,12 @@ def _synthetic_cases() -> list[dict]:
 
 
 # ----------------------------------------------------------------------
-# Test 127 -- bolunme oyuna gore
+# Test 128 -- bolunme oyuna gore
 # ----------------------------------------------------------------------
 
 
 def test_corpus2_split_is_by_game():
-    """Test 127: bir oyunun **tum** pozisyonlari ayni bolunmede olmali.
+    """Test 128: bir oyunun **tum** pozisyonlari ayni bolunmede olmali.
 
     v1'de bolunme pozisyon duzeyindeydi (``er_harness.assign_splits``); ayni
     oyunun pozisyonlari CAL ve TEST'e dusebiliyordu. Bu, TEST'i sizdirdigi
@@ -99,7 +99,7 @@ def test_corpus2_split_is_by_game():
 
 
 def test_corpus2_split_covers_every_case_exactly_once():
-    """Test 127b: bolunmeler toplami vaka sayisina esit, tekrar yok."""
+    """Test 128b: bolunmeler toplami vaka sayisina esit, tekrar yok."""
     cases = _synthetic_cases()
     splits = corpus2.assign_splits_by_game(cases, seed=99)
     all_names = [n for names in splits.values() for n in names]
@@ -107,12 +107,12 @@ def test_corpus2_split_covers_every_case_exactly_once():
 
 
 # ----------------------------------------------------------------------
-# Test 128 -- sizinti filtresi
+# Test 129 -- sizinti filtresi
 # ----------------------------------------------------------------------
 
 
 def test_corpus2_no_leak_from_training():
-    """Test 128: egitim kumesindeki tahta korpusta **kalmamali**.
+    """Test 129: egitim kumesindeki tahta korpusta **kalmamali**.
 
     Filtre ayna/perspektif-kanonik hash kullanir; ayni pozisyon Beyaz'in ya da
     Siyah'in bakis acisindan yazilsa da yakalanir.
@@ -152,7 +152,7 @@ def test_corpus2_no_leak_from_training():
 
 
 def test_corpus2_leak_filter_reports_zero_explicitly():
-    """Test 128b: sizinti yoksa da sayi **acikca** raporlanir (Kural 6)."""
+    """Test 129b: sizinti yoksa da sayi **acikca** raporlanir (Kural 6)."""
     cases = [{"name": "a", "board": [0] * 26, "whiteOff": 0, "blackOff": 0}]
     result = corpus2.leak_filter(cases, set())
     payload = result.to_dict()
@@ -162,7 +162,7 @@ def test_corpus2_leak_filter_reports_zero_explicitly():
 
 
 def test_corpus2_mirror_hash_is_perspective_invariant():
-    """Test 128c: ayna hash'i degistirmemeli."""
+    """Test 129c: ayna hash'i degistirmemeli."""
     from tools import reference_gen as refgen
 
     board = list(refgen.START_BOARD)
@@ -175,12 +175,12 @@ def test_corpus2_mirror_hash_is_perspective_invariant():
 
 
 # ----------------------------------------------------------------------
-# Test 129 -- contact payi
+# Test 130 -- contact payi
 # ----------------------------------------------------------------------
 
 
 def test_corpus2_contact_share():
-    """Test 129: baslik kumesinde contact **>= %60** olmali.
+    """Test 130: baslik kumesinde contact **>= %60** olmali.
 
     v1'de contact %19,5'ti (39/200) ve bearoff %18,5 -- yani korpusun buyuk
     kismi urunde **tam veritabanindan** cozulen ya da gercek oyunda **nadir**
@@ -200,7 +200,7 @@ def test_corpus2_contact_share():
 
 
 def test_corpus2_headline_selection_is_stratified():
-    """Test 129b: secim katmanli -- her baslik fazindan pay kadar vaka alinir."""
+    """Test 130b: secim katmanli -- her baslik fazindan pay kadar vaka alinir."""
     from tools import reference_gen as refgen
 
     board = list(refgen.START_BOARD)
@@ -235,7 +235,7 @@ def test_corpus2_headline_selection_is_stratified():
 
 
 def test_corpus2_headline_shortfall_is_reported():
-    """Test 129c: bir fazda yeterli vaka yoksa eksik **acikca** raporlanir."""
+    """Test 130c: bir fazda yeterli vaka yoksa eksik **acikca** raporlanir."""
     from tools import reference_gen as refgen
 
     board = list(refgen.START_BOARD)
@@ -257,12 +257,12 @@ def test_corpus2_headline_shortfall_is_reported():
 
 
 # ----------------------------------------------------------------------
-# Test 130 -- uc yol raporlama
+# Test 131 -- uc yol raporlama
 # ----------------------------------------------------------------------
 
 
 def test_er_reports_three_paths():
-    """Test 130: ER **uc** oynanis yolu icin ayri ayri raporlanmali.
+    """Test 131: ER **uc** oynanis yolu icin ayri ayri raporlanmali.
 
     Tek yol raporlamak, "ER 0,0533" gibi bir sayinin hangi oynanisa ait
     oldugunu belirsiz birakir (F7-46). Urun ``ProductionDepthPly = 1`` iken
@@ -306,7 +306,7 @@ def test_er_reports_three_paths():
 
 
 def test_er_path_measurement_requires_weights_for_weighted_mean():
-    """Test 130b: agirlik yoksa agirlikli ortalama ham ortalamaya duser."""
+    """Test 131b: agirlik yoksa agirlikli ortalama ham ortalamaya duser."""
     measurement = er_paths._summarize_path(
         "policy", [0.1, 0.2, 0.3], ["contact", "contact", "race"], {}
     )
@@ -315,7 +315,7 @@ def test_er_path_measurement_requires_weights_for_weighted_mean():
 
 
 def test_er_path_measurement_uses_real_game_weights():
-    """Test 130c: agirlikli ortalama gercek oyun paylariyla hesaplanir."""
+    """Test 131c: agirlikli ortalama gercek oyun paylariyla hesaplanir."""
     measurement = er_paths._summarize_path(
         "policy",
         [0.10, 0.10, 0.40],
@@ -327,12 +327,12 @@ def test_er_path_measurement_uses_real_game_weights():
 
 
 # ----------------------------------------------------------------------
-# Test 131 -- bootstrap GA
+# Test 132 -- bootstrap GA
 # ----------------------------------------------------------------------
 
 
 def test_er_bootstrap_ci():
-    """Test 131: her yol **bootstrap %95 GA** raporlamali (Kural 3).
+    """Test 132: her yol **bootstrap %95 GA** raporlamali (Kural 3).
 
     Nokta tahmini kanit degildir; GA sifiri iceriyorsa iddia
     ``kanitlanmadi`` olur.
@@ -349,7 +349,7 @@ def test_er_bootstrap_ci():
 
 
 def test_er_bootstrap_ci_is_deterministic():
-    """Test 131b: ayni girdi ayni GA'yi vermeli (tohum sabit)."""
+    """Test 132b: ayni girdi ayni GA'yi vermeli (tohum sabit)."""
     losses = [0.0, 0.02, 0.05, 0.11, 0.20]
     a = er_paths._summarize_path("policy", losses, ["contact"] * 5, {})
     b = er_paths._summarize_path("policy", losses, ["contact"] * 5, {})
@@ -359,7 +359,7 @@ def test_er_bootstrap_ci_is_deterministic():
 
 
 def test_er_bootstrap_ci_widens_with_spread():
-    """Test 131c: daha genis yayilim daha genis GA vermeli."""
+    """Test 132c: daha genis yayilim daha genis GA vermeli."""
     tight = er_paths._summarize_path("policy", [0.05] * 20, ["contact"] * 20, {})
     wide = er_paths._summarize_path(
         "policy", [0.0, 0.5] * 10, ["contact"] * 20, {}
@@ -368,12 +368,12 @@ def test_er_bootstrap_ci_widens_with_spread():
 
 
 # ----------------------------------------------------------------------
-# Test 132 -- guc tablosu sigma ust sinirindan
+# Test 133 -- guc tablosu sigma ust sinirindan
 # ----------------------------------------------------------------------
 
 
 def test_power_uses_sigma_upper_bound():
-    """Test 132: gereken n **sigma'nin ust guven sinirindan** hesaplanmali.
+    """Test 133: gereken n **sigma'nin ust guven sinirindan** hesaplanmali.
 
     Nokta tahmininden hesaplamak n'i sistematik olarak eksik verir (Kural 4,
     kazananin laneti). ``er_power.required_n_from_upper`` bunu belgeler.
@@ -397,7 +397,7 @@ def test_power_uses_sigma_upper_bound():
 
 
 def test_power_table_rejects_non_positive_sigma():
-    """Test 132b: sifir/negatif sigma sessizce gecmemeli (Kural 6)."""
+    """Test 133b: sifir/negatif sigma sessizce gecmemeli (Kural 6)."""
     with pytest.raises(ValueError):
         corpus2.power_table(0.0)
     with pytest.raises(ValueError):
@@ -405,7 +405,7 @@ def test_power_table_rejects_non_positive_sigma():
 
 
 def test_power_rows_use_sigma_ci_high_not_sigma():
-    """Test 132c: ``power_rows`` nokta tahminini **kullanmamali**."""
+    """Test 133c: ``power_rows`` nokta tahminini **kullanmamali**."""
     report = {
         "paths": {
             "policy": {

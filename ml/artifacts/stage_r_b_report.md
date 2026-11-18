@@ -13,7 +13,7 @@ Bu rapor `faz 7 v2.5.md` §8'in istediği 7 maddeyi verir. Aşama R-C'ye
 |---|---|---|
 | `ml/corpus2.py` | **yeni** | Korpus v2 üreticisi: katmanlı faz seçimi, oyun düzeyinde bölünme, ayna-kanonik sızıntı filtresi, `gameId`/`ply`/`source`, gerçek oyun faz payları, güç tablosu, CLI (`build`/`verify`/`power`) |
 | `ml/er_paths.py` | **yeni** | ER'yi üç oynanış yolu (`policy`, `value`, `search1`) için ayrı ölçer; bootstrap %95 GA, faz ve kaynak kırılımı, gerçek oyun frekansıyla ağırlıklı ER, σ üst sınırından güç tablosu, CLI (`measure`) |
-| `ml/tests/test_corpus2.py` | **yeni** | Test 127–132 (17 test) |
+| `ml/tests/test_corpus2.py` | **yeni** | Test 128–133 (17 test) |
 | `ml/artifacts/reference_corpus_v2.json` | **yeni** | 1000 pozisyon, digest `e0466b9e…` |
 | `ml/artifacts/corpus2_records.json` | **yeni** | 43 oyunun ham kayıtları (yeniden üretilebilirlik) |
 | `ml/artifacts/er_paths_v1.json` | **yeni** | v1 (dondurulmuş) üç yol ölçümü |
@@ -238,5 +238,5 @@ Hamle seçimi `rng.choice(sorted(states))` → yasal afterstate'ler üzerinde
 
 ## Test durumu
 
-`ml/tests/test_corpus2.py` — **17 test yeşil** (Test 127–132).
+`ml/tests/test_corpus2.py` — **17 test yeşil** (Test 128–133).
 `ml/tests/test_docs_consistency.py` — **21 test yeşil**.

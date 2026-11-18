@@ -70,15 +70,27 @@ DEFAULT_BATCH = 256
 DEFAULT_VALUE_WEIGHT = 0.5
 #: Incelemenin karar esigi: ER bu degerin altina inerse sorun pipeline'dir.
 TARGET_ER = 0.03
-#: "Isaretli iyilesme" icin gereken en kucuk goreli kazanc.
+#: "Isaretli iyilesme" icin gereken en kucuk goreli kazanc. Faz 7-R'den sonra
+#: yalnizca **raporlama** amaciyla kullanilir; karar etiketini degistirmez
+#: (karar eslesmis GA'ya baglidir, Kural 3).
 MIN_GAIN = 0.20
+
+#: Eslesmis fark icin bootstrap yeniden ornekleme sayisi (Kural 3: >= 10 000).
+PAIRED_BOOTSTRAP_RESAMPLES = 20000
+PAIRED_BOOTSTRAP_SEED = 20261121
 
 #: Karar etiketleri.
 VERDICT_PIPELINE = "pipeline"
 VERDICT_PARTIAL = "kismi"
+#: **Kaldirildi** (Faz 7-R R-07). Etiketlerin ise yaramamasi kapasiteyi
+#: kanitlamaz; bu yuzden ``distill_verdict`` bu etiketi **asla dondurmez**.
+#: Sabit, eski artifact'lari okuyabilmek icin duruyor.
 VERDICT_CAPACITY = "kapasite"
 VERDICT_UNPROVEN = "belirsiz"
 VERDICT_UNKNOWN = "bilinmiyor"
+#: Yeni (Faz 7-R R-07): n < gereken n. Karar **verilemez**, "kazanc yok" da
+#: denemez.
+VERDICT_INSUFFICIENT_DATA = "veri-yetersiz"
 
 LICENSE_NOTE = (
     "gnubg GPL lisanslidir. Bu modulun urettigi etiketler yalnizca arastirma "
@@ -770,6 +782,78 @@ def paired_loss_test(
 # ----------------------------------------------------------------------
 
 
+def paired_er_test(
+    before: dict[str, float],
+    after: dict[str, float],
+    *,
+    resamples: int = PAIRED_BOOTSTRAP_RESAMPLES,
+    seed: int = PAIRED_BOOTSTRAP_SEED,
+) -> dict[str, Any]:
+    """Ayni pozisyonlarda iki ER olcumunun **eslesmis** karsilastirmasi.
+
+    ``paired_loss_test`` yalnizca normal yaklasimla fark GA'si veriyordu; bu
+    fonksiyon **bootstrap** GA uretir ve ayrica ``er_after``in **mutlak** GA'sini
+    hesaplar. Ikincisi zorunludur: "pipeline" iddiasi "ER hedefin altinda"
+    demektir ve bu, farkin degil **mutlak** ER'nin GA'siyla sinanmalidir
+    (Faz 7-R R-07: eski kod ``er_after <= target`` nokta tahminine bakiyordu).
+
+    Donen alanlar:
+      ``n``, ``meanBefore``, ``meanAfter``, ``meanDiff``, ``sdDiff``,
+      ``seDiff``, ``ciLowDiff``, ``ciHighDiff``, ``excludesZero``,
+      ``ciLowAfter``, ``ciHighAfter``, ``resamples``, ``seed``.
+    """
+    names = sorted(set(before) & set(after))
+    n = len(names)
+    empty = {
+        "n": n,
+        "meanBefore": float("nan"),
+        "meanAfter": float("nan"),
+        "meanDiff": 0.0,
+        "sdDiff": 0.0,
+        "seDiff": 0.0,
+        "ciLowDiff": 0.0,
+        "ciHighDiff": 0.0,
+        "excludesZero": False,
+        "ciLowAfter": float("nan"),
+        "ciHighAfter": float("nan"),
+        "resamples": 0,
+        "seed": int(seed),
+    }
+    if n < 2:
+        return empty
+
+    b = np.asarray([float(before[k]) for k in names], dtype=np.float64)
+    a = np.asarray([float(after[k]) for k in names], dtype=np.float64)
+    diff = b - a
+    mean_diff = float(np.mean(diff))
+    sd_diff = float(np.std(diff, ddof=1))
+    se_diff = sd_diff / math.sqrt(n)
+
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, n, size=(int(resamples), n))
+    boot_diff = diff[idx].mean(axis=1)
+    boot_after = a[idx].mean(axis=1)
+    low_diff = float(np.percentile(boot_diff, 2.5))
+    high_diff = float(np.percentile(boot_diff, 97.5))
+    low_after = float(np.percentile(boot_after, 2.5))
+    high_after = float(np.percentile(boot_after, 97.5))
+    return {
+        "n": n,
+        "meanBefore": float(np.mean(b)),
+        "meanAfter": float(np.mean(a)),
+        "meanDiff": mean_diff,
+        "sdDiff": sd_diff,
+        "seDiff": se_diff,
+        "ciLowDiff": low_diff,
+        "ciHighDiff": high_diff,
+        "excludesZero": bool(low_diff > 0.0 or high_diff < 0.0),
+        "ciLowAfter": low_after,
+        "ciHighAfter": high_after,
+        "resamples": int(resamples),
+        "seed": int(seed),
+    }
+
+
 def distill_verdict(
     er_before: float | None,
     er_after: float | None,
@@ -777,34 +861,75 @@ def distill_verdict(
     target: float = TARGET_ER,
     min_gain: float = MIN_GAIN,
     paired: dict[str, Any] | None = None,
+    required_n: int | None = None,
 ) -> str:
-    """gnubg ogretmen deneyinin karari.
+    """gnubg ogretmen deneyinin karari (Faz 7-R R-07 ile yeniden yazildi).
 
-    * ``er_after <= target`` -> ``pipeline``: etiketler sorunu cozdu, demek ki
-      kendi hedeflerimiz yetersizdi.
-    * ``paired`` verildi ve GA sifiri **dislamiyor** -> ``belirsiz``: nokta
-      tahmini iyilesme gosteriyor ama fark gurultuden ayirt edilemiyor; ne
-      "iyilesme var" ne "etiketler ise yaramadi" denebilir.
-    * ``er_after <= er_before * (1 - min_gain)`` -> ``kismi``: anlamli iyilesme
-      var ama hedefin uzerinde; hem pipeline hem kapasite payi var.
-    * aksi halde -> ``kapasite``: etiketler ise yaramadi, dar bogaz ag/veri.
-    * olcum eksikse -> ``bilinmiyor``.
+    Kural 3 geregi **once eslesmis fark + bootstrap GA** gelir; nokta tahmini
+    tek basina kanit degildir.
 
-    ``paired`` eslesmis test sonucudur (``paired_loss_test``). Verildiginde
-    nokta tahmini tek basina yeterli sayilmaz: %95 GA sifiri dislamiyorsa
-    kazanc **kanitlanmamis** kabul edilir.
+    * olcum eksik / sonlu degil -> ``bilinmiyor``
+    * ``paired`` yok -> ``belirsiz`` (eslesmis kanit yok)
+    * ``required_n`` verildi ve ``n < required_n`` -> ``veri-yetersiz``
+    * ``paired["ciHighAfter"] <= target`` -> ``pipeline``: ER'nin **GA ust
+      siniri** hedefin altinda, yani etiketler sorunu cozdu.
+    * GA sifiri disliyor ve ``meanDiff > 0`` -> ``kismi``: kazanc kanitlandi
+      ama ER hedefin uzerinde.
+    * aksi halde -> ``belirsiz``.
+
+    **Kapasite cikarimi kaldirildi.** Etiketlerin ise yaramamasi, dar bogazin
+    ag/veri oldugunu **kanitlamaz**; o iddia ancak ``ml/learning_curve.py``
+    egimiyle kurulabilir. Bu yuzden ``VERDICT_CAPACITY`` artik donmez.
     """
     if er_before is None or er_after is None:
         return VERDICT_UNKNOWN
     if not (math.isfinite(er_before) and math.isfinite(er_after)):
         return VERDICT_UNKNOWN
-    if er_after <= target:
-        return VERDICT_PIPELINE
-    if paired is not None and not paired.get("excludesZero", False):
+    if paired is None:
         return VERDICT_UNPROVEN
-    if er_before > 0.0 and er_after <= er_before * (1.0 - min_gain):
+    n = int(paired.get("n", 0) or 0)
+    if required_n is not None and n < int(required_n):
+        return VERDICT_INSUFFICIENT_DATA
+    ci_high_after = paired.get("ciHighAfter")
+    if ci_high_after is not None and math.isfinite(float(ci_high_after)):
+        if float(ci_high_after) <= float(target):
+            return VERDICT_PIPELINE
+    if paired.get("excludesZero", False) and float(paired.get("meanDiff", 0.0)) > 0.0:
         return VERDICT_PARTIAL
-    return VERDICT_CAPACITY
+    return VERDICT_UNPROVEN
+
+
+def distill_verdict_detail(
+    er_before: float | None,
+    er_after: float | None,
+    *,
+    target: float = TARGET_ER,
+    min_gain: float = MIN_GAIN,
+    paired: dict[str, Any] | None = None,
+    required_n: int | None = None,
+) -> dict[str, Any]:
+    """``distill_verdict``in gerekceli hali (rapor icin)."""
+    verdict = distill_verdict(
+        er_before,
+        er_after,
+        target=target,
+        min_gain=min_gain,
+        paired=paired,
+        required_n=required_n,
+    )
+    meets_min_gain = None
+    if er_before is not None and er_after is not None and er_before > 0.0:
+        meets_min_gain = bool(er_after <= er_before * (1.0 - min_gain))
+    return {
+        "verdict": verdict,
+        "target": float(target),
+        "minGain": float(min_gain),
+        "meetsMinGain": meets_min_gain,
+        "requiredN": None if required_n is None else int(required_n),
+        "n": None if paired is None else int(paired.get("n", 0) or 0),
+        "paired": paired,
+        "capacityInference": False,
+    }
 
 
 VERDICT_TEXT = {
@@ -819,8 +944,14 @@ VERDICT_TEXT = {
         "getirin, sonra olcek buyutun."
     ),
     VERDICT_CAPACITY: (
-        "Etiketler ise yaramadi: ER anlamli iyilesmedi. Dar bogaz **kapasite** "
-        "(ag boyutu / veri hacmi). Olcek buyutmek dogru kaldiractir."
+        "**Kaldirildi (Faz 7-R R-07).** Etiketlerin ise yaramamasi kapasiteyi "
+        "kanitlamaz; bu etiket artik uretilmez. 'Olcek mi pipeline mi' karari "
+        "`ml/learning_curve.py` egimiyle verilir."
+    ),
+    VERDICT_INSUFFICIENT_DATA: (
+        "Orneklem **yetersiz**: n, gereken n'nin altinda. Bu durumda ne "
+        "'kazanc var' ne 'kazanc yok' denebilir. Gereken n, sigma'nin **ust "
+        "guven sinirindan** hesaplanir (Kural 4)."
     ),
     VERDICT_UNPROVEN: (
         "Nokta tahmini iyilesti ama eslesmis %95 GA **sifiri dislamiyor**: fark"
@@ -1029,6 +1160,12 @@ def build_parser() -> argparse.ArgumentParser:
     vd.add_argument("--after", type=float, required=True)
     vd.add_argument("--target", type=float, default=TARGET_ER)
     vd.add_argument("--min-gain", type=float, default=MIN_GAIN)
+    vd.add_argument(
+        "--required-n",
+        type=int,
+        default=None,
+        help="gereken n (sigma ust sinirindan); n altindaysa 'veri-yetersiz'",
+    )
     vd.add_argument("--value-json", type=Path, default=None, help="deger kafasi egitim raporu")
     vd.add_argument("--value-er", type=float, default=None, help="deger kafasi denemesinin ER'si")
     vd.add_argument("--er-before-json", type=Path, default=None, help="once olcumu (er_harness JSON)")
@@ -1190,7 +1327,7 @@ def _cmd_verdict(args: argparse.Namespace) -> int:
         and Path(args.er_before_json).is_file()
         and Path(args.er_after_json).is_file()
     ):
-        paired = paired_loss_test(
+        paired = paired_er_test(
             load_er_losses(args.er_before_json), load_er_losses(args.er_after_json)
         )
     verdict = distill_verdict(
@@ -1199,6 +1336,7 @@ def _cmd_verdict(args: argparse.Namespace) -> int:
         target=args.target,
         min_gain=args.min_gain,
         paired=paired,
+        required_n=args.required_n,
     )
     report: dict[str, Any] = {
         "verdict": verdict,
@@ -1260,6 +1398,8 @@ def _cmd_verdict(args: argparse.Namespace) -> int:
         return 3
     if verdict == VERDICT_UNPROVEN:
         return 4
+    if verdict == VERDICT_INSUFFICIENT_DATA:
+        return 5
     return 0
 
 

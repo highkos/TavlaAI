@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1159** | ~8 dk 30 s | ✅ 1159/1159 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1644** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1219** | ~8 dk 30 s | ✅ 1219/1219 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **1704** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -2479,7 +2479,7 @@ Bölüm 5.1.6 üç yol tanımlar ve **kullanıcı onayı** ister. Ölçüm sonra
 ### 21.9 Doğrulama
 
 ```
-ml/tests                     1159/1159  (3 yavaş/koşullu test atlanır)
+ml/tests                     1219/1219  (3 yavaş/koşullu test atlanır)
 Backgammon.Tests             285/285
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
@@ -2930,10 +2930,10 @@ Ayrı bir `EquityCubeAdvisor` işi gerektirir.
 Backgammon.Tests             297/297   (29 dk 56 s)
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
-ml/tests                    1159/1159  (3 yavaş/koşullu test atlanır)
+ml/tests                    1219/1219  (3 yavaş/koşullu test atlanır)
 ```
 
-Toplam **1644**. Derleme 0 uyarı / 0 hata.
+Toplam **1704**. Derleme 0 uyarı / 0 hata.
 
 
 ## 30. Faz 7-R Aşama R-B — ölçüm altyapısı (F7-55 – F7-62)
@@ -2947,7 +2947,7 @@ başlamayacak. Ayrıntılı rapor: `ml/artifacts/stage_r_b_report.md`.
 |---|---|---|
 | `ml/corpus2.py` | yeni | Korpus v2: katmanlı faz seçimi, **oyun düzeyinde** bölünme, ayna-kanonik sızıntı filtresi, `gameId`/`ply`/`source`, gerçek oyun faz payları, güç tablosu |
 | `ml/er_paths.py` | yeni | ER'yi **üç oynanış yolu** için ayrı ölçer; bootstrap %95 GA, faz ve kaynak kırılımı, ağırlıklı ER, σ üst sınırından güç tablosu |
-| `ml/tests/test_corpus2.py` | yeni | Test 127–132 (17 test) |
+| `ml/tests/test_corpus2.py` | yeni | Test 128–133 (17 test) |
 | `ml/artifacts/reference_corpus_v2.json` | yeni | 1000 pozisyon, digest `e0466b9e…` |
 | `ml/artifacts/er_paths_v1.json` / `er_paths_v2.json` / `er_paths_v2_val.json` | yeni | Üç yol ölçümleri |
 
@@ -3054,7 +3054,150 @@ Tek çekirdek 2-ply `hint`: ortalama **0,562 s**/pozisyon. 4 süreçte
 ### 30.10 Doğrulama
 
 ```
-ml/tests                    1159/1159  (3 yavaş/koşullu test atlanır)
+ml/tests                    1219/1219  (3 yavaş/koşullu test atlanır)
 ```
 
-Test 127–132 yeşil. `test_docs_consistency.py` 21/21 yeşil.
+Test 128–133 yeşil. `test_docs_consistency.py` 21/21 yeşil.
+
+---
+
+## 31. Faz 7-R Aşama R-C — teşhis hattı onarımları (F7-63 – F7-71)
+
+`faz 7 v2.5.md` §4 Aşama R-C, maddeler 1–5. Amaç: ölçüm hattındaki **ölçüm
+hatalarını** gerçek arızalardan ayırmak ve karar fonksiyonlarını Kural 3'e
+uygun hâle getirmek.
+
+### 31.1 G7 iki modda, iki taraflı (madde 1)
+
+`ml/pipeline_health.py`:
+
+* `signed_terminal_series(z, decision_indices, n_decisions)` — terminal değeri
+  **karar başına işaretli** hâle getirir (`(-1)^(n-t) · z`), `td_lambda_targets`
+  zinciriyle birebir aynı.
+* `spread_from_shards` artık işaretli terminal kullanır; eski (hatalı)
+  karşılaştırma `legacyRatio` alanında **kayıt için** durur.
+* `TARGET_STD_RATIO_MAX = 1,5` eklendi; bant **kapalı** aralık `[0,5; 1,5]`.
+* `TargetSpread` yeni alanlar: `signed`, `legacyTerminalStd`, `legacyRatio`.
+
+**Ölçüm** (`it1_0000.bgsp.gz`, 627 737 örnek, `ckpt_v15.pt`,
+`ml/artifacts/g7_modes.json`):
+
+| Mod | Oran (işaretli) | Eski oran | Hedef std | Terminal std | Sonuç |
+|---|---|---|---|---|---|
+| λ=1, model yok | **1,000000** | 2,8781 | 1,4839 | 1,4839 | GEÇTİ |
+| λ=1, model var | **1,000000** | 2,8781 | 1,4839 | 1,4839 | GEÇTİ |
+| λ=0,7, model yok | 0,176031 | 0,5066 | 0,2612 | 1,4839 | **DÜŞTÜ** |
+| λ=0,7, model var | 0,682135 | 1,9633 | 1,0122 | 1,4839 | GEÇTİ |
+
+λ=1'de oran **tam olarak 1** — hedefler terminal değerlerin kopyasıdır.
+λ=0,7 + model yok: hedefler sıfıra çöker → 0,176; kapı bunu **doğru** yakalar.
+λ=0,7 + model var: `V̂` hedefleri taşır → 0,682, bantta.
+
+**Sonuç:** 3,0227 bir çökme değil, **birim uyumsuzluğuydu** (işaretsiz
+`resultPoints/cubeValue` vs işaretli TD hedefi). G7 artık **1,0000 ile GEÇTİ**.
+
+### 31.2 G5 onaylanmış banda döndü (madde 2)
+
+`Faz 6 v3.md` §6.3 ve §13.2: `0,7 ≤ oran ≤ 1,4`. Kodda `0,85–1,15` vardı ve
+gerekçesi hiçbir belgede yoktu (R-09).
+
+| Bant | 1,3371 | 2,78 (Faz 5) |
+|---|---|---|
+| Faz 6: [0,7; 1,4] | **GEÇTİ** | DÜŞTÜ |
+| Faz 7 sıkı: [0,85; 1,15] | DÜŞTÜ | DÜŞTÜ |
+
+`STD_RATIO_MIN/MAX` → `0,7 / 1,4`; sıkı bant `STD_RATIO_LEGACY_MIN/MAX` olarak
+kayıt için durur ve her kapı notunda raporlanır.
+
+### 31.3 `distill_verdict` yeniden yazıldı (madde 3)
+
+`ml/gnubg_distill.py`:
+
+* `paired_er_test(before, after, *, resamples=20000, seed=...)` — eşleştirilmiş
+  fark **ve** `er_after`'ın **mutlak** bootstrap %95 GA'sı.
+* `distill_verdict(..., paired, required_n)` — sıra: `bilinmiyor` → `belirsiz`
+  (paired yok) → `veri-yetersiz` (n < required_n) → `pipeline`
+  (`ciHighAfter ≤ target`) → `kısmi` (GA sıfırı dışlıyor ve `meanDiff > 0`) →
+  `belirsiz`.
+* `VERDICT_INSUFFICIENT_DATA = "veri-yetersiz"` (yeni).
+* `VERDICT_CAPACITY` **artık üretilmiyor**; metni "Kaldırıldı" diye başlıyor.
+* `distill_verdict_detail(...)` — `capacityInference: false` alanı.
+* CLI: `--required-n`; çıkış kodu **5** = `veri-yetersiz`.
+
+### 31.4 `ml/learning_curve.py` (madde 4)
+
+Yeni modül. Aynı hat, aynı tohum, yalnızca veri hacmi: N, 2N, 4N, 8N.
+
+* `CurvePoint` — `multiplier`, `positions`, `losses` (pozisyon düzeyinde, üç
+  yol), `slope`, `mae`, `inSampleLoss`, `heldOutLoss`.
+* `fit_log_slope(points, path, resamples, seed)` — OLS eğimi + **pozisyon
+  düzeyinde** bootstrap %95 GA. `gain = -slope` (pozitif = ER düşüyor).
+* `run_curve(sizes, train_fn, seed, ...)` — enjekte edilebilir eğitim hattı.
+* `CurveReport.decision` — `ölçek` / `pipeline` / `belirsiz` / `veri-yok`.
+* `CurveReport.scaling_summary()` — `diagnose(scaling=...)` için özet.
+* `build_markdown`, CLI (`--base-positions`, `--multipliers`, `--out`).
+
+> Gerçek eğitim hattı **henüz bağlanmadı**; `main()` bilerek `SystemExit` atar.
+> Gerçek koşum R-D'de yapılacak.
+
+### 31.5 `scaling_evidence` alanı (madde 5)
+
+`HealthReport.scaling_evidence` → `yok | eğim<ε | eğim≥ε`;
+`scaling_note` gerekçeyi ve GA kesişmesini yazar; `to_dict()` içinde
+`scalingEvidence` / `scalingNote` / `scaling`. CLI: `--scaling <json>`.
+`ε = 0,005` (`SCALING_SLOPE_EPSILON`).
+
+`yok` **"ölçek işe yaramaz" demek değildir**; "ölçülmedi" demektir.
+
+### 31.6 Onarılmış teşhis
+
+`ml/artifacts/pipeline_health_r_c.json`:
+
+| Kapı | Etiket | Değer | Sonuç | Önce |
+|---|---|---|---|---|
+| G1 | PipBot kazanma oranı ≥ 0,90 | 0,9950 | GEÇTİ | GEÇTİ |
+| G2 | Kalibrasyon eğimi [0,85; 1,15] | 0,6743 | **DÜŞTÜ** | DÜŞTÜ |
+| G3 | Kalibrasyon MAE < 0,15 | 0,2683 | **DÜŞTÜ** | DÜŞTÜ |
+| G4 | Korelasyon > 0,90 | 0,9016 | GEÇTİ | GEÇTİ |
+| G5 | Std oranı [0,7; 1,4] (Faz 6) | 1,3371 | **GEÇTİ** | DÜŞTÜ (yanlış bant) |
+| G6 | 2-ply ER < 0,02 | 0,0740 | **DÜŞTÜ** | DÜŞTÜ |
+| G7 | Hedef saçılımı [0,5; 1,5] | 1,0000 | **GEÇTİ** | GEÇTİ (yanlış ölçüm) |
+
+Teşhis **`pipeline`** (değişmedi), ama artık **üç** gerçek arıza var:
+kalibrasyon eğimi, kalibrasyon MAE, ER. Önceki raporda G5 ve G7 de "düşen"
+görünüyordu; ikisi de **ölçüm hatasıydı**.
+
+### 31.7 Testler
+
+| Test | Ad | Dosya | Durum |
+|---|---|---|---|
+| 134 | `G7_TwoSided` (+ G5 Faz 6 bandı) | `ml/tests/test_stage_r_c.py` | YEŞİL |
+| 135 | `G7_Lambda1_RatioIsOne` | `ml/tests/test_stage_r_c.py` | YEŞİL |
+| 136 | `Verdict_PairedFirst` | `ml/tests/test_stage_r_c.py` | YEŞİL |
+| 137 | `Verdict_NoCapacityInference` | `ml/tests/test_stage_r_c.py` | YEŞİL |
+| 138 | `LearningCurve_Runs` | `ml/tests/test_stage_r_c.py` | YEŞİL |
+
+`pytest ml/tests` → **1219 passed, 3 skipped** (1222 toplandı; R-B'de 1159).
+`test_docs_consistency.py` → 21/21.
+
+### 31.8 Test numarası çakışması (düzeltildi)
+
+R-B'de `test_corpus2.py` Test 127–132 olarak numaralandı; ancak
+`ml/tests/test_gnubg_distill.py` **zaten** "Test 127" başlığını taşıyordu
+(`f8b9917`). Son test numarası 127'ydi, yani R-T1 = **128** olmalıydı.
+Düzeltildi: `test_corpus2.py` → Test 128–133, R-C testleri → Test 134–138.
+
+### 31.9 Açık noktalar
+
+1. **G7 üst sınırı (1,5) onay bekliyor** (Kural 2).
+2. **Gerçek öğrenme eğrisi koşulmadı** — `scaling_evidence = yok`.
+3. `er_paths.search1` Python, C# `BackgammonSearch` değil — parite kanıtlanmadı.
+4. `er_paths.terminal_equity` C# `IsGameOver` ile doğrulanmadı.
+5. R-02 / R-03 / R-06 / R-17 / F7-55 → R-D'de.
+6. R-Q1 (GPL), R-Q2 (hint 6 olasılığı), R-Q5 (G7 λ/terminal birimi) açık;
+   R-Q5 **kısmen** yanıtlandı (birim uyumsuzluğu kanıtlandı ve düzeltildi).
+7. `degisenler.zip` hâlâ izlenmiyor.
+
+### 31.10 Sonraki aşama
+
+**R-D — gnubg öğretmen hattı yeniden tasarımı.** Önkoşul: bu raporun onayı.

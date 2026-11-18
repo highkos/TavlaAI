@@ -28,9 +28,12 @@ def test_126a_thresholds_are_the_documented_ones() -> None:
     assert (ph.SLOPE_MIN, ph.SLOPE_MAX) == (0.85, 1.15)
     assert ph.MAE_MAX == 0.15
     assert ph.CORRELATION_MIN == 0.90
-    assert (ph.STD_RATIO_MIN, ph.STD_RATIO_MAX) == (0.85, 1.15)
+    # R-09: onaylanmis bant Faz 6'nin bandi (0,7-1,4); siki bant geri alindi.
+    assert (ph.STD_RATIO_MIN, ph.STD_RATIO_MAX) == (0.7, 1.4)
+    assert (ph.STD_RATIO_LEGACY_MIN, ph.STD_RATIO_LEGACY_MAX) == (0.85, 1.15)
     assert ph.ER_MAX == 0.02
     assert ph.TARGET_STD_RATIO_MIN == 0.5
+    assert ph.TARGET_STD_RATIO_MAX == 1.5
 
 
 def test_126a_gate_ids_are_complete_and_labelled() -> None:
@@ -132,9 +135,22 @@ def test_126f_g5_passes_inside_band(value: float) -> None:
     assert ph.gate_std_ratio(value).passed is True
 
 
-@pytest.mark.parametrize("value", [0.0, 0.8499, 1.3371, 1.1501])
+@pytest.mark.parametrize("value", [0.0, 0.6999, 1.4001, 2.78])
 def test_126f_g5_fails_outside_band(value: float) -> None:
     assert ph.gate_std_ratio(value).passed is False
+
+
+@pytest.mark.parametrize("value", [0.7, 0.8499, 1.3371, 1.1501, 1.4])
+def test_126f_g5_passes_in_faz6_band(value: float) -> None:
+    """R-09: 1,3371 Faz 6 bandinda **gecer**; siki bantta duser."""
+    assert ph.gate_std_ratio(value).passed is True
+
+
+def test_126f_g5_note_reports_both_bands() -> None:
+    gate = ph.gate_std_ratio(1.3371)
+    assert gate.passed is True
+    assert "siki bant" in gate.note
+    assert "DUSTU" in gate.note
 
 
 def test_126f_g5_unmeasured() -> None:
@@ -165,14 +181,29 @@ def test_126g_g6_unmeasured() -> None:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("value", [0.5001, 1.0, 3.0227])
-def test_126h_g7_passes_above_floor(value: float) -> None:
+@pytest.mark.parametrize("value", [0.5, 0.5001, 1.0, 1.4999, 1.5])
+def test_126h_g7_passes_inside_band(value: float) -> None:
+    """Bant **kapali** aralik: [0,5; 1,5]."""
     assert ph.gate_target_std_ratio(value).passed is True
 
 
-@pytest.mark.parametrize("value", [0.0, 0.1, 0.5])
-def test_126h_g7_fails_at_or_below_floor(value: float) -> None:
+@pytest.mark.parametrize("value", [0.0, 0.1, 0.4999])
+def test_126h_g7_fails_below_floor(value: float) -> None:
     assert ph.gate_target_std_ratio(value).passed is False
+
+
+@pytest.mark.parametrize("value", [1.5001, 2.0, 3.0227])
+def test_126h_g7_fails_above_ceiling(value: float) -> None:
+    """R-08: 3,0227 artik **DUSTU** - tek tarafli kapi bunu gizliyordu."""
+    gate = ph.gate_target_std_ratio(value)
+    assert gate.passed is False
+    assert "ust sinir" in gate.note
+
+
+def test_126h_g7_band_is_two_sided() -> None:
+    assert ph.TARGET_STD_RATIO_MIN == 0.5
+    assert ph.TARGET_STD_RATIO_MAX == 1.5
+    assert "0,5; 1,5" in ph.GATE_LABELS["G7"]
 
 
 def test_126h_g7_unmeasured() -> None:
@@ -243,6 +274,9 @@ def test_126i_target_spread_to_dict_keys() -> None:
         "terminalMean",
         "zeroShare",
         "ratio",
+        "signed",
+        "legacyTerminalStd",
+        "legacyRatio",
     }
 
 
@@ -372,7 +406,8 @@ def test_126k_verdict_pipeline_when_value_gate_fails() -> None:
     report = _report(**inputs)
     assert report.verdict == ph.VERDICT_PIPELINE
     assert report.strength_gap is False
-    assert set(report.failed) == {"G2", "G3", "G5"}
+    # R-09: 1,3371 artik G5'ten gecmez; kalan iki deger kapisi duser.
+    assert set(report.failed) == {"G2", "G3"}
 
 
 def test_126k_verdict_foundation_when_g1_fails() -> None:
@@ -534,7 +569,7 @@ def test_126m_markdown_spread_section_only_when_measured() -> None:
 
 def test_126m_markdown_sources_section() -> None:
     md = ph.build_markdown(_report(sources={"er": "ml/artifacts/x.json"}))
-    assert "## 4. Kaynaklar" in md
+    assert "## 5. Kaynaklar" in md
     assert "`ml/artifacts/x.json`" in md
 
 
@@ -725,4 +760,6 @@ def test_126p_real_verdict_is_pipeline() -> None:
     assert report.by_id("G1").passed is True
     assert report.by_id("G2").passed is False
     assert report.by_id("G3").passed is False
-    assert report.by_id("G5").passed is False
+    # R-09: 1,3371 Faz 6 bandinda gecer; siki bant notu bunu kaydeder.
+    assert report.by_id("G5").passed is True
+    assert "DUSTU" in report.by_id("G5").note
