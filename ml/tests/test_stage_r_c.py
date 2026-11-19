@@ -28,36 +28,60 @@ import shards as shard_mod
 
 def test_134_g7_has_an_upper_bound() -> None:
     assert ph.TARGET_STD_RATIO_MAX == 1.5
-    assert ph.TARGET_STD_RATIO_MIN == 0.5
+
+
+def test_134_g7_lambda_one_is_a_unit_sign_test() -> None:
+    """Onay kosulu: ``lam = 1`` modu **birim/isaret testi** olarak adlandirilir."""
+    gate = ph.gate_target_std_ratio(1.0, lam=1.0)
+    assert gate.passed is True
+    assert gate.display_label == ph.GATE_LABEL_G7_UNIT
+    assert "Birim/isaret" in gate.display_label
+    assert ph.TARGET_STD_RATIO_UNIT_TOL == 1e-6
+
+
+def test_134_g7_lambda_one_tolerance_is_tight() -> None:
+    """Bant yok: 1'den 1e-5 sapma **duser**, 1e-7 sapma gecer."""
+    assert ph.gate_target_std_ratio(1.0 + 1e-7, lam=1.0).passed is True
+    assert ph.gate_target_std_ratio(1.0 + 1e-5, lam=1.0).passed is False
 
 
 def test_134_g7_measured_anomaly_now_fails() -> None:
     """Faz 7'de olculen 3,0227 artik **DUSTU** (tek tarafli kapi gizliyordu)."""
-    gate = ph.gate_target_std_ratio(3.0227)
+    gate = ph.gate_target_std_ratio(3.0227, lam=0.7)
     assert gate.passed is False
     assert gate.value == pytest.approx(3.0227)
     assert "ust sinir" in gate.note
 
 
 def test_134_g7_healthy_ratio_passes() -> None:
-    assert ph.gate_target_std_ratio(1.0).passed is True
-    assert ph.gate_target_std_ratio(0.6821).passed is True
+    assert ph.gate_target_std_ratio(1.0, lam=1.0).passed is True
+    assert ph.gate_target_std_ratio(0.6821, lam=0.7).passed is True
 
 
 def test_134_g7_collapse_still_fails() -> None:
-    assert ph.gate_target_std_ratio(0.176).passed is False
+    """Olculen 0,176031 (lam=0,7, model yok) gercek cokme - duser."""
+    assert ph.gate_target_std_ratio(0.176, lam=0.7).passed is False
+
+
+def test_134_g7_lambda_floor_is_derived_not_arbitrary() -> None:
+    """Onay kosulu: ``lam < 1`` alt siniri lam'dan turetilir (0,5 degil)."""
+    assert ph.target_std_ratio_lower(0.7) == pytest.approx(0.7 ** (1.0 / 0.3))
+    assert ph.target_std_ratio_lower(0.7) == pytest.approx(0.30457, abs=1e-4)
+    assert ph.target_std_ratio_lower(0.7) != pytest.approx(0.5)
 
 
 def test_134_g7_label_states_the_band() -> None:
-    assert "0,5" in ph.GATE_LABELS["G7"]
     assert "1,5" in ph.GATE_LABELS["G7"]
+    assert "lam^(1/(1-lam))" in ph.GATE_LABELS["G7"]
 
 
 def test_134_g7_thresholds_are_exported() -> None:
     report = ph.diagnose()
     data = report.to_dict()
-    assert data["thresholds"]["targetStdRatioMin"] == 0.5
     assert data["thresholds"]["targetStdRatioMax"] == 1.5
+    assert data["thresholds"]["targetStdRatioUnitTol"] == 1e-6
+    assert data["thresholds"]["lam"] == 1.0
+    assert data["thresholds"]["targetStdRatioLower"] is None
 
 
 # ----------------------------------------------------------------------

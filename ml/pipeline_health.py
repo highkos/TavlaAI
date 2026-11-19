@@ -90,8 +90,16 @@ ER_MAX = 0.02
 #: anlamina gelir; TD(lam) hedefleri terminal degerlerin yumusatilmis hali
 #: oldugu icin bu beklenmez. Ust sinir olmadan kapi, birim uyusmazligini
 #: (isaretli hedef vs isaretsiz terminal) gizler.
-TARGET_STD_RATIO_MIN = 0.5
 TARGET_STD_RATIO_MAX = 1.5
+#: G7 **birim/isaret testi** toleransi (``lam = 1``).
+#:
+#: Onay kosulu (Faz 7-R R-08): ``lam = 1`` modunda hedefler **tam olarak**
+#: ``+-z`` oldugu icin oran yapisal olarak 1'dir. Bu modda **bant degil**
+#: birim/isaret testi uygulanir: ``|oran - 1| < 1e-6``. Bant kullanmak birim
+#: uyusmazligini "bantta kaldi" diye gizleyebilir; test gizleyemez.
+TARGET_STD_RATIO_UNIT_TOL = 1e-6
+#: ``lam``in 1 sayilmasi icin tolerans.
+LAMBDA_UNIT_TOL = 1e-9
 
 GATE_IDS = ("G1", "G2", "G3", "G4", "G5", "G6", "G7")
 
@@ -102,8 +110,13 @@ GATE_LABELS = {
     "G4": "Korelasyon > 0,90",
     "G5": "Std orani [0,7; 1,4] (Faz 6)",
     "G6": "2-ply ER < 0,02",
-    "G7": "Hedef sacilimi [0,5; 1,5]",
+    "G7": "Hedef sacilimi [lam^(1/(1-lam)); 1,5]",
 }
+
+#: G7'nin iki modu icin ayri etiketler (onay kosulu: ``lam = 1`` modu
+#: "birim/isaret testi" olarak **adlandirilir**).
+GATE_LABEL_G7_UNIT = "Birim/isaret testi |oran-1| < 1e-6 (lam=1)"
+GATE_LABEL_G7_LAMBDA = "Hedef sacilimi [lam^(1/(1-lam)); 1,5]"
 
 #: Olcekleme kaniti esigi: ER'nin **log2(veri)** basina **dususu** (kazanc).
 #:
@@ -143,19 +156,32 @@ class Gate:
     value: float | None
     passed: bool | None
     note: str = ""
+    label: str = ""
+
+    @property
+    def display_label(self) -> str:
+        """Kapi etiketi; ``label`` verilmisse o, yoksa varsayilan."""
+        return self.label or GATE_LABELS.get(self.gate_id, self.gate_id)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "gate": self.gate_id,
-            "label": GATE_LABELS.get(self.gate_id, self.gate_id),
+            "label": self.display_label,
             "value": self.value,
             "passed": self.passed,
             "note": self.note,
         }
 
 
-def _gate(gate_id: str, value: float | None, passed: bool | None, note: str = "") -> Gate:
-    return Gate(gate_id=gate_id, value=value, passed=passed, note=note)
+def _gate(
+    gate_id: str,
+    value: float | None,
+    passed: bool | None,
+    note: str = "",
+    *,
+    label: str = "",
+) -> Gate:
+    return Gate(gate_id=gate_id, value=value, passed=passed, note=note, label=label)
 
 
 def gate_pip_win_rate(win_rate: float | None) -> Gate:
@@ -209,25 +235,55 @@ def gate_er(er: float | None) -> Gate:
     return _gate("G6", float(er), float(er) < ER_MAX)
 
 
-def gate_target_std_ratio(ratio: float | None) -> Gate:
-    """G7: hedef sacilimi **cift tarafli** bantta mi.
+def target_std_ratio_lower(lam: float) -> float:
+    """``lam < 1`` icin G7 **alt siniri** - ``lam``dan turetilir.
 
-    Tek tarafli kapi (Faz 7-R oncesi) yalnizca cokmeyi yakaliyordu; oranin
-    1'in uzerine cikmasi da bir arizadir (hedefler terminal degerlerden daha
-    genis -> birim/isaret uyusmazligi). Bu yuzden ust sinir zorunludur.
+    TD(lam) hedefi, terminal degerin ``lam**(T-t)`` agirligiyla yumusatilmis
+    halidir. Etkin ufuk, geometrik dagilimin ortalamasidir: ``h = 1/(1-lam)``.
+    Hedefin terminal bilgisinin **en az** bu ufuktaki agirligi korumasi
+    beklenir, dolayisiyla
+
+        alt(lam) = lam ** (1 / (1 - lam))
+
+    ``lam -> 1`` icin ``alt -> 1/e = 0,3679``; ``lam = 0,7`` icin 0,3046.
+    Bu, keyfi 0,5 yerine **lam'dan turetilmis** bir sinirdir (onay kosulu).
+    """
+    if not 0.0 < lam < 1.0:
+        raise ValueError("lam (0, 1) araliginda olmali: " + repr(lam))
+    return float(lam ** (1.0 / (1.0 - lam)))
+
+
+def gate_target_std_ratio(ratio: float | None, *, lam: float = 1.0) -> Gate:
+    """G7: hedef sacilimi - **iki modlu** kapi.
+
+    Onay kosulu (Faz 7-R R-08):
+
+    * ``lam == 1``: **birim/isaret testi**. Hedefler tam olarak ``+-z``
+      oldugu icin oran yapisal olarak 1'dir; kapi ``|oran - 1| < 1e-6``.
+      Bant **kullanilmaz** - bant birim uyusmazligini gizler.
+    * ``lam < 1``: alt sinir ``lam**(1/(1-lam))`` (lam'dan turetilmis), ust
+      sinir 1,5 (onayli). Ust sinir, hedeflerin terminal degerlerden **daha
+      genis** olmasini (birim/isaret uyusmazligi) yakalar.
     """
     if ratio is None:
         return _gate("G7", None, None, "olculmedi")
     value = float(ratio)
     if not math.isfinite(value):
         return _gate("G7", value, False, "oran hesaplanamadi (terminal std = 0)")
-    ok = TARGET_STD_RATIO_MIN <= value <= TARGET_STD_RATIO_MAX
-    note = ""
+    if abs(lam - 1.0) <= LAMBDA_UNIT_TOL:
+        ok = abs(value - 1.0) < TARGET_STD_RATIO_UNIT_TOL
+        note = "birim/isaret testi (lam=1): |oran-1| < 1e-6"
+        if not ok:
+            note += "; sapma = %.3e" % abs(value - 1.0)
+        return _gate("G7", value, ok, note, label=GATE_LABEL_G7_UNIT)
+    lower = target_std_ratio_lower(lam)
+    ok = lower <= value <= TARGET_STD_RATIO_MAX
+    note = "lam=%s; alt sinir lam^(1/(1-lam)) = %s" % (_fmt(lam, 2), _fmt(lower))
     if value > TARGET_STD_RATIO_MAX:
-        note = "ust sinir asildi: hedefler terminal degerlerden daha genis"
-    elif value < TARGET_STD_RATIO_MIN:
-        note = "hedefler coktu"
-    return _gate("G7", value, ok, note)
+        note += "; ust sinir asildi: hedefler terminal degerlerden daha genis"
+    elif value < lower:
+        note += "; hedefler coktu"
+    return _gate("G7", value, ok, note, label=GATE_LABEL_G7_LAMBDA)
 
 
 # ----------------------------------------------------------------------
@@ -542,6 +598,7 @@ class HealthReport:
     spread: TargetSpread | None = None
     sources: dict[str, str] = field(default_factory=dict)
     scaling: dict[str, Any] | None = None
+    lam: float = 1.0
 
     def by_id(self, gate_id: str) -> Gate | None:
         for g in self.gates:
@@ -666,8 +723,13 @@ class HealthReport:
                 "stdRatioLegacyMin": STD_RATIO_LEGACY_MIN,
                 "stdRatioLegacyMax": STD_RATIO_LEGACY_MAX,
                 "erMax": ER_MAX,
-                "targetStdRatioMin": TARGET_STD_RATIO_MIN,
                 "targetStdRatioMax": TARGET_STD_RATIO_MAX,
+                "targetStdRatioUnitTol": TARGET_STD_RATIO_UNIT_TOL,
+                "targetStdRatioLower": (
+                    None if abs(self.lam - 1.0) <= LAMBDA_UNIT_TOL
+                    else target_std_ratio_lower(self.lam)
+                ),
+                "lam": self.lam,
                 "scalingSlopeEpsilon": SCALING_SLOPE_EPSILON,
             },
         }
@@ -681,6 +743,7 @@ def diagnose(
     spread: TargetSpread | None = None,
     sources: dict[str, str] | None = None,
     scaling: dict[str, Any] | None = None,
+    lam: float = 1.0,
 ) -> HealthReport:
     """Artifact'lardan kapi listesi ve teshis uretir.
 
@@ -697,13 +760,14 @@ def diagnose(
         gate_correlation(cal["correlation"]),
         gate_std_ratio(cal["std_ratio"]),
         gate_er(er_from_artifact(er_report)),
-        gate_target_std_ratio(spread.ratio if spread is not None else None),
+        gate_target_std_ratio(spread.ratio if spread is not None else None, lam=lam),
     ]
     return HealthReport(
         gates=gates,
         spread=spread,
         sources=dict(sources or {}),
         scaling=dict(scaling) if scaling else None,
+        lam=lam,
     )
 
 
@@ -765,7 +829,7 @@ def build_markdown(report: HealthReport, *, title: str = "Faz 7 - Pipeline sagli
     for g in report.gates:
         lines.append(
             "| %s | %s | %s | **%s** |"
-            % (g.gate_id, GATE_LABELS.get(g.gate_id, g.gate_id), _fmt(g.value), _mark(g.passed))
+            % (g.gate_id, g.display_label, _fmt(g.value), _mark(g.passed))
         )
     lines.append("")
     lines.append("## 2. Teshis")
@@ -915,6 +979,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         spread=spread,
         sources=sources,
         scaling=scaling_data,
+        lam=args.lam,
     )
 
     if args.json is not None:
@@ -929,7 +994,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not args.quiet:
         print("teshis: %s" % report.verdict)
         for g in report.gates:
-            print("  %s %-42s %10s  %s" % (g.gate_id, GATE_LABELS.get(g.gate_id, ""), _fmt(g.value), _mark(g.passed)))
+            print("  %s %-42s %10s  %s" % (g.gate_id, g.display_label, _fmt(g.value), _mark(g.passed)))
         if report.strength_gap:
             print("  -> guc boslugu: pipeline saglikli, ER hedefi tutmuyor")
         print("  olcekleme kaniti: %s (%s)" % (report.scaling_evidence, report.scaling_note))

@@ -4476,3 +4476,116 @@ bırakılır**. Faz 7-R'nin kapsamı şu şekilde genişletilir:
 
 R-C testleri 134–138'i aldı. Küp ER'si testleri **139–147** olarak eklendi
 (`ml/tests/test_cube_er.py`, 27 test). Sonraki boş numara **148**.
+
+---
+
+## F7-78 — G7 kapisi iki modlu: birim/isaret testi + lambda'dan turetilen alt sinir
+
+Kullanici G7'nin **1,5 ust sinirini onayladi** ve iki kosul koydu:
+
+1. `lam = 1` modlari icin kapi `|oran - 1| < 1e-6` olmali ve **"birim/isaret
+   testi"** olarak adlandirilmali.
+2. `lam < 1` alt siniri **lambda'dan turetilmeli**, keyfi bir sabit olmamali.
+
+**Uygulama.** `ml/pipeline_health.py`:
+
+- `TARGET_STD_RATIO_MIN = 0.5` **kaldirildi** (keyfi sabitti).
+- `TARGET_STD_RATIO_MAX = 1.5` (onaylanan ust sinir).
+- `TARGET_STD_RATIO_UNIT_TOL = 1e-6`, `LAMBDA_UNIT_TOL = 1e-9`.
+- `target_std_ratio_lower(lam) = lam ** (1 / (1 - lam))`.
+- `gate_target_std_ratio(ratio, *, lam=1.0)` iki modlu.
+- `Gate.label` / `Gate.display_label`; `HealthReport.lam`; `diagnose(lam=)`;
+  CLI `--lam`.
+
+**Alt sinirin turetimi.** TD(lambda) hedefi terminal degeri `lam ** (T - t)`
+agirligiyla yumusatir. Etkin ufuk geometrik ortalamadir: `h = 1 / (1 - lam)`.
+Hedefin en az bu kadar terminal agirligi korumasi gerekir; bu da oran icin
+`lam ** (1 / (1 - lam))` alt sinirini verir. `lam -> 1` icin `1/e = 0,3679`;
+`lam = 0,7` icin **0,30457**.
+
+**Dogrulanan siniflandirmalar.**
+
+| Olcum | Mod | Sonuc |
+|---|---|---|
+| 0,176031 (lam=0,7, modelsiz) | lam<1 | **basarisiz** (gercek cokme) |
+| 3,0227 (eski anomali) | lam=1 | **basarisiz** (ust sinir) |
+| 1,000000 (lam=1) | lam=1 | **basarili** (birim testi) |
+| 0,682135 (lam=0,7) | lam<1 | **basarili** |
+
+`lam = 1` modunda bant **yoktur**: dogru deger tam olarak 1'dir, cunku hedef
+isaretli terminal serisidir ve terminal de isaretli okunur (F7-63). Bant
+kullanmak, birim uyusmazligini gizleyen hatayi geri getirirdi.
+
+**Testler.** `ml/tests/test_pipeline_health.py` ve `ml/tests/test_stage_r_c.py`
+guncellendi; 194 test geciyor.
+
+---
+
+## F7-79 - Seviye farki (ppg) olcumu: m = 0,1115 ppg, sigma = 2,9960
+
+**Neden.** Kullanici `m = 0,02 ppg` degerini **gecici** onayladi ve gercek
+`sigma_ppg` olcumunu istedi: "m, gnubg 0-ply ile 2-ply arasindaki olculmus ppg
+farkinin yarisi gibi bir deger olmali ki 'esdeger' ifadesi bir seviye farkini
+ayirt etsin." Bu, R-F'nin iddia esigini ve dolayisiyla oyun sayisini belirler.
+
+**Arac.** `ml/ppg_measure.py` (yeni). gnubg kendine-oynama:
+
+- **Money** icin gnubg'nin gomulu Python'u (`gnubg-cli.exe -p script.py`),
+  `set matchlength 0` + `new game`, sonuc `gnubg.match()["games"][-1]["info"]`.
+  `new session` yolu **kullanilamaz**: oyun siniri yok ve gomulu Python'dan
+  kesilemiyor.
+- **Mac** icin `new match L` + cikti ayristirma (`The score (after N games) is:`).
+- Guven araligi **kume bootstrap'i** (20 000 yeniden ornekleme); money'de kume =
+  oyun, macta kume = mac. `sigma_used = max(sigma_oyun, sigma_kume)`.
+
+**Olcum (2400 money oyunu, 40 mac/hucre, 6 isci).**
+
+| Karsilastirma | Baglam | n | Fark (ppg) | %95 GA | sigma |
+|---|---|---|---|---|---|
+| 0-ply vs 2-ply | money | 2400 oyun | **-0,2229** | [-0,3425; -0,1037] | 2,9960 |
+| 0-ply vs 2-ply | mac-5 | 40 mac / 99 oyun | -0,8546 | [-1,8950; +0,1867] | 5,3717 |
+| 0-ply vs 2-ply | mac-9 | 40 mac / 233 oyun | -1,2169 | [-2,3245; -0,3527] | 7,9001 |
+| 2-ply vs 3-ply | money | 400 oyun | -0,0625 | [-0,3600; +0,2400] | 3,0581 |
+| 2-ply vs 3-ply | mac-5 | 40 mac / 113 oyun | +0,1096 | [-0,8279; +1,1388] | 5,3569 |
+| 2-ply vs 3-ply | mac-9 | 40 mac / 213 oyun | -0,8990 | [-1,8590; -0,0512] | 6,8013 |
+
+**Sonuc: `m = 0,1115 ppg`** (0-2 money farkinin yarisi; GA sifiri disliyor).
+
+**Dort bulgu.**
+
+1. **400 oyun yetersizdi.** Ayni hucre 400 oyunla `-0,1300` ve GA
+   `[-0,4150; +0,1550]` verdi - sifiri iceriyor. 2400 oyunla ayni fark
+   `-0,2229` ve GA sifiri **disliyor**. Yani "bir seviye farki" premisi ancak
+   2400 oyunda kuruldu. 400 oyunla `m` turetme girisimi sessizce gurultuden
+   deger uretirdi.
+2. **`sigma_ppg` kullanicinin tahmininden cok yuksek.** Olculen **2,9960**
+   (money), 5,37-7,90 (mac). Kullanicinin 1,4 tahmini ve
+   `match_power.DEFAULT_PPG_SIGMA = 2,4` degeri **dusuk**. `m = 0,1115` icin
+   gereken oyun sayisi **4337** (Kural 4: sigma ust siniri 3,7450). 0,02 icin
+   gereken sayi ~80 000 olurdu - pratikte imkansiz. Olcum R-F'yi
+   **yapilabilir** kildi.
+3. **2-ply vs 4-ply olculemez.** Bu makinede oyun basina 60 s'yi asti (5 oyun
+   300 s'de bitmedi). Ikincil karsilastirma **2-ply vs 3-ply** oldu (6 s/oyun)
+   ve 400 oyunla **gucsuz** kaldi; gereken n ~4519.
+4. **Mac baglaminda ppg olcegi farkli.** Mac-9'da fark -1,22 ppg; bu checker
+   oyunundan cok **kup yetersizligini** yansitir (0-ply kup karari macta cok
+   daha pahali). Bu yuzden `m` **money'den** turetildi; mac huceleri ayri
+   raporlanir.
+
+**`derive_margin` semantigi.** `m = 0,5 x |nokta tahmini|`. Taban olarak
+guven araliginin sifira en yakin sinirini kullanmak **yanlisti**: o zaman `m`
+orneklem buyuklugu ile kuculur ve R-F'nin maliyeti yapay olarak duser. `m`
+seviye farkinin ozelligidir, olcum hassasiyetinin degil. GA bunun yerine
+**guvenilirlik notu** olarak raporlanir (`GA sifiri disliyor: m saglam` /
+`GA sifiri iceriyor: m GECICI`).
+
+**Ikinci hata: marj kaynagi secimi girdi sirasina bagliydi.** `build_report`
+`money[0]` aliyordu; `--merge` ile yeni hucre listenin **sonuna** eklendigi
+icin marj yanlislikla `2-ply vs 3-ply @ money` hucresinden turetildi
+(`m = 0,1200`, gucsuz hucre). Duzeltme: `build_report` karsilastirmalari
+`(plies_a, plies_b, length)` ile **siralar**; `report` alt komutu marji guncel
+kodla **yeniden hesaplar**.
+
+**Testler.** `ml/tests/test_ppg_measure.py` - 10 test (Test 148-157).
+`derive_margin` 3 argumanli; "m orneklem buyuklugune bagli degildir" testi
+eklendi.

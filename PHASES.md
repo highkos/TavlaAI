@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1246** | ~8 dk 30 s | ✅ 1246/1246 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1731** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1273** | ~8 dk 30 s | ✅ 1273/1273 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **1758** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -2479,7 +2479,7 @@ Bölüm 5.1.6 üç yol tanımlar ve **kullanıcı onayı** ister. Ölçüm sonra
 ### 21.9 Doğrulama
 
 ```
-ml/tests                     1246/1246  (3 yavaş/koşullu test atlanır)
+ml/tests                     1273/1273  (3 yavaş/koşullu test atlanır)
 Backgammon.Tests             285/285
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
@@ -2930,10 +2930,10 @@ Ayrı bir `EquityCubeAdvisor` işi gerektirir.
 Backgammon.Tests             297/297   (29 dk 56 s)
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
-ml/tests                    1246/1246  (3 yavaş/koşullu test atlanır)
+ml/tests                    1273/1273  (3 yavaş/koşullu test atlanır)
 ```
 
-Toplam **1731**. Derleme 0 uyarı / 0 hata.
+Toplam **1758**. Derleme 0 uyarı / 0 hata.
 
 
 ## 30. Faz 7-R Aşama R-B — ölçüm altyapısı (F7-55 – F7-62)
@@ -3054,7 +3054,7 @@ Tek çekirdek 2-ply `hint`: ortalama **0,562 s**/pozisyon. 4 süreçte
 ### 30.10 Doğrulama
 
 ```
-ml/tests                    1246/1246  (3 yavaş/koşullu test atlanır)
+ml/tests                    1273/1273  (3 yavaş/koşullu test atlanır)
 ```
 
 Test 128–133 yeşil. `test_docs_consistency.py` 21/21 yeşil.
@@ -3177,7 +3177,7 @@ görünüyordu; ikisi de **ölçüm hatasıydı**.
 | 137 | `Verdict_NoCapacityInference` | `ml/tests/test_stage_r_c.py` | YEŞİL |
 | 138 | `LearningCurve_Runs` | `ml/tests/test_stage_r_c.py` | YEŞİL |
 
-`pytest ml/tests` → **1246 passed, 3 skipped** (1222 toplandı; R-B'de 1159).
+`pytest ml/tests` → **1273 passed, 3 skipped** (1222 toplandı; R-B'de 1159).
 `test_docs_consistency.py` → 21/21.
 
 ### 31.8 Test numarası çakışması (düzeltildi)
@@ -3348,3 +3348,148 @@ satırından **önceki** parçada aranır. Tanınan biçimler: `No double`,
    yaratabilir — ölçülmedi.
 4. Δ = 0,01 için n = 1517 gerekiyor; mevcut 400 yetersiz.
 5. **G7 üst sınırı (1,5) hâlâ onay bekliyor** (Kural 2).
+
+---
+
+## 33. Faz 7-R — G7 iki modlu kapı (F7-78)
+
+### 33.1 Onaylanan değişiklik
+
+Kullanıcı G7 üst sınırını **1,5** olarak onayladı ve iki koşul koydu:
+
+1. `λ = 1` modları için kapı `|oran − 1| < 1e-6` olmalı ve **"birim/işaret
+   testi"** olarak adlandırılmalı.
+2. `λ < 1` alt sınırı **λ'dan türetilmeli**, keyfî olmamalı.
+
+### 33.2 Uygulama
+
+| Öğe | Değer |
+|---|---|
+| `TARGET_STD_RATIO_MAX` | **1,5** (onaylandı) |
+| `TARGET_STD_RATIO_UNIT_TOL` | **1e-6** |
+| `LAMBDA_UNIT_TOL` | **1e-9** |
+| `TARGET_STD_RATIO_MIN` | **kaldırıldı** (0,5 keyfîydi) |
+| `target_std_ratio_lower(lam)` | `lam ** (1 / (1 - lam))` |
+| `GATE_LABEL_G7_UNIT` | `Birim/isaret testi \|oran-1\| < 1e-6 (lam=1)` |
+| `GATE_LABEL_G7_LAMBDA` | `Hedef sacilimi [lam^(1/(1-lam)); 1,5]` |
+
+`λ → 1` için alt sınır `1/e = 0,3679`; `λ = 0,7` için **0,30457**.
+
+### 33.3 Neden türetilmiş alt sınır
+
+TD(λ) hedefi terminal değeri `lam ** (T − t)` ağırlığıyla yumuşatır. Etkin ufuk
+geometrik ortalamadır: `h = 1 / (1 − lam)`. Hedefin en az bu kadar terminal
+ağırlığı koruması gerekir; bu da oran için `lam ** (1 / (1 − lam))` alt sınırını
+verir. Keyfî 0,5 bu gerekçeyi taşımıyordu.
+
+### 33.4 Neden `λ = 1`'de bant yok
+
+`λ = 1` modunda doğru değer **tam olarak 1**'dir: hedef işaretli terminal
+serisidir ve terminal de işaretli okunur (F7-63). Bant kullanmak, birim
+uyuşmazlığını gizleyen hatayı geri getirirdi. Bu yüzden `λ = 1` modu bir
+**birim/işaret testidir**, tolerans testi değil.
+
+### 33.5 Doğrulanan sınıflandırmalar
+
+| Ölçüm | Mod | Sonuç |
+|---|---|---|
+| 0,176031 (λ=0,7, modelsiz) | λ<1 | **başarısız** (gerçek çökme) |
+| 3,0227 (eski anomali) | λ=1 | **başarısız** (üst sınır) |
+| 1,000000 (λ=1) | λ=1 | **başarılı** (birim testi) |
+| 0,682135 (λ=0,7) | λ<1 | **başarılı** |
+
+### 33.6 Raporlama
+
+`HealthReport.lam` eklendi; `to_dict()["thresholds"]` artık
+`targetStdRatioMax`, `targetStdRatioUnitTol`, `targetStdRatioLower` (λ=1 iken
+`None`) ve `lam` taşır. `Gate.label` / `Gate.display_label` eklendi; CLI
+`--lam` ile beslenir, konsol ve Markdown çıktısı `display_label` kullanır.
+
+### 33.7 Testler
+
+`ml/tests/test_pipeline_health.py` ve `ml/tests/test_stage_r_c.py` güncellendi;
+**194 test** geçiyor.
+
+---
+
+## 34. Faz 7-R — Seviye farkı (ppg) ölçümü (F7-79)
+
+### 34.1 Amaç
+
+Kullanıcı `m = 0,02 ppg` değerini **geçici** onayladı ve gerçek `sigma_ppg`
+ölçümünü istedi: `m`, gnubg 0-ply ile 2-ply arasındaki **ölçülmüş** ppg
+farkının yarısı olmalı ki "eşdeğer" bir seviye farkını ayırt etsin.
+
+### 34.2 Araç
+
+`ml/ppg_measure.py` (yeni, 10 test — Test 148–157).
+
+- **Money:** gnubg'nin gömülü Python'u (`gnubg-cli.exe -p script.py`),
+  `set matchlength 0` + `new game`, sonuç `gnubg.match()["games"][-1]["info"]`.
+  `new session` yolu kullanılamaz: oyun sınırı yok ve gömülü Python'dan
+  kesilemiyor.
+- **Maç:** `new match L` + `The score (after N games) is:` satırının ayrıştırılması.
+- **GA:** küme bootstrap'i, 20 000 yeniden örnekleme. Money'de küme = oyun,
+  maçta küme = maç. `sigma_used = max(sigma_oyun, sigma_kume)`.
+
+### 34.3 Ölçüm sonucu
+
+| Karşılaştırma | Bağlam | n | Fark (ppg) | %95 GA | σ |
+|---|---|---|---|---|---|
+| 0-ply vs 2-ply | money | 2400 oyun | **−0,2229** | [−0,3425; −0,1037] | 2,9960 |
+| 0-ply vs 2-ply | maç-5 | 40 maç / 99 oyun | −0,8546 | [−1,8950; +0,1867] | 5,3717 |
+| 0-ply vs 2-ply | maç-9 | 40 maç / 233 oyun | −1,2169 | [−2,3245; −0,3527] | 7,9001 |
+| 2-ply vs 3-ply | money | 400 oyun | −0,0625 | [−0,3600; +0,2400] | 3,0581 |
+| 2-ply vs 3-ply | maç-5 | 40 maç / 113 oyun | +0,1096 | [−0,8279; +1,1388] | 5,3569 |
+| 2-ply vs 3-ply | maç-9 | 40 maç / 213 oyun | −0,8990 | [−1,8590; −0,0512] | 6,8013 |
+
+**`m = 0,1115 ppg`** (0-2 money farkının yarısı; GA sıfırı dışlıyor).
+
+### 34.4 Dört bulgu
+
+1. **400 oyun yetersizdi.** Aynı hücre 400 oyunla `−0,1300`, GA
+   `[−0,4150; +0,1550]` — sıfırı içeriyor. 2400 oyunla GA sıfırı **dışlıyor**.
+   "Bir seviye farkı" premisi ancak 2400 oyunda kuruldu.
+2. **`sigma_ppg` tahminden çok yüksek.** Ölçülen **2,9960** (money),
+   5,37–7,90 (maç). Kullanıcının 1,4 tahmini ve
+   `match_power.DEFAULT_PPG_SIGMA = 2,4` **düşük**. `m = 0,1115` için gereken
+   oyun **4337**; `m = 0,02` için ~80 000 olurdu — pratikte imkânsız. Ölçüm
+   R-F'yi **yapılabilir** kıldı.
+3. **2-ply vs 4-ply ölçülemez.** Oyun başına 60 s'yi aştı (5 oyun 300 s'de
+   bitmedi). İkincil karşılaştırma **2-ply vs 3-ply** oldu (6 s/oyun) ve 400
+   oyunla **güçsüz** kaldı; gereken n ≈ 4519.
+4. **Maç bağlamında ppg ölçeği farklı.** Maç-9'da fark −1,22 ppg; bu checker
+   oyunundan çok **küp yetersizliğini** yansıtır. Bu yüzden `m` **money'den**
+   türetildi; maç hücreleri ayrı raporlanır.
+
+### 34.5 `derive_margin` semantiği
+
+`m = 0,5 × |nokta tahmini|`. Taban olarak GA'nın sıfıra en yakın sınırını
+kullanmak **yanlıştı**: o zaman `m` örneklem büyüklüğüyle küçülür ve R-F'nin
+maliyeti yapay olarak düşer. `m` seviye farkının özelliğidir, ölçüm
+hassasiyetinin değil. GA bunun yerine **güvenilirlik notu** olarak raporlanır.
+
+### 34.6 İkinci hata: marj kaynağı girdi sırasına bağlıydı
+
+`build_report` `money[0]` alıyordu; `--merge` yeni hücreyi listenin **sonuna**
+eklediği için marj yanlışlıkla `2-ply vs 3-ply @ money` hücresinden türetildi
+(`m = 0,1200`, güçsüz hücre). Düzeltme: karşılaştırmalar
+`(plies_a, plies_b, length)` ile **sıralanır**; `report` alt komutu marjı güncel
+kodla **yeniden hesaplar**.
+
+### 34.7 R-F'ye etkisi
+
+| Öğe | Önce (yer tutucu) | Sonra (ölçüldü) |
+|---|---|---|
+| `m` | 0,02 ppg | **0,1115 ppg** |
+| σ_ppg | 1,4 (tahmin) | **2,9960** (money) |
+| Gereken oyun | ~80 000 | **4337** |
+| Duvar saati (6 işçi) | ~6 saat | **~20 dakika** |
+
+### 34.8 Açık noktalar
+
+1. 2-ply vs 3-ply money hücresi güçsüz (400 oyun); gereken n ≈ 4519.
+2. Maç hücrelerinde σ 5,37–7,90; maç iddiası için gereken n 13 900–30 200.
+3. gnubg `cubeinfo` varsayılanı `jacoby: 1`; para oyununda ikincil fark
+   yaratabilir — ölçülmedi.
+4. `m` yalnızca **money** bağlamı için geçerli; maç bağlamı ayrı `m` gerektirir.

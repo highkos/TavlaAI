@@ -10,6 +10,7 @@ uretebildigini ve CLI cikis kodlarinin teshisle tutarli oldugunu dogrular
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -32,7 +33,8 @@ def test_126a_thresholds_are_the_documented_ones() -> None:
     assert (ph.STD_RATIO_MIN, ph.STD_RATIO_MAX) == (0.7, 1.4)
     assert (ph.STD_RATIO_LEGACY_MIN, ph.STD_RATIO_LEGACY_MAX) == (0.85, 1.15)
     assert ph.ER_MAX == 0.02
-    assert ph.TARGET_STD_RATIO_MIN == 0.5
+    # Onay kosulu: lam=1 modu **birim/isaret testi**; bant degil.
+    assert ph.TARGET_STD_RATIO_UNIT_TOL == 1e-6
     assert ph.TARGET_STD_RATIO_MAX == 1.5
 
 
@@ -181,29 +183,74 @@ def test_126g_g6_unmeasured() -> None:
 # ----------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("value", [0.5, 0.5001, 1.0, 1.4999, 1.5])
-def test_126h_g7_passes_inside_band(value: float) -> None:
-    """Bant **kapali** aralik: [0,5; 1,5]."""
-    assert ph.gate_target_std_ratio(value).passed is True
+@pytest.mark.parametrize("value", [1.0, 1.0 + 1e-7, 1.0 - 1e-7, 1.0 + 9e-7])
+def test_126h_g7_unit_test_passes_near_one(value: float) -> None:
+    """Onay kosulu: ``lam = 1`` modunda kapi **birim/isaret testi**dir."""
+    gate = ph.gate_target_std_ratio(value, lam=1.0)
+    assert gate.passed is True
+    assert gate.display_label == ph.GATE_LABEL_G7_UNIT
+    assert "birim/isaret" in gate.note
 
 
-@pytest.mark.parametrize("value", [0.0, 0.1, 0.4999])
-def test_126h_g7_fails_below_floor(value: float) -> None:
-    assert ph.gate_target_std_ratio(value).passed is False
+@pytest.mark.parametrize("value", [0.5, 0.9, 1.0 + 1e-5, 1.5, 3.0227])
+def test_126h_g7_unit_test_fails_away_from_one(value: float) -> None:
+    """Bant **yok**: 1'den her sapma birim/isaret uyusmazligidir."""
+    gate = ph.gate_target_std_ratio(value, lam=1.0)
+    assert gate.passed is False
+    assert gate.display_label == ph.GATE_LABEL_G7_UNIT
+
+
+def test_126h_g7_unit_test_is_default_mode() -> None:
+    """``lam`` verilmezse varsayilan 1,0 -> birim/isaret testi."""
+    assert ph.gate_target_std_ratio(1.0).passed is True
+    assert ph.gate_target_std_ratio(0.5).passed is False
+
+
+def test_126h_g7_lambda_lower_bound_is_derived_from_lambda() -> None:
+    """Onay kosulu: ``lam < 1`` alt siniri **lam'dan turetilir**."""
+    for lam in (0.1, 0.3, 0.5, 0.7, 0.9, 0.99):
+        assert ph.target_std_ratio_lower(lam) == pytest.approx(lam ** (1.0 / (1.0 - lam)))
+
+
+def test_126h_g7_lambda_lower_bound_tends_to_inverse_e() -> None:
+    """``lam -> 1`` icin alt sinir ``1/e``ye yaklasir (keyfi 0,5 degil)."""
+    assert ph.target_std_ratio_lower(0.999) == pytest.approx(1.0 / math.e, abs=2e-3)
+    assert ph.target_std_ratio_lower(0.7) == pytest.approx(0.30457, abs=1e-4)
+
+
+def test_126h_g7_lambda_lower_bound_rejects_out_of_range() -> None:
+    for lam in (0.0, 1.0, 1.5, -0.2):
+        with pytest.raises(ValueError):
+            ph.target_std_ratio_lower(lam)
+
+
+@pytest.mark.parametrize("value", [0.3046, 0.4, 0.6821, 1.0, 1.4999, 1.5])
+def test_126h_g7_lambda_band_passes(value: float) -> None:
+    """``lam = 0,7``: alt sinir 0,3046, ust sinir 1,5."""
+    gate = ph.gate_target_std_ratio(value, lam=0.7)
+    assert gate.passed is True
+    assert gate.display_label == ph.GATE_LABEL_G7_LAMBDA
+    assert "lam^(1/(1-lam))" in gate.note
+
+
+@pytest.mark.parametrize("value", [0.0, 0.176, 0.3045])
+def test_126h_g7_lambda_band_fails_below_derived_floor(value: float) -> None:
+    """Olculen 0,176031 (lam=0,7, model yok) **gercek cokme** - duser."""
+    gate = ph.gate_target_std_ratio(value, lam=0.7)
+    assert gate.passed is False
+    assert "coktu" in gate.note
 
 
 @pytest.mark.parametrize("value", [1.5001, 2.0, 3.0227])
-def test_126h_g7_fails_above_ceiling(value: float) -> None:
+def test_126h_g7_lambda_band_fails_above_ceiling(value: float) -> None:
     """R-08: 3,0227 artik **DUSTU** - tek tarafli kapi bunu gizliyordu."""
-    gate = ph.gate_target_std_ratio(value)
+    gate = ph.gate_target_std_ratio(value, lam=0.7)
     assert gate.passed is False
     assert "ust sinir" in gate.note
 
 
-def test_126h_g7_band_is_two_sided() -> None:
-    assert ph.TARGET_STD_RATIO_MIN == 0.5
+def test_126h_g7_ceiling_is_approved_value() -> None:
     assert ph.TARGET_STD_RATIO_MAX == 1.5
-    assert "0,5; 1,5" in ph.GATE_LABELS["G7"]
 
 
 def test_126h_g7_unmeasured() -> None:
@@ -213,6 +260,7 @@ def test_126h_g7_unmeasured() -> None:
 def test_126h_g7_nan_ratio_fails() -> None:
     # terminal_std == 0 -> ratio nan -> kapi dusmeli (sessizce gecmemeli).
     assert ph.gate_target_std_ratio(float("nan")).passed is False
+    assert ph.gate_target_std_ratio(float("nan"), lam=0.7).passed is False
 
 
 # ----------------------------------------------------------------------
