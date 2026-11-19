@@ -1,0 +1,141 @@
+{
+  "bootstrapResamples": 20000,
+  "bootstrapSeed": 20261120,
+  "clustered": true,
+  "decision": "olcek",
+  "notes": [
+    "Havuzlanmis 3 tohum: 1, 2, 3",
+    "tohum 1: kazanc 0.0062 GA [0.0039; 0.0089] -> belirsiz",
+    "tohum 2: kazanc 0.0073 GA [0.0051; 0.0096] -> olcek",
+    "tohum 3: kazanc 0.0064 GA [0.0040; 0.0088] -> belirsiz"
+  ],
+  "points": [
+    {
+      "calibrationMae": null,
+      "calibrationSlope": null,
+      "counts": {
+        "policy": 3945,
+        "search1": 0,
+        "value": 3945
+      },
+      "games": {
+        "policy": 120,
+        "search1": 0,
+        "value": 120
+      },
+      "heldOutLoss": 0.039493789241138104,
+      "inSampleLoss": 0.6666664878527323,
+      "means": {
+        "policy": 0.039493789241138104,
+        "value": 0.1462757922431598
+      },
+      "multiplier": 1,
+      "note": "3 tohum havuzu",
+      "positions": 500
+    },
+    {
+      "calibrationMae": null,
+      "calibrationSlope": null,
+      "counts": {
+        "policy": 3945,
+        "search1": 0,
+        "value": 3945
+      },
+      "games": {
+        "policy": 120,
+        "search1": 0,
+        "value": 120
+      },
+      "heldOutLoss": 0.028658555003257258,
+      "inSampleLoss": 0.35728352268536884,
+      "means": {
+        "policy": 0.028658555003257258,
+        "value": 0.07821470185747212
+      },
+      "multiplier": 2,
+      "note": "3 tohum havuzu",
+      "positions": 1000
+    },
+    {
+      "calibrationMae": null,
+      "calibrationSlope": null,
+      "counts": {
+        "policy": 3945,
+        "search1": 0,
+        "value": 3945
+      },
+      "games": {
+        "policy": 120,
+        "search1": 0,
+        "value": 120
+      },
+      "heldOutLoss": 0.02418174894071563,
+      "inSampleLoss": 0.288326233625412,
+      "means": {
+        "policy": 0.02418174894071563,
+        "value": 0.045988086051825805
+      },
+      "multiplier": 4,
+      "note": "3 tohum havuzu",
+      "positions": 2000
+    },
+    {
+      "calibrationMae": null,
+      "calibrationSlope": null,
+      "counts": {
+        "policy": 3945,
+        "search1": 0,
+        "value": 3945
+      },
+      "games": {
+        "policy": 120,
+        "search1": 0,
+        "value": 120
+      },
+      "heldOutLoss": 0.01889302905286569,
+      "inSampleLoss": 0.1788191795349121,
+      "means": {
+        "policy": 0.01889302905286569,
+        "value": 0.04535310484955255
+      },
+      "multiplier": 8,
+      "note": "3 tohum havuzu",
+      "positions": 4000
+    }
+  ],
+  "scalingSlopeEpsilon": 0.005,
+  "seed": 1,
+  "seeds": [
+    1,
+    2,
+    3
+  ],
+  "slopes": {
+    "policy": {
+      "ciHigh": -0.005286229926945845,
+      "ciLow": -0.008036505267421576,
+      "clustered": true,
+      "clusters": 120,
+      "gain": 0.006627908662735886,
+      "gainCiHigh": 0.008036505267421576,
+      "gainCiLow": 0.005286229926945845,
+      "n": 4,
+      "path": "policy",
+      "resamples": 20000,
+      "slope": -0.006627908662735886
+    },
+    "value": {
+      "ciHigh": -0.029751794406195183,
+      "ciLow": -0.038663944421467325,
+      "clustered": true,
+      "clusters": 120,
+      "gain": 0.033499467798646806,
+      "gainCiHigh": 0.038663944421467325,
+      "gainCiLow": 0.029751794406195183,
+      "n": 4,
+      "path": "value",
+      "resamples": 20000,
+      "slope": -0.033499467798646806
+    }
+  }
+}

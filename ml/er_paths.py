@@ -56,6 +56,18 @@ DICE_ROLLS = tuple(
     (d1, d2) for d1 in range(1, 7) for d2 in range(d1, 7)
 )
 
+#: Zar olasiliklari (36'da). Cift 1/36, cift olmayan 2/36.
+#:
+#: **F7-80:** eski kod 21 zari **esit** (1/21) agirlikla ortaliyordu. Bu, Python
+#: olcum aracini urun aramasindan ayiriyordu: C# `BackgammonSearch` gercek zar
+#: olasiligini kullanir. Fark, karar yakinsa (ust-2 fark ~0,001) argmax'i
+#: cevirebiliyordu; 500 vakalik parite olcumunde 28 uyusmazligin **tamami**
+#: ust-2 farki <= 0,0155 olan vakalardi.
+DICE_WEIGHTS = tuple(1 if d1 == d2 else 2 for (d1, d2) in DICE_ROLLS)
+
+#: Agirlik toplami (36).
+DICE_WEIGHT_SUM = sum(DICE_WEIGHTS)
+
 #: Bootstrap yeniden ornekleme sayisi (Kural 3: >= 10 000).
 BOOTSTRAP_RESAMPLES = 20000
 
@@ -89,11 +101,16 @@ def terminal_equity(
     points = 1
     if loser_off == 0:
         points = 2
-        # Kaybedenin kendi evinde (1..6) veya barda tasi var mi?
+        # F7-80: mars/backgammon ayrimi **kazananin** evine ve **kaybedenin**
+        # barina bakar. Bu kod tabaninda Beyaz'in evi 19..24, Siyah'in evi
+        # 1..6; Beyaz'in bari 0, Siyah'in bari 25 (bkz. ``refgen.is_home`` ve
+        # ``gnubg_er._bar_index``). Eski kod evleri ve barlari **ters**
+        # kullaniyordu: 500 vakalik parite olcumunde 4 vakada mars yerine
+        # backgammon (ya da tersi) uretiyordu.
         if white_won:
-            in_home = board[0] < 0 or any(board[i] < 0 for i in range(1, 7))
+            in_home = board[25] < 0 or any(board[i] < 0 for i in range(19, 25))
         else:
-            in_home = board[25] > 0 or any(board[i] > 0 for i in range(19, 25))
+            in_home = board[0] > 0 or any(board[i] > 0 for i in range(1, 7))
         if in_home:
             points = 3
 
@@ -176,17 +193,41 @@ def search1_values(
 
     flat_values = scorer.values(flat_vectors) if flat_vectors else []
 
+    # F7-80: rakibin **terminal** afterstate'leri deger kafasindan degil
+    # oyun kuralindan gelir. Eski kod bunlari deger kafasiyla tahmin ediyordu;
+    # rakip mars/backgammon yapabiliyorsa 1-ply deger **sistematik olarak
+    # iyimser** cikiyordu (olculen fark 0,34-0,98 equity).
+    flat_exact: list[float | None] = [None] * len(flat_vectors)
+    cursor = 0
+    for (board, white_off, black_off) in candidates:
+        for (d1, d2) in DICE_ROLLS:
+            dice = [d1, d1, d1, d1] if d1 == d2 else [d1, d2]
+            max_steps, states = refgen.legal_after_states(
+                board, opponent, dice, white_off, black_off
+            )
+            if max_steps == 0 or not states:
+                continue
+            for (b, w, k) in sorted(states):
+                exact = terminal_equity(b, w, k, opponent)
+                if exact is not None:
+                    flat_exact[cursor] = exact
+                cursor += 1
+
     out: list[float] = []
     for index, per_roll in enumerate(spans):
         total = 0.0
-        for (start, end) in per_roll:
+        for roll, (start, end) in enumerate(per_roll):
+            weight = DICE_WEIGHTS[roll]
             if start < 0:
                 # Rakip oynayamaz: kendi (rakip bakisi) degeri.
-                total += own_values[index]
+                total += weight * own_values[index]
                 continue
-            best = max(flat_values[start:end])
-            total += best
-        out.append(-total / float(len(DICE_ROLLS)))
+            best = max(
+                flat_exact[j] if flat_exact[j] is not None else flat_values[j]
+                for j in range(start, end)
+            )
+            total += weight * best
+        out.append(-total / float(DICE_WEIGHT_SUM))
 
     # Terminal adaylar: deger kafasi yerine kesin puan.
     for index, (board, white_off, black_off) in enumerate(candidates):

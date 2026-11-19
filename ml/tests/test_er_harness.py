@@ -173,8 +173,18 @@ def test_er_harness_is_deterministic() -> None:
     assert first["digest"] == second["digest"]
     assert first["splits"] == second["splits"]
 
+    # **F7-80:** dondurulmuş v1 kümesi, `reference_gen`'in büyük-zar
+    # filtresi kusurlu **eski** sürümüyle üretildi. Kusur düzeltildiği için
+    # üretici artık farklı (ama yasal) bir yürüyüş izliyor ve özet değişiyor.
+    # v1 kümesi **tarihsel taban** olarak dondurulmuş kalır (0,0740 ölçümü
+    # `stage_h_er_2ply.json` 0,073970'i birebir yeniden üretir); bu yüzden
+    # özet eşitliği aranmaz, yalnızca üreticinin **kendi içinde** determinist
+    # olduğu ve dondurulmuş kümenin hâlâ okunabildiği doğrulanır.
     corpus = _corpus()
-    assert corpus["digest"] == first["digest"], "dondurulmuş küme üreticiyle uyuşmuyor"
+    assert corpus["digest"] != first["digest"], (
+        "F7-80 sonrası üretici değişti; dondurulmuş v1 özeti farklı olmalı"
+    )
+    assert len(corpus["cases"]) == H.TARGET_POSITIONS
 
     if GNUBG is None:
         return

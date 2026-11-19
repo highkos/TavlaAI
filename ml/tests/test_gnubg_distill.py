@@ -32,7 +32,7 @@ def test_127a_constants() -> None:
 
 def test_127a_verdict_labels_are_distinct() -> None:
     labels = {
-        gd.VERDICT_PIPELINE,
+        gd.VERDICT_TEACHER_EFFECTIVE,
         gd.VERDICT_PARTIAL,
         gd.VERDICT_CAPACITY,
         gd.VERDICT_UNPROVEN,
@@ -73,7 +73,7 @@ def test_127b_verdict_without_paired_is_unproven() -> None:
 
 def test_127b_verdict_pipeline_requires_ci_upper_below_target() -> None:
     paired = {"n": 300, "meanDiff": 0.02, "excludesZero": True, "ciHighAfter": 0.0299}
-    assert gd.distill_verdict(0.0740, 0.0299, paired=paired) == gd.VERDICT_PIPELINE
+    assert gd.distill_verdict(0.0740, 0.0299, paired=paired) == gd.VERDICT_TEACHER_EFFECTIVE
 
 
 def test_127b_verdict_point_estimate_below_target_is_not_pipeline() -> None:
@@ -111,13 +111,13 @@ def test_127b_verdict_sufficient_data_when_n_meets_required() -> None:
     paired = {"n": 300, "meanDiff": 0.02, "excludesZero": True, "ciHighAfter": 0.0299}
     assert (
         gd.distill_verdict(0.0740, 0.0299, paired=paired, required_n=285)
-        == gd.VERDICT_PIPELINE
+        == gd.VERDICT_TEACHER_EFFECTIVE
     )
 
 
 def test_127b_verdict_custom_target() -> None:
     paired = {"n": 300, "meanDiff": 0.05, "excludesZero": True, "ciHighAfter": 0.055}
-    assert gd.distill_verdict(0.10, 0.05, target=0.06, paired=paired) == gd.VERDICT_PIPELINE
+    assert gd.distill_verdict(0.10, 0.05, target=0.06, paired=paired) == gd.VERDICT_TEACHER_EFFECTIVE
 
 
 def test_127b_verdict_detail_reports_no_capacity_inference() -> None:
@@ -244,7 +244,7 @@ def test_127l_verdict_pipeline_beats_unproven() -> None:
     paired = {"n": 70, "meanDiff": 0.0, "se": 0.01, "t": 0.0,
               "ciLow": -0.02, "ciHigh": 0.02, "excludesZero": False,
               "ciHighAfter": 0.0299}
-    assert gd.distill_verdict(0.0708, 0.0299, paired=paired) == gd.VERDICT_PIPELINE
+    assert gd.distill_verdict(0.0708, 0.0299, paired=paired) == gd.VERDICT_TEACHER_EFFECTIVE
 
 
 def test_127l_verdict_without_paired_is_unproven() -> None:
@@ -699,7 +699,7 @@ def test_127g_markdown_has_sections() -> None:
             "value": {"finalMae": 0.2, "correlation": 0.9, "slope": 1.0, "er": 0.0708},
             "policy": {"steps": 100, "width": 20, "valueWeight": 0.5,
                        "firstLoss": 1.0, "lastLoss": 0.1, "top1": 1.0},
-            "verdict": gd.VERDICT_PIPELINE,
+            "verdict": gd.VERDICT_TEACHER_EFFECTIVE,
             "erBefore": 0.0740,
             "erAfter": 0.0200,
             "target": 0.03,
@@ -711,7 +711,7 @@ def test_127g_markdown_has_sections() -> None:
     assert "## 3. Politika damitma" in md
     assert "## 4. Karar" in md
     assert "## 5. Durustluk notlari" in md
-    assert "**`pipeline`**" in md
+    assert "**`ogretmen-etkili`**" in md
     assert "GPL" in md
     assert "| Iyilesme | 73.0% |" in md
 

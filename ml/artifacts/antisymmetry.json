@@ -1,0 +1,32 @@
+{
+  "count": 500,
+  "model": "ml\\runs\\stage_d_l2\\onnx\\model_v30.onnx",
+  "correlation": -0.891470269165664,
+  "meanAbsSum": 0.7151693571206084,
+  "maxAbsSum": 3.0299026650680787,
+  "sumWithinTol": 116,
+  "sumTotal": 12167,
+  "vectorizerChecked": 12167,
+  "vectorizerMismatches": 0,
+  "vectorizerSymmetric": true,
+  "argmaxAgreement": 174,
+  "argmaxTotal": 500,
+  "argmaxRate": 0.348,
+  "erPlus": 0.039599999999999996,
+  "erMinus": 0.087524,
+  "erDiff": -0.047923999999999994,
+  "erDiffCiLow": -0.06199444999999999,
+  "erDiffCiHigh": -0.03398585000000002,
+  "erDiffExcludesZero": true,
+  "corrMin": 0.99,
+  "sumTol": 0.001,
+  "corrOk": false,
+  "erOk": false,
+  "passed": false,
+  "notes": [
+    "Girdi vektoru renk takasinda simetrikse kusur **modelde**dir; girdi simetrisi bu raporda ayrica olculur.",
+    "Bu olcum R-D **oncesi** durumdur. R-D egitimi iki perspektif artirimi (`augment_perspectives`) veya girdi kanoniklestirmesi kullanmak zorunda; kapi R-D sonunda yeniden aranir.",
+    "KORELASYON KAPISI DUSTU: |corr| = 0.8915 < 0.99",
+    "ER FARKI KAPISI DUSTU: GA [-0.0620; -0.0340] sifiri disliyor"
+  ]
+}

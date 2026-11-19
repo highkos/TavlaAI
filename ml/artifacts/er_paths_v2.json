@@ -1,5 +1,5 @@
 {
- "model": "ml/runs/stage_d_l2/onnx/model_v30.onnx",
+ "model": "ml\\runs\\stage_d_l2\\onnx\\model_v30.onnx",
  "referee": {
   "command": "eval",
   "column": "2",
@@ -39,7 +39,17 @@
     "race": 150
    },
    "weightedMean": 0.043353,
-   "terminalCandidates": 0
+   "terminalCandidates": 0,
+   "sourceMeans": {
+    "gnubg2": 0.045568,
+    "random": 0.02606,
+    "self": 0.030119
+   },
+   "sourceCounts": {
+    "gnubg2": 664,
+    "random": 50,
+    "self": 286
+   }
   },
   "value": {
    "path": "value",
@@ -66,38 +76,56 @@
     "race": 150
    },
    "weightedMean": 0.047798,
-   "terminalCandidates": 0
+   "terminalCandidates": 0,
+   "sourceMeans": {
+    "gnubg2": 0.051169,
+    "random": 0.0287,
+    "self": 0.030727
+   },
+   "sourceCounts": {
+    "gnubg2": 664,
+    "random": 50,
+    "self": 286
+   }
   },
   "search1": {
    "path": "search1",
    "label": "1-ply expectiminimax (deger kafasi)",
    "count": 1000,
-   "mean": 0.020962,
+   "mean": 0.020936,
    "median": 0.0,
    "maximum": 0.417,
-   "exactMatchRate": 0.58,
-   "sigma": 0.04769,
-   "sigmaCiLow": 0.041479,
-   "sigmaCiHigh": 0.053968,
-   "ciLow": 0.018109,
+   "exactMatchRate": 0.592,
+   "sigma": 0.0473,
+   "sigmaCiLow": 0.041115,
+   "sigmaCiHigh": 0.053557,
+   "ciLow": 0.018055,
    "ciHigh": 0.023963,
-   "standardError": 0.001508,
+   "standardError": 0.001496,
    "phaseMeans": {
-    "bar": 0.023544,
-    "contact": 0.022855,
-    "race": 0.009087
+    "bar": 0.02214,
+    "contact": 0.023612,
+    "race": 0.008227
    },
    "phaseCounts": {
     "bar": 250,
     "contact": 600,
     "race": 150
    },
-   "weightedMean": 0.022105,
-   "terminalCandidates": 0
+   "weightedMean": 0.021943,
+   "terminalCandidates": 0,
+   "sourceMeans": {
+    "gnubg2": 0.023083,
+    "random": 0.01302,
+    "self": 0.017336
+   },
+   "sourceCounts": {
+    "gnubg2": 664,
+    "random": 50,
+    "self": 286
+   }
   }
  },
  "corpus": "v2",
- "split": "all",
- "elapsedSeconds": 2119.8,
- "corpusDigest": "e0466b9e673dca6cbdd05d8246730deea9371fa9a425055db715e8390e4a97b8"
+ "split": "all"
 }

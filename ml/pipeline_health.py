@@ -139,6 +139,8 @@ SCALING_STATES = (SCALING_NONE, SCALING_BELOW, SCALING_AT_OR_ABOVE)
 #: Teshis etiketleri.
 VERDICT_HEALTHY = "saglikli"
 VERDICT_PIPELINE = "pipeline"
+VERDICT_SCALE = "olcek"
+VERDICT_UNDETERMINED = "belirsiz"
 VERDICT_FOUNDATION = "temel"
 VERDICT_UNKNOWN = "bilinmiyor"
 
@@ -620,26 +622,42 @@ class HealthReport:
 
     @property
     def verdict(self) -> str:
-        """Teshis: ``saglikli`` / ``pipeline`` / ``temel`` / ``bilinmiyor``.
+        """Teshis: ``saglikli`` / ``pipeline`` / ``olcek`` / ``belirsiz`` /
+        ``temel`` / ``bilinmiyor``.
 
         ``saglikli`` demek icin **G1-G5 ve G7'nin hepsi olculmus ve gecmis**
         olmalidir. Olculmemis bir kapi varken "saglikli" demek sahte bir
         guvencedir; o durumda teshis ``bilinmiyor``dur. ``G6`` (ER) bu kuralin
         disindadir: ER bir **guc** olcumudur, pipeline sagliginin onkosulu
         degildir (bkz. :attr:`strength_gap`).
+
+        **``pipeline`` bir nedensel iddiadir ve kanit ister** (Faz 7-R adim 0).
+        "Deger kapisi dustu" tek basina "dar bogaz pipeline" demek degildir:
+        ayni tablo kapasite yetersizliginden de dogar. Ayrim ancak ogrenme
+        egrisiyle kurulur:
+
+        * ``scaling_evidence == "egim<eps"`` -> ``pipeline`` (olcek ise yaramiyor)
+        * ``scaling_evidence == "egim>=eps"`` -> ``olcek`` (olcek kaldiractir)
+        * ``scaling_evidence == "yok"`` -> ``belirsiz`` (olculmedi, iddia yok)
         """
         g1 = self.by_id("G1")
         if g1 is None or g1.passed is None:
             return VERDICT_UNKNOWN
         if g1.passed is False:
             return VERDICT_FOUNDATION
-        # G1 gecti: kalibrasyon/deger kapilarindan biri dusuyorsa pipeline.
+        # G1 gecti: kalibrasyon/deger kapilarindan biri dusuyorsa dar bogaz var.
         value_gates = ("G2", "G3", "G4", "G5", "G7")
         any_failed = any(
             (g := self.by_id(gid)) is not None and g.passed is False for gid in value_gates
         )
         if any_failed:
-            return VERDICT_PIPELINE
+            # Nedensel etiket icin ogrenme egrisi kaniti zorunlu.
+            evidence = self.scaling_evidence
+            if evidence == SCALING_BELOW:
+                return VERDICT_PIPELINE
+            if evidence == SCALING_AT_OR_ABOVE:
+                return VERDICT_SCALE
+            return VERDICT_UNDETERMINED
         # Hicbiri dusmedi; ama hepsi olculdu mu?
         all_measured = all(
             (g := self.by_id(gid)) is not None and g.passed is True for gid in value_gates
@@ -797,9 +815,23 @@ VERDICT_TEXT = {
     ),
     VERDICT_PIPELINE: (
         "Teshis **pipeline**. Model PipBot'u yeniyor ama deger kafasi bozuk "
-        "(kalibrasyon/MAE/std orani). Bu durumda olcek buyutmek ise yaramaz: "
-        "daha buyuk model daha emin bir sekilde yanlis olur. Once hedef/kayip/"
-        "kalibrasyon hattini onarin."
+        "(kalibrasyon/MAE/std orani) **ve** ogrenme egrisi olcegin ise "
+        "yaramadigini gosteriyor (egim < esik). Bu durumda olcek buyutmek ise "
+        "yaramaz: daha buyuk model daha emin bir sekilde yanlis olur. Once "
+        "hedef/kayip/kalibrasyon hattini onarin."
+    ),
+    VERDICT_SCALE: (
+        "Teshis **olcek**. Deger kapisi dusuyor **ama** ogrenme egrisi olcegin "
+        "ise yaradigini gosteriyor (egim >= esik). Bu durumda once daha cok "
+        "veri/daha buyuk ag denemek dogru kaldiractir; kalibrasyon onarimini "
+        "bunun ardina birakin."
+    ),
+    VERDICT_UNDETERMINED: (
+        "Teshis **belirsiz**. Deger kapilarindan en az biri dustu, yani bir dar "
+        "bogaz var; **ama** ogrenme egrisi olculmedi. \"Dar bogaz pipeline\" "
+        "nedensel bir iddiadir ve kanit ister: ayni tablo kapasite "
+        "yetersizliginden de dogar. `ml/learning_curve.py` egrisini olcun; "
+        "egim < esik ise `pipeline`, egim >= esik ise `olcek` denebilir."
     ),
     VERDICT_FOUNDATION: (
         "Teshis **temel**. Model basit bir sezgisel bottan bile zayif. Once "
@@ -999,12 +1031,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("  -> guc boslugu: pipeline saglikli, ER hedefi tutmuyor")
         print("  olcekleme kaniti: %s (%s)" % (report.scaling_evidence, report.scaling_note))
 
-    # Cikis kodu: 0 = saglikli, 1 = pipeline, 2 = temel, 3 = bilinmiyor
+    # Cikis kodu: 0 = saglikli, 1 = pipeline, 2 = temel, 3 = bilinmiyor,
+    # 4 = belirsiz (olcek kaniti yok), 5 = olcek
     return {
         VERDICT_HEALTHY: 0,
         VERDICT_PIPELINE: 1,
         VERDICT_FOUNDATION: 2,
         VERDICT_UNKNOWN: 3,
+        VERDICT_UNDETERMINED: 4,
+        VERDICT_SCALE: 5,
     }[report.verdict]
 
 

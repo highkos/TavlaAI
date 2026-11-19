@@ -4589,3 +4589,185 @@ kodla **yeniden hesaplar**.
 **Testler.** `ml/tests/test_ppg_measure.py` - 10 test (Test 148-157).
 `derive_margin` 3 argumanli; "m orneklem buyuklugune bagli degildir" testi
 eklendi.
+
+## F7-80 - `search1` paritesi: Python olcum aracinda **dort** gercek kusur
+
+Kullanici "adim 0" kapisi olarak C#-Python `search1` paritesini istedi. Parite
+olcumu (`ml/search1_parity.py`, 500 vaka, corpus v2, `--stride 2`) **dort ayri
+kusur** buldu. Dordu de Python **olcum** tarafindaydi; C# urun kodu dogruydu.
+
+**Kusur 1 - zar agirligi.** `er_paths.search1_values` 21 zari **esit**
+(1/21) agirlikla ortaliyordu. C# `BackgammonSearch` gercek zar olasiligini
+kullanir (cift 1/36, cift olmayan 2/36). Duzeltme: `DICE_WEIGHTS` /
+`DICE_WEIGHT_SUM`. Etki: 500 vakada argmax uyusmasi 0,9440 -> 0,9820, skor MAE
+0,0277 -> 0,0079.
+
+**Kusur 2 - rakibin terminal afterstate'leri.** 1-ply aramada rakibin yanitlari
+`scorer.values` ile **deger kafasindan** tahmin ediliyordu. Rakip mars/backgammon
+yapabiliyorsa bu tahmin sistematik olarak iyimserdi (olculen sapma 0,34-0,98
+equity). Duzeltme: `terminal_equity` ile **oyun kuralindan** hesaplanir.
+
+**Kusur 3 - `terminal_equity` ev/bar gelenegi ters.** Bu kod tabaninda Beyaz'in
+evi 19..24, Siyah'in evi 1..6; Beyaz'in bari 0, Siyah'in bari 25
+(`refgen.is_home`, `gnubg_er._bar_index`). Fonksiyon evleri ve barlari **ters**
+kullaniyordu: 4 vakada mars yerine backgammon (ya da tersi) uretiyordu.
+
+**Kusur 4 - `tools/reference_gen.py` icindeki `_single_step_uses_die` off sayaci.** Off
+sayaclarini `key`'den alip **bir kez daha** artiriyordu, bu yuzden hicbir zaman
+eslesmiyordu. Sonuc: buyuk-zar filtresi **her** tek-adimli sonucu atiyor,
+`legal_after_states` bos kume donduruyordu. `er_paths.search1` "rakip oynayamaz"
+dalina dusup degeri deger kafasindan tahmin ediyordu (olculen sapma 0,52
+equity). Bu kusur **urun** kodunu da etkiliyordu: `tools/reference_gen.py`
+korpus uretiminde ve `ml/er_harness.py` icinde kullanilir.
+
+**Sonuc (duzeltmelerden sonra, 500 vaka):**
+
+| Olcum | Deger |
+|---|---|
+| Kararli vaka (ust-2 fark > 0,02) | 357 |
+| Berabere vaka (cikarildi) | 143 |
+| Argmax uyusmasi (kararli) | **357/357 = 1,0000**, GA [1,0000; 1,0000] |
+| Skor MAE | **5,36e-08** (float32 yuvarlama) |
+| Skor maksimum fark | 7,51e-07 |
+
+Yani Python `search1` ile C# `BackgammonSearch` **sayisal olarak ayni**
+(float32 hassasiyetinde). Kalan 6 "uyusmazlik" tam berabere (ust-2 fark = 0);
+orada argmax kayan nokta gurultusudur, parite kusuru degil. Bu yuzden kapi
+**kararli** vakalar uzerinde islenir (`TIE_TOL = 0.02`).
+
+**Baslik ER'si degismedi.** Duzeltmelerden sonra corpus v2 uzerinde:
+
+| Yol | Once | Sonra |
+|---|---|---|
+| `policy` | 0,0402 | 0,0402 |
+| `value` | 0,0442 | 0,0442 |
+| `search1` | 0,0210 | **0,0209** |
+
+Kusurlar az sayida (bear-off / terminal) pozisyonu etkiliyordu; baslik sayilari
+saglam. `ml/artifacts/er_paths_v2.json` duzeltilmis olcumle degistirildi.
+
+**Artefaktlar.** `ml/artifacts/search1_corpus.json`,
+`ml/artifacts/search1_cs.json`, `ml/artifacts/search1_parity.json` / `.md`.
+
+**Testler.** `ml/tests/test_search1_parity.py` - 6 test (Test 176-181).
+
+## F7-81 - Renk takasi (antisimetri) olcumu: kapi **DUSTU**
+
+Kullanici "adim 0" kapisi olarak renk takasinda `|corr| >= 0,99` ve renk
+takasinda ER farkinin **olculemez** olmasini istedi. `ml/antisymmetry.py` bunu
+olcer.
+
+**Olcum (model_v30, corpus v2, 500 vaka, gnubg 2-ply hakem):**
+
+| Olcum | Deger | Kapi | Durum |
+|---|---|---|---|
+| `corr(e(+1), e(-1))` | **-0,8915** | `\|corr\| >= 0,99` | **DUSTU** |
+| ER farki GA | **[-0,0620; -0,0340]** | sifiri icermeli | **DUSTU** |
+| Girdi renk-simetrisi (`flip_perspective`) | 0/12 167 uyusmazlik | 0 olmali | GECTI |
+| `mean \|e(+1)+e(-1)\|` | 0,7152 | 0'a yakin | DUSTU |
+| `max \|e(+1)+e(-1)\|` | 3,0299 | - | - |
+| `\|e(+1)+e(-1)\| <= 0,001` | 116/12 167 (0,95%) | - | - |
+| Politika antisimetrisi | 174/500 (0,3480) | - | - |
+| ER(+1) | 0,0396 | - | - |
+| ER(-1) | 0,0875 | - | - |
+
+**Teshis: kusur girdide degil, modelde.** Girdi vektoru renk takasinda
+**kusursuz** simetrik (12 167 afterstate'in **sifirinda** uyusmazlik). Yani
+`gnubg_er.vectorize` dogru; model iki bakista farkli sey soyluyor. Kok neden
+F7-55'te bulunmustu: `ml/train_v2.py` girdi vektorune **bakis artirimi**
+uygulamiyor (`flip_exclusive` yalnizca TD(lambda) hedef zincirinde, satir
+97/136/138).
+
+**Politika antisimetrisi "ayni argmax" degildir.** Politika kafasi **oynayacak
+tarafin** en iyi hamlesini siralar; bakis cevrilince oynayacak taraf degisir.
+Dogru ifade `argmax(logit(+1)) == argmin(logit(-1))`. Ilk surum iki argmax'i
+karsilastiriyordu ve ER(-1) = 0,4907 gibi anlamsiz bir sayi uretiyordu; bu
+duzeltildi.
+
+**Bu "once" durumudur.** Kapi **R-D'de** gecmelidir: R-D egitimi iki perspektif
+artirimi (`antisymmetry.augment_perspectives`) veya girdi kanoniklestirmesi
+kullanmak **zorunda**. R-D sonunda ayni olcum tekrarlanir ve kapi aranir.
+
+**Artefaktlar.** `ml/artifacts/antisymmetry.json` / `.md`.
+
+**Testler.** `ml/tests/test_antisymmetry.py` - 10 test (Test 158-167).
+
+## F7-82 - `learning_curve.py` gercek egitime baglandi
+
+Kullanici "adim 0" kapisi olarak `learning_curve.py`'in gercek egitime
+baglanmasini, **>= 3 tohum** ve **oyun duzeyi kume bootstrap** istedi.
+
+**Yeni modul `ml/curve_pool.py`.** Etiketli havuz uretir: gnubg 2-ply ile
+kendine karsi oyun oynar, her karar noktasinda **tum** adaylari etiketler
+(`gnubg_hint.HintReferee`), aday vektorlerini ve gnubg equity'lerini saklar.
+Bolum **oyun duzeyinde**: `--held-out-games` oyunlar tamamen held-out'a gider.
+`CurvePool` alanlari: `x` [M,221], `offsets` [N+1], `best` [N], `y` [N],
+`cand_equity` [M], `game_ids` [N], `split` [N], `meta`.
+
+**`make_train_fn`** `TrainFn` sozlesmesini doldurur: N pozisyon ornekler,
+`epochs` **sabit** tutarak egitir (veri degisir, epoch degismez - R-D kurali),
+held-out pozisyonlarda **pozisyon basina** politika ve deger kaybi dondurur,
+`gameIds` ile birlikte. Boylece bootstrap oyun duzeyinde kumelenebilir.
+
+**`learning_curve.py` degisiklikleri:**
+- `_cluster_means(losses, game_ids)` eklendi.
+- `fit_log_slope(..., cluster=True)` - **oyun duzeyi** kume bootstrap. Ayni
+  oyunun pozisyonlari korelidir; kume GA'si pozisyon GA'sindan **dar olamaz**
+  (test 184 bunu dogrular).
+- `run_curve(..., cluster=True)` ve yeni `run_curve_multi_seed(sizes, train_fn,
+  seeds, ...)` - tohumlari **havuzlar**, oyun kimliklerini tohumla onekler
+  (`s0:g3`), boylece ayni kimlik farkli tohumda ayni kume sayilmaz.
+- CLI: `--pool` (zorunlu), `--seeds`, `--epochs`, `--no-cluster`, `--out`,
+  `--markdown`. `main()` artik `SystemExit` **atmiyor**.
+- `CurveReport` alanlari: `seeds`, `clustered`.
+
+**Olcum (200 oyun, 6 596 pozisyon, 129 819 aday, 3 tohum, 20 sabit epoch):**
+
+| Carpan | Pozisyon | ER `policy` | ER `value` | In-sample |
+|---|---|---|---|---|
+| 1x | 500 | 0,0395 | 0,1463 | 0,6667 |
+| 2x | 1 000 | 0,0287 | 0,0782 | 0,3573 |
+| 4x | 2 000 | 0,0242 | 0,0460 | 0,2883 |
+| 8x | 4 000 | 0,0189 | 0,0454 | 0,1788 |
+
+| Yol | Kazanc (ER / log2 veri) | %95 GA | Karar |
+|---|---|---|---|
+| `policy` | **0,0066** | [0,0053; 0,0080] | esik 0,0050 ustu |
+| `value` | **0,0335** | [0,0298; 0,0387] | esik ustu |
+
+**Karar: `olcek`.** Tohum bazinda: tohum 1 `belirsiz` (GA [0,0039; 0,0089]),
+tohum 2 `olcek`, tohum 3 `belirsiz`. Havuzlanmis karar `olcek`; **tek tohum
+yeterli degil**, bu yuzden >=3 tohum kurali korunur.
+
+`search1` sutunu bos: `make_train_fn` yalnizca politika ve deger kaybini
+dondurur; 1-ply arama kaybi egitim hedefi degildir. Bos sutun gizlenmez.
+
+**Artefaktlar.** `ml/artifacts/curve_pool.npz`,
+`ml/artifacts/learning_curve.json` / `.md`.
+
+**Testler.** `ml/tests/test_curve_pool.py` - 8 test (Test 168-175);
+`ml/tests/test_learning_curve_cluster.py` - 6 test (Test 182-187).
+
+## F7-83 - `pipeline` etiketi `belirsiz`e ayrildi, `distill_verdict` yeniden adlandirildi
+
+Kullanici "adim 0" kapisi olarak iki etiket degisikligi istedi.
+
+**`pipeline_health.verdict`.** Bir deger kapisi dustugunde artik dogrudan
+`pipeline` **denmiyor**: `scaling_evidence` okunur.
+- `egim<eps` -> `pipeline` (olcek **kanitlandi** olarak yardim etmiyor)
+- `egim>=eps` -> yeni `olcek` (`VERDICT_SCALE`)
+- `yok` -> yeni `belirsiz` (`VERDICT_UNDETERMINED`)
+
+`yok` "olcek yardim etmiyor" demek **degil**, "olculmedi" demektir. Eski kod bu
+ikisini karistiriyordu. CLI cikis kodlari: 0 saglikli, 1 pipeline, 2 temel,
+3 bilinmiyor, **4 belirsiz**, **5 olcek**.
+
+**`gnubg_distill.VERDICT_PIPELINE` -> `VERDICT_TEACHER_EFFECTIVE =
+"ogretmen-etkili"`.** Eski ad bir **neden** iddia ediyordu ("damitma ise yaradi,
+demek ki sorun pipeline'da"). Yeni ad yalnizca **olcumu** adlandirir: ogretmen
+etkili oldu. Kapasite cikarimi `distill_verdict_detail` icinde
+`capacityInference: false` olarak isaretlenir; `VERDICT_CAPACITY` hic
+dondurulmez.
+
+**Testler.** `test_pipeline_health.py` + `test_gnubg_distill.py` +
+`test_stage_r_c.py` -> **315 test** gecti.

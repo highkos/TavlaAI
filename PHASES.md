@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1273** | ~8 dk 30 s | ✅ 1273/1273 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1758** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1310** | ~8 dk 30 s | ✅ 1310/1310 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **1795** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -2479,7 +2479,7 @@ Bölüm 5.1.6 üç yol tanımlar ve **kullanıcı onayı** ister. Ölçüm sonra
 ### 21.9 Doğrulama
 
 ```
-ml/tests                     1273/1273  (3 yavaş/koşullu test atlanır)
+ml/tests                     1310/1310  (3 yavaş/koşullu test atlanır)
 Backgammon.Tests             285/285
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
@@ -2930,10 +2930,10 @@ Ayrı bir `EquityCubeAdvisor` işi gerektirir.
 Backgammon.Tests             297/297   (29 dk 56 s)
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
-ml/tests                    1273/1273  (3 yavaş/koşullu test atlanır)
+ml/tests                    1310/1310  (3 yavaş/koşullu test atlanır)
 ```
 
-Toplam **1758**. Derleme 0 uyarı / 0 hata.
+Toplam **1795**. Derleme 0 uyarı / 0 hata.
 
 
 ## 30. Faz 7-R Aşama R-B — ölçüm altyapısı (F7-55 – F7-62)
@@ -3054,7 +3054,7 @@ Tek çekirdek 2-ply `hint`: ortalama **0,562 s**/pozisyon. 4 süreçte
 ### 30.10 Doğrulama
 
 ```
-ml/tests                    1273/1273  (3 yavaş/koşullu test atlanır)
+ml/tests                    1310/1310  (3 yavaş/koşullu test atlanır)
 ```
 
 Test 128–133 yeşil. `test_docs_consistency.py` 21/21 yeşil.
@@ -3177,7 +3177,7 @@ görünüyordu; ikisi de **ölçüm hatasıydı**.
 | 137 | `Verdict_NoCapacityInference` | `ml/tests/test_stage_r_c.py` | YEŞİL |
 | 138 | `LearningCurve_Runs` | `ml/tests/test_stage_r_c.py` | YEŞİL |
 
-`pytest ml/tests` → **1273 passed, 3 skipped** (1222 toplandı; R-B'de 1159).
+`pytest ml/tests` → **1310 passed, 3 skipped** (1222 toplandı; R-B'de 1159).
 `test_docs_consistency.py` → 21/21.
 
 ### 31.8 Test numarası çakışması (düzeltildi)
@@ -3493,3 +3493,153 @@ kodla **yeniden hesaplar**.
 3. gnubg `cubeinfo` varsayılanı `jacoby: 1`; para oyununda ikincil fark
    yaratabilir — ölçülmedi.
 4. `m` yalnızca **money** bağlamı için geçerli; maç bağlamı ayrı `m` gerektirir.
+
+## 35. Faz 7-R — "adım 0" kapıları (F7-80 – F7-83)
+
+R-D'ye geçmeden kullanıcının istediği **dört** kapı. Üçü kod, biri ölçüm.
+
+### 35.1 Kapı 1 — renk takası (antisimetri)
+
+`ml/antisymmetry.py` (yeni). `mirror_board`, `flip_perspective`,
+`augment_perspectives`, `measure_antisymmetry`, `build_markdown`.
+
+**Ölçüm (model_v30, corpus v2, 500 vaka, gnubg 2-ply):**
+
+| Ölçüm | Değer | Kapı | Durum |
+|---|---|---|---|
+| `corr(e(+1), e(-1))` | **−0,8915** | `\|corr\| ≥ 0,99` | **DUSTU** |
+| ER farkı GA | **[−0,0620; −0,0340]** | sıfırı içermeli | **DUSTU** |
+| Girdi renk-simetrisi | 0/12 167 uyusmazlık | 0 | GEÇTİ |
+| `mean \|e(+1)+e(−1)\|` | 0,7152 | 0'a yakın | DUSTU |
+| Politika antisimetrisi | 174/500 (0,3480) | — | — |
+| ER(+1) / ER(−1) | 0,0396 / 0,0875 | — | — |
+
+**Teşhis: kusur modelde, girdide değil.** Girdi vektörü renk takasında
+kusursuz simetrik. Kök neden F7-55: `ml/train_v2.py` girdi vektörüne bakış
+artırımı uygulamıyor.
+
+**Politika antisimetrisi "aynı argmax" değildir.** Doğru ifade
+`argmax(logit(+1)) == argmin(logit(−1))`; ilk sürüm iki argmax'ı
+karşılaştırıyordu ve ER(−1) = 0,4907 gibi anlamsız bir sayı üretiyordu.
+
+**Bu "önce" durumudur.** Kapı **R-D'de** geçmelidir; R-D eğitimi
+`augment_perspectives` veya girdi kanonikleştirmesi kullanmak zorunda.
+
+### 35.2 Kapı 2 — `learning_curve.py` gerçek eğitime bağlandı
+
+`ml/curve_pool.py` (yeni): gnubg 2-ply kendine karşı oyun, her karar
+noktasında **tüm** adaylar etiketli, bölüm **oyun düzeyinde**
+(`--held-out-games`). `CurvePool`: `x` [M,221], `offsets`, `best`, `y`,
+`cand_equity`, `game_ids`, `split`, `meta`.
+
+`make_train_fn` → `TrainFn` sözleşmesi: N pozisyon örnekle, `epochs` **sabit**
+(veri değişir, epoch değişmez), held-out'ta **pozisyon başına** kayıp +
+`gameIds` döndür.
+
+`learning_curve.py`: `_cluster_means` eklendi; `fit_log_slope(..., cluster=True)`
+**oyun düzeyi** küme bootstrap; `run_curve_multi_seed` tohumları havuzlar ve
+oyun kimliklerini tohumla önekler (`s0:g3`); CLI `--pool`/`--seeds`/`--epochs`/
+`--no-cluster`/`--out`/`--markdown`; `main()` artık `SystemExit` atmıyor.
+
+Küme GA'sı pozisyon GA'sından **dar olamaz** (test 184).
+
+### 35.3 Kapı 3 — etiketler
+
+`pipeline_health.verdict`: değer kapısı düştüğünde `scaling_evidence` okunur —
+`eğim<eps` → `pipeline`, `eğim≥eps` → yeni **`ölçek`**, `yok` → yeni
+**`belirsiz`**. `yok` "ölçek yardım etmiyor" değil, "ölçülmedi" demektir. CLI
+çıkış kodları 4 = `belirsiz`, 5 = `ölçek`.
+
+`gnubg_distill.VERDICT_PIPELINE` → **`VERDICT_TEACHER_EFFECTIVE =
+"ogretmen-etkili"`**. Eski ad bir **neden** iddia ediyordu; yeni ad yalnızca
+ölçümü adlandırır. `capacityInference: false`.
+
+### 35.4 Kapı 4 — C#–Python `search1` paritesi
+
+`ml/search1_parity.py` (yeni) + `Backgammon.MatchBench search1` alt komutu.
+500 vaka, corpus v2, `--stride 2`.
+
+**Dört gerçek kusur bulundu — dördü de Python ölçüm tarafında:**
+
+1. **Zar ağırlığı.** 21 zar **eşit** (1/21) ağırlıklıydı; C# gerçek olasılığı
+   kullanır (çift 1/36, çift olmayan 2/36). → `DICE_WEIGHTS`.
+2. **Rakibin terminal afterstate'leri** değer kafasından tahmin ediliyordu;
+   rakip mars/backgammon yapabiliyorsa sistematik iyimser (0,34–0,98 equity).
+   → `terminal_equity` ile oyun kuralından.
+3. **`terminal_equity` ev/bar geleneği ters.** Beyaz'ın evi 19..24, barı 0;
+   Siyah'ın evi 1..6, barı 25. 4 vakada mars ↔ backgammon karıştı.
+4. **`tools/reference_gen.py` icindeki `_single_step_uses_die` off sayacı.** Sayaçları
+   `key`'den alıp bir kez daha artırıyordu → hiç eşleşmiyordu → büyük-zar
+   filtresi **her** tek-adımlı sonucu atıyordu → `legal_after_states` boş küme.
+   Bu kusur **ürün** kodunu da etkiliyordu (korpus üretimi, `er_harness`).
+
+**Sonuç (düzeltmelerden sonra):**
+
+| Ölçüm | Değer |
+|---|---|
+| Kararlı vaka (üst-2 fark > 0,02) | 357 |
+| Berabere vaka (çıkarıldı) | 143 |
+| Argmax uyuşması (kararlı) | **357/357 = 1,0000**, GA [1,0000; 1,0000] |
+| Skor MAE | **5,36e-08** (float32 yuvarlama) |
+| Skor maksimum fark | 7,51e-07 |
+
+Python `search1` ile C# `BackgammonSearch` **sayısal olarak aynı**. Kalan 6
+"uyuşmazlık" tam berabere (üst-2 fark = 0); orada argmax kayan nokta
+gürültüsüdür. Kapı **kararlı** vakalar üzerinde işlenir (`TIE_TOL = 0.02`).
+
+**Başlık ER'si değişmedi:** `policy` 0,0402 → 0,0402; `value` 0,0442 → 0,0442;
+`search1` 0,0210 → **0,0209**. Kusurlar az sayıda (bear-off / terminal)
+pozisyonu etkiliyordu. `ml/artifacts/er_paths_v2.json` düzeltilmiş ölçümle
+değiştirildi.
+
+### 35.5 Artefaktlar
+
+| Dosya | İçerik |
+|---|---|
+| `ml/artifacts/antisymmetry.json` / `.md` | renk takası ölçümü (500 vaka) |
+| `ml/artifacts/curve_pool.npz` | 200 oyun / 6 596 pozisyon / 129 819 aday, oyun düzeyinde bölünmüş |
+| `ml/artifacts/learning_curve.json` / `.md` | 3 tohum, 4 nokta, oyun düzeyi küme bootstrap |
+| `ml/artifacts/search1_corpus.json` | parite girdisi (500 vaka) |
+| `ml/artifacts/search1_cs.json` | C# `Backgammon.MatchBench search1` çıktısı |
+| `ml/artifacts/search1_parity.json` / `.md` | parite raporu |
+
+**Öğrenme eğrisi sonucu (3 tohum, 500→4 000 pozisyon, 20 sabit epoch):**
+
+| Çarpan | Pozisyon | ER `policy` | ER `value` | In-sample |
+|---|---|---|---|---|
+| 1× | 500 | 0,0395 | 0,1463 | 0,6667 |
+| 2× | 1 000 | 0,0287 | 0,0782 | 0,3573 |
+| 4× | 2 000 | 0,0242 | 0,0460 | 0,2883 |
+| 8× | 4 000 | 0,0189 | 0,0454 | 0,1788 |
+
+| Yol | Kazanç (ER / log2 veri) | %95 GA | Karar |
+|---|---|---|---|
+| `policy` | **0,0066** | [0,0053; 0,0080] | eşik 0,0050 üstü |
+| `value` | **0,0335** | [0,0298; 0,0387] | eşik üstü |
+
+**Karar: `ölçek`.** Veri ikiye katlandığında ER ölçülebilir biçimde düşüyor.
+Tohum bazında: tohum 1 → `belirsiz` (GA [0,0039; 0,0089]), tohum 2 → `ölçek`,
+tohum 3 → `belirsiz`. Havuzlanmış karar `ölçek`; **tek tohum yeterli değil**,
+bu yüzden ≥3 tohum kuralı korunur.
+
+`search1` sütunu boş: `curve_pool.make_train_fn` yalnızca politika ve değer
+kaybını döndürür; 1-ply arama kaybı eğitim hedefi değildir. Boş sütun
+**gizlenmez**.
+
+### 35.6 Testler
+
+| Dosya | Test | Aralık |
+|---|---|---|
+| `ml/tests/test_antisymmetry.py` | 10 | 158–167 |
+| `ml/tests/test_curve_pool.py` | 8 | 168–175 |
+| `ml/tests/test_search1_parity.py` | 6 | 176–181 |
+| `ml/tests/test_learning_curve_cluster.py` | 6 | 182–187 |
+
+### 35.7 Açık kalanlar
+
+1. **Renk takası kapısı DÜŞTÜ** — R-D'de geçmesi zorunlu.
+2. `curve_pool` etiketleri gnubg GPL; ürün dağıtımı öncesi lisans netleşmeli
+   (R-Q1).
+3. `search1` paritesi **cubeless**; küp kararı ayrı eksen (F7-73).
+4. `TIE_TOL = 0.02` bir **ölçüm** tercihidir, model kusuru değil; 143/500 vaka
+   berabere çıktı çünkü corpus v2'de birçok pozisyonda tek yasal hamle var.

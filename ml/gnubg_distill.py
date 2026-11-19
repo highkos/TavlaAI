@@ -4,13 +4,13 @@ Neden bu deney? Inceleme, en buyuk kaldracin kendi aramamizin bilgisini
 damitmak degil, **gnubg 2-ply etiketlerini** ogretmen olarak kullanmak
 oldugunu one surdu. Mantik basit ve karar verici:
 
-* Etiketlerle ER **0,03'un altina** iniyorsa sorun **pipeline**dir (hedef/kayip
-  hatti). Kendi aramamizla urettigimiz hedefler yeterince bilgi tasimiyor.
-* Inmiyorsa sorun **kapasite**dir (ag kucuk, veri az). O zaman olcek buyutmek
-  dogru kaldractir.
+* Etiketlerle ER **0,03'un altina** iniyorsa **ogretmen etkilidir**: gnubg
+  etiketleri kendi aramamizin urettigi hedeflerden daha fazla bilgi tasiyor.
+* Inmiyorsa ogretmen etkili degildir.
 
-Bu, F7-20'nin (teshis: `pipeline`) dogal devamidir: teshis "pipeline" dedi, bu
-deney **hangi** pipeline onariminin ise yaradigini olcer.
+**Bu deney kapasite/pipeline ayrimini KURMAZ** (Faz 7-R adim 0). Eski metin
+"inmiyorsa sorun kapasitedir" diyordu; bu bir nedensel iddiaydi ve olcumle
+desteklenmiyordu. Ayrim ancak `ml/learning_curve.py` egrisiyle kurulur.
 
 Yontem:
 
@@ -68,7 +68,7 @@ DEFAULT_LR = 1e-3
 DEFAULT_BATCH = 256
 #: Politika egitiminde deger teriminin agirligi (politika ana hedeftir).
 DEFAULT_VALUE_WEIGHT = 0.5
-#: Incelemenin karar esigi: ER bu degerin altina inerse sorun pipeline'dir.
+#: Incelemenin karar esigi: ER bu degerin altina inerse **ogretmen etkilidir**.
 TARGET_ER = 0.03
 #: "Isaretli iyilesme" icin gereken en kucuk goreli kazanc. Faz 7-R'den sonra
 #: yalnizca **raporlama** amaciyla kullanilir; karar etiketini degistirmez
@@ -80,7 +80,11 @@ PAIRED_BOOTSTRAP_RESAMPLES = 20000
 PAIRED_BOOTSTRAP_SEED = 20261121
 
 #: Karar etiketleri.
-VERDICT_PIPELINE = "pipeline"
+#: Etiketler **nedensel iddia tasimaz** (Faz 7-R adim 0). Eski ``pipeline``
+#: etiketi "dar bogaz pipeline" diyordu; olcumun gosterdigi tek sey
+#: **ogretmen etiketlerinin ise yaradigidir**. Kapasite/pipeline ayrimi
+#: ``ml/learning_curve.py`` egrisiyle kurulur, bu fonksiyonla degil.
+VERDICT_TEACHER_EFFECTIVE = "ogretmen-etkili"
 VERDICT_PARTIAL = "kismi"
 #: **Kaldirildi** (Faz 7-R R-07). Etiketlerin ise yaramamasi kapasiteyi
 #: kanitlamaz; bu yuzden ``distill_verdict`` bu etiketi **asla dondurmez**.
@@ -793,7 +797,7 @@ def paired_er_test(
 
     ``paired_loss_test`` yalnizca normal yaklasimla fark GA'si veriyordu; bu
     fonksiyon **bootstrap** GA uretir ve ayrica ``er_after``in **mutlak** GA'sini
-    hesaplar. Ikincisi zorunludur: "pipeline" iddiasi "ER hedefin altinda"
+    hesaplar. Ikincisi zorunludur: "ogretmen etkili" iddiasi "ER hedefin altinda"
     demektir ve bu, farkin degil **mutlak** ER'nin GA'siyla sinanmalidir
     (Faz 7-R R-07: eski kod ``er_after <= target`` nokta tahminine bakiyordu).
 
@@ -871,8 +875,9 @@ def distill_verdict(
     * olcum eksik / sonlu degil -> ``bilinmiyor``
     * ``paired`` yok -> ``belirsiz`` (eslesmis kanit yok)
     * ``required_n`` verildi ve ``n < required_n`` -> ``veri-yetersiz``
-    * ``paired["ciHighAfter"] <= target`` -> ``pipeline``: ER'nin **GA ust
-      siniri** hedefin altinda, yani etiketler sorunu cozdu.
+    * ``paired["ciHighAfter"] <= target`` -> ``ogretmen-etkili``: ER'nin **GA
+      ust siniri** hedefin altinda, yani ogretmen etiketleri ise yaradi. Bu
+      **kapasite/pipeline ayrimi degildir**; o ayrim ogrenme egrisiyle kurulur.
     * GA sifiri disliyor ve ``meanDiff > 0`` -> ``kismi``: kazanc kanitlandi
       ama ER hedefin uzerinde.
     * aksi halde -> ``belirsiz``.
@@ -893,7 +898,7 @@ def distill_verdict(
     ci_high_after = paired.get("ciHighAfter")
     if ci_high_after is not None and math.isfinite(float(ci_high_after)):
         if float(ci_high_after) <= float(target):
-            return VERDICT_PIPELINE
+            return VERDICT_TEACHER_EFFECTIVE
     if paired.get("excludesZero", False) and float(paired.get("meanDiff", 0.0)) > 0.0:
         return VERDICT_PARTIAL
     return VERDICT_UNPROVEN
@@ -933,15 +938,16 @@ def distill_verdict_detail(
 
 
 VERDICT_TEXT = {
-    VERDICT_PIPELINE: (
-        "Etiketler sorunu cozdu: ER hedefin altina indi. Dar bogaz **pipeline**"
-        "di (hedef/kayip hatti), kapasite degil. Kendi aramamizin urettigi "
-        "hedefler yeterli bilgi tasimiyordu."
+    VERDICT_TEACHER_EFFECTIVE: (
+        "**Ogretmen etkili.** ER'nin GA ust siniri hedefin altina indi: gnubg "
+        "etiketleri ise yaradi. Bu, kendi aramamizin urettigi hedeflerin "
+        "yetersiz kaldigini gosterir. **Kapasite/pipeline ayrimi bu etiketten "
+        "cikmaz**; o ayrim `ml/learning_curve.py` egrisiyle kurulur."
     ),
     VERDICT_PARTIAL: (
-        "Anlamli iyilesme var ama ER hedefin uzerinde. Hem **pipeline** hem "
-        "**kapasite** payi var: once etiket hattini (gnubg ogretmen) kalici hale "
-        "getirin, sonra olcek buyutun."
+        "Anlamli iyilesme var ama ER hedefin uzerinde. Ogretmen **kismen** "
+        "etkili: etiket hattini (gnubg ogretmen) kalici hale getirin. "
+        "Kapasite payi bu olcumden cikmaz; ogrenme egrisiyle olculmelidir."
     ),
     VERDICT_CAPACITY: (
         "**Kaldirildi (Faz 7-R R-07).** Etiketlerin ise yaramamasi kapasiteyi "

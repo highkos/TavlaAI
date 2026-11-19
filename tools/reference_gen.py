@@ -167,19 +167,29 @@ def legal_after_states(board, turn, dice, white_off, black_off):
             filtered = set()
             for key in results:
                 # Tek adımlı sonuç: büyük zarla oynanmış mı?
-                if _single_step_uses_die(board, turn, higher, key):
+                if _single_step_uses_die(
+                    board, turn, higher, key, white_off, black_off
+                ):
                     filtered.add(key)
             return max_steps, filtered
 
     return max_steps, set(results.keys())
 
 
-def _single_step_uses_die(board, turn, die, key):
-    nb, wo, bo = key
+def _single_step_uses_die(board, turn, die, key, white_off, black_off):
+    """Tek adımlık sonuç ``key`` bu zarla mı oynanmış?
+
+    **F7-80:** eski sürüm off sayaclarını ``key``'den alıp bir kez daha
+    artırıyordu; bu yüzden hiçbir zaman eşleşmiyordu. Sonuç: büyük-zar
+    filtresi **her** tek-adımlı sonucu atıyor, ``legal_after_states`` boş
+    küme döndürüyordu. Bu, ``er_paths.search1``'in "rakip oynayamaz"
+    dalına düşmesine ve değeri değer kafasından tahmin etmesine yol
+    açıyordu (ölçülen sapma 0,52 equity).
+    """
     for step in generate_steps(board, turn, die):
         frm, to, is_off = step
         nb2 = apply_step(board, turn, step)
-        wo2, bo2 = (wo, bo)
+        wo2, bo2 = white_off, black_off
         if is_off:
             if turn == 1:
                 wo2 += 1

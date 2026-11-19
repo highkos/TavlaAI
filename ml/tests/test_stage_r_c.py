@@ -220,12 +220,12 @@ def _synthetic_games() -> list[shard_mod.GameRecord]:
 def test_136_point_estimate_below_target_cannot_say_pipeline() -> None:
     """R-07'nin tam kalbi: nokta tahmini hedefin altinda, GA ust siniri ustunde."""
     paired = {"n": 300, "meanDiff": 0.02, "excludesZero": True, "ciHighAfter": 0.041}
-    assert gd.distill_verdict(0.0740, 0.0299, paired=paired) != gd.VERDICT_PIPELINE
+    assert gd.distill_verdict(0.0740, 0.0299, paired=paired) != gd.VERDICT_TEACHER_EFFECTIVE
 
 
 def test_136_pipeline_requires_ci_upper_below_target() -> None:
     paired = {"n": 300, "meanDiff": 0.02, "excludesZero": True, "ciHighAfter": 0.0299}
-    assert gd.distill_verdict(0.0740, 0.0299, paired=paired) == gd.VERDICT_PIPELINE
+    assert gd.distill_verdict(0.0740, 0.0299, paired=paired) == gd.VERDICT_TEACHER_EFFECTIVE
 
 
 def test_136_no_paired_evidence_is_unproven() -> None:
@@ -279,7 +279,7 @@ def test_137_sufficient_data_when_n_meets_required() -> None:
     paired = {"n": 300, "meanDiff": 0.02, "excludesZero": True, "ciHighAfter": 0.0299}
     assert (
         gd.distill_verdict(0.0740, 0.0299, paired=paired, required_n=285)
-        == gd.VERDICT_PIPELINE
+        == gd.VERDICT_TEACHER_EFFECTIVE
     )
 
 

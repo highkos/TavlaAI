@@ -54,6 +54,8 @@ namespace Backgammon.MatchBench
                         return RunProbe(args);
                     case "dump-afterstates":
                         return RunDumpAfterStates(args);
+                    case "search1":
+                        return RunSearch1(args);
                     case "bench":
                         return RunBench(args);
                     case "decision-latency":
@@ -85,6 +87,7 @@ namespace Backgammon.MatchBench
             Console.WriteLine("  Backgammon.MatchBench crawford --out <json>");
             Console.WriteLine("  Backgammon.MatchBench gen-positions --count 200 --out <json> [--seed 1]");
             Console.WriteLine("  Backgammon.MatchBench cube-dice --positions <in.json> --out <out.json> [--model <onnx>]");
+            Console.WriteLine("  Backgammon.MatchBench search1 --positions <in.json> --out <out.json> [--model <onnx>] [--depth 1] [--limit N] [--stride N]");
             Console.WriteLine("  Backgammon.MatchBench bench --model <onnx> --out <json> [--cuda 0|1] [--buckets 1,8,32,128,512,2048]");
             Console.WriteLine("  Backgammon.MatchBench decision-latency --model <onnx> --out <json> [--depth 2] [--positions 30] [--max-root 4] [--max-inner 4] [--tt-capacity 1048576]");
         }
@@ -1255,6 +1258,217 @@ namespace Backgammon.MatchBench
             WriteText(outPath, sb.ToString());
             Console.WriteLine("dump-afterstates: " + written + " kayit -> " + outPath);
             return 0;
+        }
+
+        // ------------------------------------------------------------------
+        // search1 — C# aramasi ile Python `er_paths.search1` paritesi
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Faz 7-R adim 0 madde 4: <b>C#–Python <c>search1</c> paritesi</b>.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <c>ml/er_paths.py</c> icindeki <c>search1</c> Python'da yazilmis 1-ply bir
+        /// aramadir; urun ise <see cref="BackgammonSearch"/> kullanir. Ikisinin ayni
+        /// hamleyi secmesi <b>kanitlanmamis</b>ti. Bu alt komut, ayni korpusu C#
+        /// aramasiyla degerlendirip <b>aday basina</b> skorlari doker; Python tarafi
+        /// ayni korpusu kendi <c>search1</c>'i ile degerlendirir ve
+        /// <c>ml/search1_parity.py</c> iki ciktiyi karsilastirir.
+        /// </para>
+        /// <para>
+        /// <b>Neden aday basina skor:</b> yalnizca argmax'i karsilastirmak, iki arama
+        /// farkli skorlarla ayni hamleyi sectiginde parite varmis gibi gosterir.
+        /// Skorlar da dokulur; karsilastirma hem argmax hem skor farkini raporlar.
+        /// </para>
+        /// <para>
+        /// <b>Bilinen yapisal farklar</b> (parite testi bunlari ayri raporlar):
+        /// Python <c>search1</c> 21 zari <b>esit</b> agirlikla ortalar (1/21); C#
+        /// arama gercek zar olasiligini kullanir (cevrimdisi 2/36, cift 1/36).
+        /// Ayrica Python terminal adaylari kesin puanla degistirir; C# aramasi
+        /// terminal kayitlari kendi terminal degerinden alir.
+        /// </para>
+        /// </remarks>
+        private static int RunSearch1(string[] args)
+        {
+            string positionsPath = null;
+            string outPath = null;
+            string modelPath = null;
+            int depth = 1;
+            int limit = 0;
+            int stride = 1;
+
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (args[i] == "--positions" && i + 1 < args.Length)
+                {
+                    positionsPath = args[++i];
+                }
+                else if (args[i] == "--out" && i + 1 < args.Length)
+                {
+                    outPath = args[++i];
+                }
+                else if (args[i] == "--model" && i + 1 < args.Length)
+                {
+                    modelPath = args[++i];
+                }
+                else if (args[i] == "--depth" && i + 1 < args.Length)
+                {
+                    depth = int.Parse(args[++i], CultureInfo.InvariantCulture);
+                }
+                else if (args[i] == "--limit" && i + 1 < args.Length)
+                {
+                    limit = int.Parse(args[++i], CultureInfo.InvariantCulture);
+                }
+                else if (args[i] == "--stride" && i + 1 < args.Length)
+                {
+                    stride = int.Parse(args[++i], CultureInfo.InvariantCulture);
+                }
+            }
+
+            if (positionsPath == null || outPath == null)
+            {
+                Console.Error.WriteLine("search1: --positions ve --out zorunlu.");
+                return 2;
+            }
+
+            if (stride < 1)
+            {
+                Console.Error.WriteLine("search1: --stride >= 1 olmali.");
+                return 2;
+            }
+
+            OnnxEvaluatorOptions options = OnnxEvaluatorOptions.Default;
+            options.IntraOpThreads = 1;
+            options.InterOpThreads = 1;
+
+            using OnnxModelHandle handle = OnnxModelHandle.Load(modelPath ?? DefaultModelPath(), options);
+            using var inner = new OnnxPolicyValueEvaluator(handle, options);
+
+            using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(positionsPath));
+            JsonElement cases = doc.RootElement.GetProperty("cases");
+
+            SearchSettings ss = SearchSettings.Reference(depth);
+            EngineSettings es = EngineSettings.Default;
+            var workspace = new SearchWorkspace();
+            var scratch = new BackgammonState();
+
+            var sb = new StringBuilder();
+            sb.Append("{\n  \"model\": ").Append(JsonString(handle.ModelPath));
+            sb.Append(",\n  \"depth\": ").Append(depth);
+            sb.Append(",\n  \"cases\": [");
+
+            int index = 0;
+            int seen = 0;
+            int passes = 0;
+
+            foreach (JsonElement c in cases.EnumerateArray())
+            {
+                if (seen++ % stride != 0)
+                {
+                    continue;
+                }
+
+                if (limit > 0 && index >= limit)
+                {
+                    break;
+                }
+
+                BackgammonState state = StateFromJson(c);
+                JsonElement dice = c.GetProperty("dice");
+                BackgammonEngine.SetDice(state, dice[0].GetInt32(), dice[1].GetInt32());
+
+                workspace.Reset();
+                SearchResult sr = BackgammonSearch.Search(state, ss, es, workspace, inner);
+
+                if (sr.IsPass)
+                {
+                    passes++;
+                }
+
+                sb.Append(index == 0 ? "\n" : ",\n");
+                sb.Append("    {\"name\": ").Append(JsonString(c.GetProperty("name").GetString()));
+                sb.Append(", \"turn\": ").Append(state.turn);
+                sb.Append(", \"dice\": [").Append(dice[0].GetInt32()).Append(", ")
+                  .Append(dice[1].GetInt32()).Append(']');
+                sb.Append(", \"candidateCount\": ").Append(sr.CandidateCount);
+                sb.Append(", \"isPass\": ").Append(sr.IsPass ? "true" : "false");
+                sb.Append(", \"evaluationScore\": ").Append(Num(sr.EvaluationScore));
+                sb.Append(", \"bestSequence\": ").Append(JsonString(sr.BestSequence.ToString()));
+                sb.Append(", \"bestIndex\": ").Append(sr.IsPass ? -1 : BestIndex(sr));
+                sb.Append(", \"candidates\": [");
+
+                ReadOnlySpan<RootCandidate> candidates = sr.RootCandidates;
+                for (int k = 0; k < candidates.Length; k++)
+                {
+                    RootCandidate rc = candidates[k];
+                    if (k > 0)
+                    {
+                        sb.Append(", ");
+                    }
+
+                    // Afterstate kimligi: aday dizisi temiz bir kopyaya uygulanir.
+                    // ``SearchWorkspace.ListAt`` ic (internal) oldugu icin dogrudan
+                    // okunamaz; uygulama yolu kamu API'sidir ve ayni sonucu verir.
+                    scratch.CopyFrom(state);
+                    BackgammonEngine.ApplyMove(scratch, rc.Sequence);
+
+                    sb.Append("{\"index\": ").Append(k);
+                    sb.Append(", \"score\": ").Append(Num(rc.Score));
+                    sb.Append(", \"kind\": ").Append(rc.Kind);
+                    sb.Append(", \"isTerminal\": ").Append(rc.Kind == 0 ? "true" : "false");
+                    sb.Append(", \"sequence\": ").Append(JsonString(rc.Sequence.ToString()));
+                    sb.Append(", \"board\": [");
+                    for (int j = 0; j < scratch.board.Length; j++)
+                    {
+                        if (j > 0)
+                        {
+                            sb.Append(", ");
+                        }
+
+                        sb.Append(scratch.board[j].ToString(CultureInfo.InvariantCulture));
+                    }
+
+                    sb.Append(']');
+                    sb.Append(", \"whiteOff\": ").Append(scratch.whiteBorneOff);
+                    sb.Append(", \"blackOff\": ").Append(scratch.blackBorneOff);
+                    sb.Append('}');
+                }
+
+                sb.Append("]}");
+                index++;
+            }
+
+            sb.Append("\n  ],\n  \"count\": ").Append(index);
+            sb.Append(",\n  \"passCount\": ").Append(passes);
+            sb.Append("\n}\n");
+
+            WriteText(outPath, sb.ToString());
+            Console.WriteLine("search1: " + index + " pozisyon, " + passes + " pas, depth " + depth + ".");
+            return 0;
+        }
+
+        /// <summary>
+        /// <see cref="SearchResult.BestSequence"/>'in kok aday listesindeki indeksi.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="SearchResult"/> bir <c>ref struct</c>'tir; yardimci metoda
+        /// gecirmek yerine cagri yerinde hesaplanir. Eslesme <b>dizi metni</b> uzerinden
+        /// yapilir: skor esitligi kayan nokta nedeniyle guvenilir degildir.
+        /// </remarks>
+        private static int BestIndex(in SearchResult sr)
+        {
+            string best = sr.BestSequence.ToString();
+            ReadOnlySpan<RootCandidate> candidates = sr.RootCandidates;
+            for (int k = 0; k < candidates.Length; k++)
+            {
+                if (string.Equals(candidates[k].Sequence.ToString(), best, StringComparison.Ordinal))
+                {
+                    return k;
+                }
+            }
+
+            return -1;
         }
 
         // ------------------------------------------------------------------

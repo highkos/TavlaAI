@@ -13,18 +13,22 @@ modellenir; ``log2`` katsayisi "veri ikiye katlandiginda ER ne kadar duser"
 diye dogrudan okunur. Egim **negatifse** veri artisi ER'yi dusuruyor demektir.
 
 Neden bootstrap? Dort nokta ile egim tahmini cok gurultuludur. Guven araligi
-**pozisyon duzeyinde** yeniden orneklenir (nokta duzeyinde degil): her
-noktanin kayiplari kendi icinde yeniden orneklenir, egim yeniden hesaplanir.
-Bu, "ayni dagilimdan yeni bir korpus gelseydi egim ne olurdu" sorusunu
-yanitlar.
+**oyun duzeyinde** yeniden orneklenir: ayni oyunun pozisyonlari guclu
+korelidir, pozisyon duzeyinde yeniden ornekleme GA'yi yapay olarak daraltir
+(F7-12). Her noktanin kayiplari **oyun kumeleri** halinde yeniden orneklenir,
+egim yeniden hesaplanir. Bu, "ayni dagilimdan yeni oyunlar gelseydi egim ne
+olurdu" sorusunu yanitlar.
 
 Kullanim (gercek egitim hatti ile)::
 
-    python ml/learning_curve.py --base-positions 2000 --out ml/artifacts/learning_curve.json
+    python ml/curve_pool.py build --games 60 --model ml/runs/stage_d_l2/onnx/model_v30.onnx
+    python ml/learning_curve.py --pool ml/artifacts/curve_pool.npz \
+        --base-positions 200 --multipliers 1 2 4 --seeds 0 1 2 \
+        --out ml/artifacts/learning_curve.json --markdown ml/artifacts/learning_curve.md
 
 Kullanim (enjekte edilebilir, testler icin)::
 
-    report = run_curve(sizes=(100, 200, 400, 800), train_fn=..., measure_fn=...)
+    report = run_curve(sizes=(100, 200, 400, 800), train_fn=...)
 """
 
 from __future__ import annotations
@@ -82,6 +86,7 @@ class CurvePoint:
     multiplier: int
     positions: int
     losses: dict[str, list[float]] = field(default_factory=dict)
+    game_ids: dict[str, list[str]] = field(default_factory=dict)
     slope: float | None = None
     mae: float | None = None
     in_sample_loss: float | None = None
@@ -102,6 +107,7 @@ class CurvePoint:
             "positions": self.positions,
             "means": self.means,
             "counts": {p: len(v) for p, v in self.losses.items()},
+            "games": {p: len(set(v)) for p, v in self.game_ids.items()},
             "calibrationSlope": self.slope,
             "calibrationMae": self.mae,
             "inSampleLoss": self.in_sample_loss,
@@ -117,8 +123,10 @@ class CurveReport:
     points: list[CurvePoint] = field(default_factory=list)
     slopes: dict[str, dict[str, float]] = field(default_factory=dict)
     seed: int = 0
+    seeds: list[int] = field(default_factory=list)
     bootstrap_resamples: int = BOOTSTRAP_RESAMPLES
     bootstrap_seed: int = BOOTSTRAP_SEED
+    clustered: bool = True
     notes: list[str] = field(default_factory=list)
 
     def slope_for(self, path: str) -> float | None:
@@ -152,8 +160,10 @@ class CurveReport:
             "slopes": self.slopes,
             "decision": self.decision,
             "seed": self.seed,
+            "seeds": self.seeds,
             "bootstrapResamples": self.bootstrap_resamples,
             "bootstrapSeed": self.bootstrap_seed,
+            "clustered": self.clustered,
             "scalingSlopeEpsilon": SCALING_SLOPE_EPSILON,
             "notes": self.notes,
         }
@@ -191,20 +201,44 @@ def _ols_slope(x: np.ndarray, y: np.ndarray) -> float:
     return float(np.sum((x - xm) * (y - ym)) / denom)
 
 
+def _cluster_means(
+    losses: Sequence[float], game_ids: Sequence[str] | None
+) -> tuple[np.ndarray, list[np.ndarray]]:
+    """Kayiplari **oyun kumelerine** indirger.
+
+    Donen: ``(kume ortalamalari, kume icindeki kayip dizileri)``. ``game_ids``
+    yoksa her pozisyon kendi kumesidir (pozisyon duzeyi, geriye uyumlu).
+    """
+    arr = np.asarray(losses, dtype=np.float64)
+    if game_ids is None or len(game_ids) != arr.shape[0]:
+        return arr, [np.asarray([v], dtype=np.float64) for v in arr]
+    order: dict[str, list[int]] = {}
+    for i, gid in enumerate(game_ids):
+        order.setdefault(str(gid), []).append(i)
+    keys = sorted(order)
+    means = np.asarray([float(np.mean(arr[order[k]])) for k in keys], dtype=np.float64)
+    groups = [arr[order[k]] for k in keys]
+    return means, groups
+
+
 def fit_log_slope(
     points: Sequence[CurvePoint],
     *,
     path: str = "policy",
     resamples: int = BOOTSTRAP_RESAMPLES,
     seed: int = BOOTSTRAP_SEED,
+    cluster: bool = True,
 ) -> dict[str, float]:
     """ER'nin ``log2(veri)`` basina egimi + bootstrap %95 GA.
 
-    Nokta tahmini OLS'tir. GA **pozisyon duzeyinde** yeniden ornekleme ile
-    hesaplanir: her noktanin kayip listesi kendi icinde (yerine koyarak)
-    yeniden orneklenir, ortalama alinir, egim yeniden fit edilir. Bu, nokta
-    sayisinin azligindan gelen belirsizligi **degil**, korpus orneklemesinden
-    gelen belirsizligi olcer - dogru olan da budur.
+    Nokta tahmini OLS'tir. GA **oyun duzeyinde** yeniden ornekleme ile
+    hesaplanir (``cluster=True``): her noktanin kayiplari once oyun kumelerine
+    indirgenir, sonra **kumeler** yerine koyarak yeniden orneklenir. Ayni
+    oyunun pozisyonlari guclu korelidir; pozisyon duzeyinde yeniden
+    ornekleme GA'yi yapay olarak daraltir (F7-12).
+
+    ``cluster=False`` eski (pozisyon duzeyi) davranistir; yalnizca
+    ``game_ids`` yoksa anlamlidir.
     """
     usable = [p for p in points if p.losses.get(path)]
     if len(usable) < 2:
@@ -217,20 +251,28 @@ def fit_log_slope(
             "gainCiLow": float("nan"),
             "gainCiHigh": float("nan"),
             "n": 0,
+            "clusters": 0,
             "resamples": 0,
+            "clustered": bool(cluster),
         }
     x = np.log2(np.asarray([p.positions for p in usable], dtype=np.float64))
     y = np.asarray([float(np.mean(p.losses[path])) for p in usable], dtype=np.float64)
     slope = _ols_slope(x, y)
 
     rng = np.random.default_rng(seed)
-    arrays = [np.asarray(p.losses[path], dtype=np.float64) for p in usable]
+    groups: list[list[np.ndarray]] = []
+    for p in usable:
+        ids = p.game_ids.get(path) if cluster else None
+        _means, g = _cluster_means(p.losses[path], ids)
+        groups.append(g)
+    cluster_counts = [len(g) for g in groups]
+
     draws = np.empty(resamples, dtype=np.float64)
     for b in range(resamples):
-        means = np.empty(len(arrays), dtype=np.float64)
-        for k, arr in enumerate(arrays):
-            idx = rng.integers(0, arr.shape[0], size=arr.shape[0])
-            means[k] = float(np.mean(arr[idx]))
+        means = np.empty(len(groups), dtype=np.float64)
+        for k, g in enumerate(groups):
+            idx = rng.integers(0, len(g), size=len(g))
+            means[k] = float(np.mean([float(np.mean(g[int(j)])) for j in idx]))
         draws[b] = _ols_slope(x, means)
     finite = draws[np.isfinite(draws)]
     if finite.size == 0:
@@ -249,7 +291,9 @@ def fit_log_slope(
         "gainCiLow": -high,
         "gainCiHigh": -low,
         "n": len(usable),
+        "clusters": int(min(cluster_counts)) if cluster_counts else 0,
         "resamples": int(resamples),
+        "clustered": bool(cluster),
     }
 
 
@@ -275,6 +319,7 @@ def run_curve(
     multipliers: Sequence[int] | None = None,
     resamples: int = BOOTSTRAP_RESAMPLES,
     bootstrap_seed: int = BOOTSTRAP_SEED,
+    cluster: bool = True,
     progress: Callable[[str], None] | None = None,
 ) -> CurveReport:
     """Ayni hat, ayni tohum, degisen **yalnizca** veri hacmi.
@@ -302,6 +347,7 @@ def run_curve(
         bootstrap_resamples=int(resamples),
         bootstrap_seed=int(bootstrap_seed),
     )
+    report.clustered = bool(cluster)
     for k, positions in enumerate(ordered):
         if progress is not None:
             progress("nokta %d/%d: %d pozisyon" % (k + 1, len(ordered), positions))
@@ -310,10 +356,15 @@ def run_curve(
             path: [float(v) for v in raw.get("losses", {}).get(path, [])]
             for path in CURVE_PATHS
         }
+        raw_ids = raw.get("gameIds", {}) or {}
+        game_ids = {
+            path: [str(v) for v in raw_ids.get(path, [])] for path in CURVE_PATHS
+        }
         point = CurvePoint(
             multiplier=int(mults[k]) if k < len(mults) else k + 1,
             positions=int(positions),
             losses=losses,
+            game_ids=game_ids,
             slope=None if raw.get("slope") is None else float(raw["slope"]),
             mae=None if raw.get("mae") is None else float(raw["mae"]),
             in_sample_loss=(
@@ -329,11 +380,128 @@ def run_curve(
     for path in CURVE_PATHS:
         if any(p.losses.get(path) for p in report.points):
             report.slopes[path] = fit_log_slope(
-                report.points, path=path, resamples=resamples, seed=bootstrap_seed
+                report.points,
+                path=path,
+                resamples=resamples,
+                seed=bootstrap_seed,
+                cluster=cluster,
             )
     if not report.slopes:
         report.notes.append("hicbir noktada kayip yok: egim hesaplanamadi")
     return report
+
+
+def run_curve_multi_seed(
+    *,
+    sizes: Sequence[int],
+    train_fn: TrainFn,
+    seeds: Sequence[int],
+    multipliers: Sequence[int] | None = None,
+    resamples: int = BOOTSTRAP_RESAMPLES,
+    bootstrap_seed: int = BOOTSTRAP_SEED,
+    cluster: bool = True,
+    progress: Callable[[str], None] | None = None,
+) -> CurveReport:
+    """Ayni egriyi **birden cok tohumla** kosar ve havuzlar.
+
+    Neden. Tek tohumla olculen egim, agirlik baslatmasinin ve mini-batch
+    sirasinin gurultusunu tasir. En az **uc** tohum istenir (kullanicinin
+    adim 0 kosulu). Havuzlama: her noktada tohumlarin kayiplari **birlestirilir**
+    ve oyun kimlikleri tohumla **oneklenir** (ayni oyun kimligi farkli
+    tohumlarda ayni kume sayilmasin). Egim, havuzlanmis veri uzerinde
+    oyun duzeyinde kume bootstrap'i ile hesaplanir.
+
+    Kural 7: tohumlar arasinda degisen tek sey tohumdur; veri hacimleri,
+    epoch sayisi, mimari ve ogrenme orani aynidir.
+    """
+    seed_list = [int(s) for s in seeds]
+    if len(seed_list) < 1:
+        raise ValueError("en az bir tohum gerekli")
+    if len(set(seed_list)) != len(seed_list):
+        raise ValueError("tohumlar tekrar etmemeli")
+
+    per_seed: list[CurveReport] = []
+    for seed in seed_list:
+        if progress is not None:
+            progress("tohum %d" % seed)
+        per_seed.append(
+            run_curve(
+                sizes=sizes,
+                train_fn=train_fn,
+                seed=seed,
+                multipliers=multipliers,
+                resamples=resamples,
+                bootstrap_seed=bootstrap_seed,
+                cluster=cluster,
+                progress=progress,
+            )
+        )
+
+    pooled = CurveReport(
+        seed=seed_list[0],
+        seeds=seed_list,
+        bootstrap_resamples=int(resamples),
+        bootstrap_seed=int(bootstrap_seed),
+        clustered=bool(cluster),
+    )
+    base = per_seed[0]
+    for k, point in enumerate(base.points):
+        losses: dict[str, list[float]] = {path: [] for path in CURVE_PATHS}
+        game_ids: dict[str, list[str]] = {path: [] for path in CURVE_PATHS}
+        in_sample: list[float] = []
+        held_out: list[float] = []
+        for seed, report in zip(seed_list, per_seed):
+            other = report.points[k]
+            for path in CURVE_PATHS:
+                losses[path].extend(other.losses.get(path, []))
+                ids = other.game_ids.get(path, [])
+                if ids:
+                    game_ids[path].extend("s%d:%s" % (seed, g) for g in ids)
+            if other.in_sample_loss is not None:
+                in_sample.append(float(other.in_sample_loss))
+            if other.held_out_loss is not None:
+                held_out.append(float(other.held_out_loss))
+        pooled.points.append(
+            CurvePoint(
+                multiplier=point.multiplier,
+                positions=point.positions,
+                losses=losses,
+                game_ids=game_ids,
+                slope=None,
+                mae=None,
+                in_sample_loss=float(np.mean(in_sample)) if in_sample else None,
+                held_out_loss=float(np.mean(held_out)) if held_out else None,
+                note="%d tohum havuzu" % len(seed_list),
+            )
+        )
+
+    for path in CURVE_PATHS:
+        if any(p.losses.get(path) for p in pooled.points):
+            pooled.slopes[path] = fit_log_slope(
+                pooled.points,
+                path=path,
+                resamples=resamples,
+                seed=bootstrap_seed,
+                cluster=cluster,
+            )
+    if not pooled.slopes:
+        pooled.notes.append("hicbir noktada kayip yok: egim hesaplanamadi")
+    pooled.notes.append(
+        "Havuzlanmis %d tohum: %s" % (len(seed_list), ", ".join(str(s) for s in seed_list))
+    )
+    for seed, report in zip(seed_list, per_seed):
+        entry = report.slopes.get("policy") or {}
+        pooled.notes.append(
+            "tohum %d: kazanc %s GA [%s; %s] -> %s"
+            % (
+                seed,
+                _fmt(entry.get("gain")),
+                _fmt(entry.get("gainCiLow")),
+                _fmt(entry.get("gainCiHigh")),
+                report.decision,
+            )
+        )
+    return pooled
 
 
 # ----------------------------------------------------------------------
@@ -403,14 +571,16 @@ def build_markdown(report: CurveReport, *, title: str = "Faz 7-R - Ogrenme egris
     lines.append("")
     lines.append("## 2. Egim (ER / log2 veri)")
     lines.append("")
-    lines.append("| Yol | Kazanc | %95 GA | Ham egim | Nokta | Yeniden ornekleme |")
-    lines.append("|---|---|---|---|---|---|")
+    lines.append(
+        "| Yol | Kazanc | %95 GA | Ham egim | Nokta | Kume | Yeniden ornekleme |"
+    )
+    lines.append("|---|---|---|---|---|---|---|")
     for path in CURVE_PATHS:
         entry = report.slopes.get(path)
         if entry is None:
             continue
         lines.append(
-            "| `%s` | %s | [%s; %s] | %s | %d | %d |"
+            "| `%s` | %s | [%s; %s] | %s | %d | %d | %d |"
             % (
                 path,
                 _fmt(entry.get("gain")),
@@ -418,10 +588,20 @@ def build_markdown(report: CurveReport, *, title: str = "Faz 7-R - Ogrenme egris
                 _fmt(entry.get("gainCiHigh")),
                 _fmt(entry.get("slope")),
                 int(entry.get("n", 0)),
+                int(entry.get("clusters", 0)),
                 int(entry.get("resamples", 0)),
             )
         )
     lines.append("")
+    lines.append(
+        "Kume bootstrap'i: **%s** (oyun duzeyinde = dogru; pozisyon duzeyinde "
+        "GA'yi yapay daraltir)."
+        % ("oyun" if report.clustered else "pozisyon")
+    )
+    lines.append("")
+    if report.seeds:
+        lines.append("Tohumlar: **%s** (havuzlanmis)." % ", ".join(str(s) for s in report.seeds))
+        lines.append("")
     lines.append(
         "**Kazanc** = ER'nin `log2(veri)` basina **dususu** (pozitif = veri "
         "arttkca ER iyilesiyor). Ham egim ayni buyuklugun isaretli hali."
@@ -468,7 +648,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="veri hacmi carpanlari",
     )
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument(
+        "--seeds",
+        type=int,
+        nargs="+",
+        default=None,
+        help="birden cok tohum (en az 3 onerilir); verilirse --seed yok sayilir",
+    )
+    p.add_argument(
+        "--pool",
+        type=Path,
+        default=None,
+        help="etiketli havuz (ml/curve_pool.py build); verilmezse hata",
+    )
+    p.add_argument("--epochs", type=int, default=20, help="sabit epoch sayisi")
+    p.add_argument("--batch", type=int, default=64)
+    p.add_argument("--lr", type=float, default=1e-3)
+    p.add_argument("--profile", default="medium")
+    p.add_argument("--device", default="cpu")
     p.add_argument("--resamples", type=int, default=BOOTSTRAP_RESAMPLES)
+    p.add_argument(
+        "--no-cluster",
+        action="store_true",
+        help="pozisyon duzeyi bootstrap (eski davranis; onerilmez)",
+    )
     p.add_argument("--out", type=Path, default=None, help="cikti JSON")
     p.add_argument("--markdown", type=Path, default=None, help="cikti Markdown")
     p.add_argument("--quiet", action="store_true")
@@ -479,20 +682,48 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     sizes = [int(args.base_positions) * int(m) for m in args.multipliers]
 
-    def _train(positions: int, seed: int) -> dict[str, Any]:
+    if args.pool is None:
         raise SystemExit(
-            "learning_curve: gercek egitim hatti baglanmadi. "
-            "run_curve(train_fn=...) ile cagirin (bkz. ml/gnubg_distill.py)."
+            "learning_curve: --pool zorunlu. Once havuzu kurun: "
+            "python ml/curve_pool.py build --games 60 "
+            "--model ml/runs/stage_d_l2/onnx/model_v30.onnx"
         )
 
-    report = run_curve(
-        sizes=sizes,
-        train_fn=_train,
-        seed=args.seed,
-        multipliers=args.multipliers,
-        resamples=args.resamples,
+    import curve_pool  # noqa: PLC0415
+
+    pool = curve_pool.load_pool(Path(args.pool))
+    train_fn = curve_pool.make_train_fn(
+        pool,
+        epochs=int(args.epochs),
+        batch=int(args.batch),
+        lr=float(args.lr),
+        device=str(args.device),
+        profile=str(args.profile),
         progress=None if args.quiet else (lambda m: print(m)),
     )
+
+    seeds = [int(s) for s in args.seeds] if args.seeds else [int(args.seed)]
+    if len(seeds) >= 2:
+        report = run_curve_multi_seed(
+            sizes=sizes,
+            train_fn=train_fn,
+            seeds=seeds,
+            multipliers=args.multipliers,
+            resamples=args.resamples,
+            cluster=not args.no_cluster,
+            progress=None if args.quiet else (lambda m: print(m)),
+        )
+    else:
+        report = run_curve(
+            sizes=sizes,
+            train_fn=train_fn,
+            seed=seeds[0],
+            multipliers=args.multipliers,
+            resamples=args.resamples,
+            cluster=not args.no_cluster,
+            progress=None if args.quiet else (lambda m: print(m)),
+        )
+        report.seeds = seeds
     if args.out is not None:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(

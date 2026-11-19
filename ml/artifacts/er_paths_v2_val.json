@@ -1,5 +1,5 @@
 {
- "model": "ml/runs/stage_d_l2/onnx/model_v30.onnx",
+ "model": "ml\\runs\\stage_d_l2\\onnx\\model_v30.onnx",
  "referee": {
   "command": "eval",
   "column": "2",
@@ -21,7 +21,7 @@
    "mean": 0.046846,
    "median": 0.0,
    "maximum": 1.025,
-   "exactMatchRate": 0.5,
+   "exactMatchRate": 0.502857,
    "sigma": 0.110414,
    "sigmaCiLow": 0.077652,
    "sigmaCiHigh": 0.14219,
@@ -88,31 +88,31 @@
    "path": "search1",
    "label": "1-ply expectiminimax (deger kafasi)",
    "count": 350,
-   "mean": 0.01874,
+   "mean": 0.019871,
    "median": 0.0,
    "maximum": 0.267,
-   "exactMatchRate": 0.608571,
-   "sigma": 0.04247,
-   "sigmaCiLow": 0.03394,
-   "sigmaCiHigh": 0.050507,
-   "ciLow": 0.014457,
-   "ciHigh": 0.023377,
-   "standardError": 0.00227,
+   "exactMatchRate": 0.614286,
+   "sigma": 0.043995,
+   "sigmaCiLow": 0.035632,
+   "sigmaCiHigh": 0.051837,
+   "ciLow": 0.015451,
+   "ciHigh": 0.024643,
+   "standardError": 0.002352,
    "phaseMeans": {
-    "bar": 0.022407,
-    "contact": 0.020498,
-    "race": 0.002568
+    "bar": 0.022066,
+    "contact": 0.022479,
+    "race": 0.002591
    },
    "phaseCounts": {
     "bar": 91,
     "contact": 215,
     "race": 44
    },
-   "weightedMean": 0.019896,
+   "weightedMean": 0.020874,
    "terminalCandidates": 0,
    "sourceMeans": {
-    "gnubg2": 0.022701,
-    "self": 0.009623
+    "gnubg2": 0.023148,
+    "self": 0.01233
    },
    "sourceCounts": {
     "gnubg2": 244,
@@ -121,6 +121,5 @@
   }
  },
  "corpus": "v2",
- "split": "val",
- "elapsedSeconds": 777.5
+ "split": "val"
 }

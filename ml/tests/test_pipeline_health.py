@@ -452,10 +452,38 @@ def test_126k_verdict_pipeline_when_value_gate_fails() -> None:
         "std_ratio": 1.3371,
     }
     report = _report(**inputs)
-    assert report.verdict == ph.VERDICT_PIPELINE
+    # Adim 0: "pipeline" nedensel iddia; olcek kaniti yoksa etiket belirsiz.
+    assert report.verdict == ph.VERDICT_UNDETERMINED
     assert report.strength_gap is False
     # R-09: 1,3371 artik G5'ten gecmez; kalan iki deger kapisi duser.
     assert set(report.failed) == {"G2", "G3"}
+
+
+def test_126k_verdict_pipeline_requires_scaling_evidence() -> None:
+    """Ayni girdi + olcek kaniti -> ``pipeline``; kanit yoksa ``belirsiz``."""
+    inputs = _healthy_inputs()
+    inputs["calibration"] = {
+        "slope": 0.6743,
+        "mae": 0.2683,
+        "correlation": 0.9016,
+        "std_ratio": 1.3371,
+    }
+    assert _report(**inputs).verdict == ph.VERDICT_UNDETERMINED
+    inputs["scaling"] = {"slope": 0.0, "ciLow": -0.01, "ciHigh": 0.01}
+    assert _report(**inputs).verdict == ph.VERDICT_PIPELINE
+
+
+def test_126k_verdict_scale_when_scaling_helps() -> None:
+    """Deger kapisi duser ama egim esigin uzerinde -> ``olcek``."""
+    inputs = _healthy_inputs()
+    inputs["calibration"] = {
+        "slope": 0.6743,
+        "mae": 0.2683,
+        "correlation": 0.9016,
+        "std_ratio": 1.3371,
+    }
+    inputs["scaling"] = {"slope": 0.05, "ciLow": 0.03, "ciHigh": 0.07}
+    assert _report(**inputs).verdict == ph.VERDICT_SCALE
 
 
 def test_126k_verdict_foundation_when_g1_fails() -> None:
@@ -502,15 +530,17 @@ def test_126k_verdict_healthy_ignores_unmeasured_g6() -> None:
     assert report.strength_gap is False
 
 
-def test_126k_g7_failure_alone_is_pipeline() -> None:
+def test_126k_g7_failure_alone_is_undetermined_without_scaling() -> None:
     inputs = _healthy_inputs()
     inputs["spread"] = ph.target_spread(np.zeros(4), [1.0, -1.0, 2.0, -2.0])
     report = _report(**inputs)
     assert report.failed == ["G7"]
-    assert report.verdict == ph.VERDICT_PIPELINE
+    assert report.verdict == ph.VERDICT_UNDETERMINED
+    inputs["scaling"] = {"slope": 0.0, "ciLow": -0.01, "ciHigh": 0.01}
+    assert _report(**inputs).verdict == ph.VERDICT_PIPELINE
 
 
-def test_126k_g4_failure_alone_is_pipeline() -> None:
+def test_126k_g4_failure_alone_is_undetermined_without_scaling() -> None:
     inputs = _healthy_inputs()
     inputs["calibration"] = {
         "slope": 1.0,
@@ -520,7 +550,9 @@ def test_126k_g4_failure_alone_is_pipeline() -> None:
     }
     report = _report(**inputs)
     assert report.failed == ["G4"]
-    assert report.verdict == ph.VERDICT_PIPELINE
+    assert report.verdict == ph.VERDICT_UNDETERMINED
+    inputs["scaling"] = {"slope": 0.0, "ciLow": -0.01, "ciHigh": 0.01}
+    assert _report(**inputs).verdict == ph.VERDICT_PIPELINE
 
 
 def test_126k_gate_order_is_stable() -> None:
@@ -599,8 +631,16 @@ def test_126m_markdown_states_verdict() -> None:
 def test_126m_markdown_pipeline_text() -> None:
     inputs = _healthy_inputs()
     inputs["calibration"] = {"slope": 0.5, "mae": 0.5, "correlation": 0.5, "std_ratio": 2.0}
+    inputs["scaling"] = {"slope": 0.0, "ciLow": -0.01, "ciHigh": 0.01}
     md = ph.build_markdown(_report(**inputs))
     assert ph.VERDICT_TEXT[ph.VERDICT_PIPELINE] in md
+
+
+def test_126m_markdown_undetermined_text() -> None:
+    inputs = _healthy_inputs()
+    inputs["calibration"] = {"slope": 0.5, "mae": 0.5, "correlation": 0.5, "std_ratio": 2.0}
+    md = ph.build_markdown(_report(**inputs))
+    assert ph.VERDICT_TEXT[ph.VERDICT_UNDETERMINED] in md
 
 
 def test_126m_markdown_strength_gap_note() -> None:
@@ -667,8 +707,23 @@ def test_126n_cli_exit_healthy(tmp_path: Path) -> None:
 def test_126n_cli_exit_pipeline(tmp_path: Path) -> None:
     cal = _write(tmp_path / "cal.json", {"slope": 0.5, "mae": 0.5, "correlation": 0.5, "std_ratio": 2.0})
     ev = _write(tmp_path / "ev.json", {"reports": [{"opponent": "PipBot", "winRate": 0.99}]})
-    code = ph.main(["--calibration", str(cal), "--eval", str(ev), "--quiet"])
+    # Adim 0: olcek kaniti yoksa cikis kodu 4 (belirsiz).
+    assert ph.main(["--calibration", str(cal), "--eval", str(ev), "--quiet"]) == 4
+    sc = _write(tmp_path / "sc.json", {"slope": 0.0, "ciLow": -0.01, "ciHigh": 0.01})
+    code = ph.main(
+        ["--calibration", str(cal), "--eval", str(ev), "--scaling", str(sc), "--quiet"]
+    )
     assert code == 1
+
+
+def test_126n_cli_exit_scale(tmp_path: Path) -> None:
+    cal = _write(tmp_path / "cal.json", {"slope": 0.5, "mae": 0.5, "correlation": 0.5, "std_ratio": 2.0})
+    ev = _write(tmp_path / "ev.json", {"reports": [{"opponent": "PipBot", "winRate": 0.99}]})
+    sc = _write(tmp_path / "sc.json", {"slope": 0.05, "ciLow": 0.03, "ciHigh": 0.07})
+    code = ph.main(
+        ["--calibration", str(cal), "--eval", str(ev), "--scaling", str(sc), "--quiet"]
+    )
+    assert code == 5
 
 
 def test_126n_cli_exit_foundation(tmp_path: Path) -> None:
@@ -804,7 +859,9 @@ def test_126p_real_verdict_is_pipeline() -> None:
         eval_report=json.loads(paths["eval"].read_text(encoding="utf-8")),
         er_report=json.loads(paths["er"].read_text(encoding="utf-8")),
     )
-    assert report.verdict == ph.VERDICT_PIPELINE
+    # Adim 0: gercek artefaktlarda ogrenme egrisi olculmedi -> belirsiz.
+    assert report.verdict == ph.VERDICT_UNDETERMINED
+    assert report.scaling_evidence == ph.SCALING_NONE
     assert report.by_id("G1").passed is True
     assert report.by_id("G2").passed is False
     assert report.by_id("G3").passed is False
