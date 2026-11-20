@@ -65,6 +65,15 @@ MAX_GAME_PLIES = 40
 SPLIT_TRAIN = "train"
 SPLIT_HELD_OUT = "heldout"
 
+#: ER olcumunde kullanilan bakis acisi (F7-101).
+#: ``active``   -- havuzun kendi vektoru (oynayacak tarafin bakisi).
+#: ``opponent`` -- ayni fiziksel afterstate'in karsi bakisi (``flip_perspective``).
+#: ``both``     -- ikisi birden; ortalama ve asimetri orani da raporlanir.
+PERSPECTIVE_ACTIVE = "active"
+PERSPECTIVE_OPPONENT = "opponent"
+PERSPECTIVE_BOTH = "both"
+PERSPECTIVES = (PERSPECTIVE_ACTIVE, PERSPECTIVE_OPPONENT, PERSPECTIVE_BOTH)
+
 
 class CurvePoolError(RuntimeError):
     """Havuz kurulamadi / okunamadi."""
@@ -422,6 +431,17 @@ def _pad(pool: CurvePool, indices: Sequence[int]) -> tuple[np.ndarray, np.ndarra
     return x, mask, width
 
 
+def _flip_rows(x: np.ndarray) -> np.ndarray:
+    """Her satiri karsi bakisa cevirir (``antisymmetry.flip_perspective``)."""
+    from antisymmetry import flip_perspective  # noqa: PLC0415
+
+    flat = x.reshape(-1, gnubg_er.VECTOR_SIZE)
+    out = np.empty_like(flat)
+    for i in range(flat.shape[0]):
+        out[i] = np.asarray(flip_perspective(flat[i]), dtype=flat.dtype)
+    return out.reshape(x.shape)
+
+
 def measure_er(
     model,
     pool: CurvePool,
@@ -429,20 +449,32 @@ def measure_er(
     *,
     paths: Sequence[str] = ("policy", "value"),
     device: str = "cpu",
+    perspective: str = PERSPECTIVE_ACTIVE,
 ) -> dict[str, list[float]]:
     """Held-out pozisyonlarda **pozisyon duzeyinde** ER kayiplari.
 
     Referans: havuzdaki gnubg ``eval`` equity'leri. ``policy`` yolu politika
     logit argmax'ini, ``value`` yolu deger kafasi argmax'ini secer. Terminal
     aday yok: havuz yalnizca yasal afterstate'lerden olusur.
+
+    ``perspective`` (F7-101): ``active`` havuzun kendi vektorunu kullanir;
+    ``opponent`` ayni fiziksel afterstate'i karsi bakistan besler ve equity'leri
+    isaret cevirir. **Tek bakisli ER, renk takasi kusurunu gizler**: havuzdaki
+    afterstate'ler her zaman *oynayan* tarafin bakisindadir, dolayisiyla
+    ``active`` olcumu karsi bakisi hic sinamaz. Iki bakisi birlikte olcmek icin
+    ``measure_er_both`` kullanin.
     """
     import torch  # noqa: PLC0415
 
+    if perspective not in (PERSPECTIVE_ACTIVE, PERSPECTIVE_OPPONENT):
+        raise CurvePoolError("bilinmeyen bakis: %s" % perspective)
     if not indices:
         return {p: [] for p in paths}
     x, mask, width = _pad(pool, indices)
     if width <= 0:
         return {p: [] for p in paths}
+    if perspective == PERSPECTIVE_OPPONENT:
+        x = _flip_rows(x)
 
     model.eval()
     losses: dict[str, list[float]] = {p: [] for p in paths}
@@ -458,6 +490,8 @@ def measure_er(
             for row in range(stop - start):
                 i = int(indices[start + row])
                 equities = pool.candidate_equities(i)
+                if perspective == PERSPECTIVE_OPPONENT:
+                    equities = -equities
                 k = int(equities.shape[0])
                 best_equity = float(np.max(equities))
                 for path in paths:
@@ -469,6 +503,50 @@ def measure_er(
                         raise CurvePoolError("bilinmeyen yol: %s" % path)
                     losses[path].append(best_equity - float(equities[pick]))
     return losses
+
+
+def measure_er_both(
+    model,
+    pool: CurvePool,
+    indices: Sequence[int],
+    *,
+    paths: Sequence[str] = ("policy", "value"),
+    device: str = "cpu",
+) -> dict[str, list[float]]:
+    """Iki bakisli ER (F7-101).
+
+    Donen anahtarlar her yol icin: ``<yol>`` (oynayan bakis), ``<yol>Opp``
+    (karsi bakis) ve ``<yol>Mean`` (ikisinin pozisyon duzeyinde ortalamasi).
+    ``Mean`` R-D'nin dogru olcutudur: artirim tek bakisi kotulestirip digerini
+    duzeltiyorsa, karar ortalamaya gore verilir.
+    """
+    active = measure_er(model, pool, indices, paths=paths, device=device)
+    opponent = measure_er(
+        model,
+        pool,
+        indices,
+        paths=paths,
+        device=device,
+        perspective=PERSPECTIVE_OPPONENT,
+    )
+    out: dict[str, list[float]] = {}
+    for path in paths:
+        out[path] = active[path]
+        out[path + "Opp"] = opponent[path]
+        out[path + "Mean"] = [
+            (a + b) / 2.0 for a, b in zip(active[path], opponent[path])
+        ]
+    return out
+
+
+def perspective_asymmetry(report: dict[str, list[float]], path: str = "value") -> float:
+    """Iki bakis ER'sinin orani (buyuk/kucuk); 1.0 = tam simetrik."""
+    active = float(np.mean(report[path])) if report.get(path) else 0.0
+    opponent = float(np.mean(report[path + "Opp"])) if report.get(path + "Opp") else 0.0
+    lo, hi = min(active, opponent), max(active, opponent)
+    if lo <= 0.0:
+        return float("inf") if hi > 0.0 else 1.0
+    return hi / lo
 
 
 def make_train_fn(
@@ -590,7 +668,119 @@ def build_parser():
 
     show = sub.add_parser("show", help="havuz ozeti")
     show.add_argument("--pool", default=POOL_PATH)
+
+    er = sub.add_parser("measure-er", help="held-out ER (tek veya iki bakis)")
+    er.add_argument(
+        "--model",
+        required=True,
+        nargs="+",
+        help="ONNX model yolu (birden fazla verilirse karsilastirma tablosu basilir)",
+    )
+    er.add_argument("--pool", default=POOL_PATH)
+    er.add_argument(
+        "--perspective",
+        choices=PERSPECTIVES,
+        default=PERSPECTIVE_BOTH,
+        help="active | opponent | both (varsayilan: both)",
+    )
+    er.add_argument("--limit", type=int, default=0, help="ilk N held-out pozisyon")
+    er.add_argument("--out", default=None, help="JSON cikti yolu (opsiyonel)")
     return p
+
+
+def _load_onnx_model(path: Path):
+    """ONNX modelini ``measure_er`` sozlesmesine sarar (torch ciktilari)."""
+    import onnxruntime as ort  # noqa: PLC0415
+    import torch  # noqa: PLC0415
+
+    session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+    input_name = session.get_inputs()[0].name
+
+    class _OnnxModel:
+        def eval(self) -> None:
+            return None
+
+        def __call__(self, x):
+            arr = x.detach().cpu().numpy() if hasattr(x, "detach") else np.asarray(x)
+            return [torch.from_numpy(o) for o in session.run(None, {input_name: arr})]
+
+    return _OnnxModel()
+
+
+def measure_summary(
+    model_path: Path,
+    pool: CurvePool,
+    indices: Sequence[int],
+    *,
+    perspective: str = PERSPECTIVE_BOTH,
+) -> dict[str, Any]:
+    """Tek model icin ER ozeti (``measure-er`` ciktisi)."""
+    model = _load_onnx_model(model_path)
+    if perspective == PERSPECTIVE_BOTH:
+        report = measure_er_both(model, pool, indices)
+    else:
+        report = measure_er(model, pool, indices, perspective=perspective)
+    summary: dict[str, Any] = {
+        "model": str(model_path),
+        "positions": len(indices),
+        "perspective": perspective,
+    }
+    for key, values in report.items():
+        summary[key] = float(np.mean(values)) if values else None
+    if perspective == PERSPECTIVE_BOTH:
+        summary["policyAsymmetry"] = perspective_asymmetry(report, "policy")
+        summary["valueAsymmetry"] = perspective_asymmetry(report, "value")
+    return summary
+
+
+def _model_label(path: str) -> str:
+    """Karsilastirma tablosunda modeli **kosu diziniyle** birlikte adlandirir.
+
+    Kosu dizinleri ayni dosya adini (`model_v10.onnx`) tekrar ettigi icin
+    yalniz dosya adi kullanmak tabloyu okunamaz kilar. ONNX'ler tipik olarak
+    `<kosu>/onnx/model_vN.onnx` altinda durur; bu yuzden `onnx` ara dizini
+    atlanir ve kosu dizini one alinir.
+    """
+    p = Path(path)
+    parts = [q for q in p.parts if q not in (".", "")]
+    if len(parts) >= 3 and parts[-2] == "onnx":
+        return "%s/%s" % (parts[-3], parts[-1])
+    if len(parts) >= 2:
+        return "%s/%s" % (parts[-2], parts[-1])
+    return p.name
+
+
+def build_er_markdown(rows: Sequence[dict[str, Any]], pool_path: str) -> str:
+    """``measure-er`` satirlarindan karsilastirma tablosu (F7-101)."""
+    lines = [
+        "# Iki bakisli ER karsilastirmasi (F7-101)",
+        "",
+        "Havuz: `%s` — %d held-out pozisyon." % (pool_path, rows[0]["positions"] if rows else 0),
+        "",
+        "`ER(+1)` havuzun kendi (oynayan) bakisi, `ER(-1)` karsi bakis, `Ort`",
+        "ikisinin ortalamasi. **R-D karari `Ort` sutununa gore verilir**; tek",
+        "bakisli ER artirimin takasini goremez.",
+        "",
+        "| Model | ER(+1) pol | ER(-1) pol | **Ort** pol | ER(+1) deger | ER(-1) deger | **Ort** deger | Asimetri pol/deger |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for r in rows:
+        lines.append(
+            "| `%s` | %.4f | %.4f | **%.4f** | %.4f | %.4f | **%.4f** | %.2fx / %.2fx |"
+            % (
+                _model_label(r["model"]),
+                r.get("policy") or 0.0,
+                r.get("policyOpp") or 0.0,
+                r.get("policyMean") or 0.0,
+                r.get("value") or 0.0,
+                r.get("valueOpp") or 0.0,
+                r.get("valueMean") or 0.0,
+                r.get("policyAsymmetry") or 0.0,
+                r.get("valueAsymmetry") or 0.0,
+            )
+        )
+    lines.append("")
+    return "\n".join(lines)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -598,6 +788,31 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "show":
         pool = load_pool(Path(args.pool))
         print(json.dumps(pool.stats(), indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "measure-er":
+        pool = load_pool(Path(args.pool))
+        indices = pool.held_out_indices()
+        if args.limit > 0:
+            indices = indices[: args.limit]
+        rows = [
+            measure_summary(
+                Path(m), pool, indices, perspective=args.perspective
+            )
+            for m in args.model
+        ]
+        payload: Any = rows[0] if len(rows) == 1 else rows
+        if args.out:
+            out = Path(args.out)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(
+                json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            if len(rows) > 1:
+                out.with_suffix(".md").write_text(
+                    build_er_markdown(rows, str(args.pool)), encoding="utf-8"
+                )
+        print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
 
     pool = build_pool(

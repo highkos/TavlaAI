@@ -49,7 +49,10 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 #: Veri hacmi carpanlari (Faz 7-R Asama R-C, madde 4).
-CURVE_MULTIPLIERS = (1, 2, 4, 8, 16, 32)
+#: K4: 64x eklendi. 64x icin **en az 10 560** egitim pozisyonu gerekir
+#: (165 taban x 64); havuz kucukse nokta sessizce dusurulmez, raporda
+#: ``eksik`` olarak isaretlenir.
+CURVE_MULTIPLIERS = (1, 2, 4, 8, 16, 32, 64)
 
 #: Bootstrap yeniden ornekleme sayisi (Kural 3: >= 10 000).
 BOOTSTRAP_RESAMPLES = 20000
@@ -84,6 +87,10 @@ IN_SAMPLE_UNITS = {
 SATURATION_B_MIN = 0.0
 SATURATION_B_MAX = 3.0
 SATURATION_MIN_POINTS = 3
+
+#: K4: taban parametresi ``c`` icin kume bootstrap yeniden ornekleme sayisi.
+#: 0 = GA hesaplama (eski davranis).
+SATURATION_BOOTSTRAP_RESAMPLES = 2000
 
 
 # ----------------------------------------------------------------------
@@ -189,6 +196,11 @@ class CurveReport:
     seed_decisions: dict[int, str] = field(default_factory=dict)
     seed_gains: dict[int, float] = field(default_factory=dict)
     saturation: dict[str, dict[str, float]] = field(default_factory=dict)
+    #: K4: egrinin hangi korpusta kosuldugu (acikca yazilir; "hangi veri?"
+    #: sorusu raporda cevapsiz kalmamali).
+    corpus: dict[str, Any] = field(default_factory=dict)
+    #: K4: eslestirilmis (paired) oncesi/sonrasi karsilastirmasi.
+    paired: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 
     def slope_for(self, path: str) -> float | None:
@@ -251,6 +263,8 @@ class CurveReport:
             "seedGains": {str(k): v for k, v in self.seed_gains.items()},
             "seedAgreement": self.seed_agreement,
             "saturation": self.saturation,
+            "corpus": self.corpus,
+            "paired": self.paired,
             "scalingSlopeEpsilon": SCALING_SLOPE_EPSILON,
             "notes": self.notes,
         }
@@ -275,6 +289,8 @@ class CurveReport:
             saturation={
                 str(k): dict(v) for k, v in (data.get("saturation") or {}).items()
             },
+            corpus=dict(data.get("corpus") or {}),
+            paired=dict(data.get("paired") or {}),
             notes=[str(n) for n in data.get("notes") or []],
         )
         return report
@@ -408,36 +424,17 @@ def fit_log_slope(
     }
 
 
-def fit_saturation(
-    points: Sequence[CurvePoint],
-    *,
-    path: str = "policy",
-) -> dict[str, float]:
-    """Doygunluk fiti ``ER = a * N^-b + c`` (F7-87).
+def _saturation_core(
+    n: np.ndarray, y: np.ndarray
+) -> tuple[float, float, float, float]:
+    """``ER = a*N^-b + c`` icin kaba grid + kapali-form en kucuk kareler.
 
-    Log-egim modeli ``ER = a * N^-b`` **taban parametresi tasimaz**: veri
-    sonsuza giderken ER sifira iner, ki bu gercek degildir. Uc parametreli
-    model ``c`` tabanini tahmin eder; ``c`` "bu mimari ve bu ogretmenle
-    ulasilabilir en iyi ER" sorusunun **olculen** cevabidir.
+    Verilen ``b`` icin model ``c``'de dogrusaldir; ``a`` ve ``c`` kapali
+    formda cozulur. Kisitlar: ``a >= 0``, ``0 <= c <= min(y)`` (taban
+    negatif olamaz ve gozlenen en iyi ER'yi asamaz).
 
-    Fit: dogrusal olmayan en kucuk kareler (``scipy`` yok; kaba grid + yerel
-    iyilestirme). ``b`` icin ``[0, 3]`` araligi; ``c`` icin ``[0, min(ER)]``.
-
-    Doner: ``a``, ``b``, ``c``, ``rmse``, ``n``. Yetersiz nokta varsa
-    ``nan`` dondurur (sessiz fallback yok, Kural 6).
+    Doner: ``(a, b, c, rmse)``; basarisizsa hepsi ``nan``.
     """
-    usable = [p for p in points if p.losses.get(path)]
-    if len(usable) < SATURATION_MIN_POINTS:
-        return {
-            "path": path,
-            "a": float("nan"),
-            "b": float("nan"),
-            "c": float("nan"),
-            "rmse": float("nan"),
-            "n": len(usable),
-        }
-    n = np.asarray([float(p.positions) for p in usable], dtype=np.float64)
-    y = np.asarray([float(np.mean(p.losses[path])) for p in usable], dtype=np.float64)
     floor = float(np.min(y))
 
     def rmse(a: float, b: float, c: float) -> float:
@@ -446,7 +443,6 @@ def fit_saturation(
 
     best = (float("nan"), float("nan"), float("nan"), float("inf"))
     for b in np.linspace(SATURATION_B_MIN, SATURATION_B_MAX, 61):
-        # Verilen b icin model c'de dogrusaldir: en kucuk kareler kapali form.
         basis = np.power(n, -b)
         design = np.column_stack([basis, np.ones_like(basis)])
         try:
@@ -459,24 +455,115 @@ def fit_saturation(
         err = rmse(a, b, c)
         if err < best[3]:
             best = (a, float(b), c, err)
+    return best
 
-    a, b, c, err = best
+
+def _cluster_resample_means(
+    point: CurvePoint, path: str, rng: np.random.Generator
+) -> float:
+    """Bir noktanin kaybini **oyun kumeleri** uzerinden yeniden ornekler."""
+    losses = point.losses.get(path) or []
+    ids = point.game_ids.get(path) or []
+    if not losses:
+        return float("nan")
+    values = np.asarray(losses, dtype=np.float64)
+    if len(ids) != len(values):
+        # Kume kimligi yoksa pozisyon duzeyine dus (daha dar GA; raporda yazilir).
+        return float(np.mean(rng.choice(values, size=values.size, replace=True)))
+    by_cluster: dict[str, list[float]] = {}
+    for gid, value in zip(ids, values):
+        by_cluster.setdefault(gid, []).append(float(value))
+    keys = list(by_cluster)
+    picked = rng.integers(0, len(keys), size=len(keys))
+    total = 0.0
+    count = 0
+    for k in picked:
+        block = by_cluster[keys[int(k)]]
+        total += float(np.sum(block))
+        count += len(block)
+    return total / count if count else float("nan")
+
+
+def fit_saturation(
+    points: Sequence[CurvePoint],
+    *,
+    path: str = "policy",
+    resamples: int = SATURATION_BOOTSTRAP_RESAMPLES,
+    seed: int = BOOTSTRAP_SEED,
+) -> dict[str, float]:
+    """Doygunluk fiti ``ER = a * N^-b + c`` (F7-87, K4).
+
+    Log-egim modeli ``ER = a * N^-b`` **taban parametresi tasimaz**: veri
+    sonsuza giderken ER sifira iner, ki bu gercek degildir. Uc parametreli
+    model ``c`` tabanini tahmin eder; ``c`` "bu mimari ve bu ogretmenle
+    ulasilabilir en iyi ER" sorusunun **olculen** cevabidir.
+
+    Fit: dogrusal olmayan en kucuk kareler (``scipy`` yok; kaba grid + yerel
+    iyilestirme). ``b`` icin ``[0, 3]`` araligi; ``c`` icin ``[0, min(ER)]``.
+
+    **K4: ``c`` icin guven araligi.** Nokta tahmini tek basina kanit degildir
+    (Kural 3). ``resamples > 0`` ise her nokta **oyun kumeleri** uzerinden
+    yeniden orneklenir ve fit tekrarlanir; ``cCiLow``/``cCiHigh`` bu
+    dagilimin %2.5/%97.5 yuzdelikleridir. Kume bootstrap'i zorunludur:
+    ayni oyunun pozisyonlari guclu korelidir, pozisyon duzeyi GA'yi yapay
+    daraltir.
+
+    Doner: ``a``, ``b``, ``c``, ``cCiLow``, ``cCiHigh``, ``rmse``, ``n``,
+    ``resamples``. Yetersiz nokta varsa ``nan`` dondurur (sessiz fallback
+    yok, Kural 6).
+    """
+    usable = [p for p in points if p.losses.get(path)]
+    empty = {
+        "path": path,
+        "a": float("nan"),
+        "b": float("nan"),
+        "c": float("nan"),
+        "cCiLow": float("nan"),
+        "cCiHigh": float("nan"),
+        "rmse": float("nan"),
+        "n": len(usable),
+        "resamples": 0,
+    }
+    if len(usable) < SATURATION_MIN_POINTS:
+        return empty
+
+    n = np.asarray([float(p.positions) for p in usable], dtype=np.float64)
+    y = np.asarray([float(np.mean(p.losses[path])) for p in usable], dtype=np.float64)
+    a, b, c, err = _saturation_core(n, y)
     if not np.isfinite(err):
-        return {
-            "path": path,
-            "a": float("nan"),
-            "b": float("nan"),
-            "c": float("nan"),
-            "rmse": float("nan"),
-            "n": len(usable),
-        }
+        return empty
+
+    c_low = float("nan")
+    c_high = float("nan")
+    done = 0
+    if resamples > 0:
+        rng = np.random.default_rng(int(seed))
+        draws: list[float] = []
+        for _ in range(int(resamples)):
+            ys = np.asarray(
+                [_cluster_resample_means(p, path, rng) for p in usable],
+                dtype=np.float64,
+            )
+            if not np.all(np.isfinite(ys)):
+                continue
+            _, _, cs, es = _saturation_core(n, ys)
+            if np.isfinite(es):
+                draws.append(float(cs))
+        if draws:
+            done = len(draws)
+            c_low = float(np.percentile(draws, 2.5))
+            c_high = float(np.percentile(draws, 97.5))
+
     return {
         "path": path,
         "a": a,
         "b": b,
         "c": c,
+        "cCiLow": c_low,
+        "cCiHigh": c_high,
         "rmse": err,
         "n": len(usable),
+        "resamples": done,
     }
 
 
@@ -588,6 +675,7 @@ def run_curve_multi_seed(
     resamples: int = BOOTSTRAP_RESAMPLES,
     bootstrap_seed: int = BOOTSTRAP_SEED,
     cluster: bool = True,
+    saturation_resamples: int = SATURATION_BOOTSTRAP_RESAMPLES,
     progress: Callable[[str], None] | None = None,
 ) -> CurveReport:
     """Ayni egriyi **birden cok tohumla** kosar ve havuzlar.
@@ -693,10 +781,15 @@ def run_curve_multi_seed(
             )
         )
 
-    # Doygunluk fiti: taban parametresi ``c`` (F7-87).
+    # Doygunluk fiti: taban parametresi ``c`` (F7-87) + ``c`` GA (K4).
     for path in CURVE_PATHS:
         if any(p.losses.get(path) for p in pooled.points):
-            pooled.saturation[path] = fit_saturation(pooled.points, path=path)
+            pooled.saturation[path] = fit_saturation(
+                pooled.points,
+                path=path,
+                resamples=int(saturation_resamples),
+                seed=bootstrap_seed,
+            )
 
     if len(seed_list) > 1 and not pooled.seed_agreement:
         pooled.notes.append(
@@ -709,6 +802,125 @@ def run_curve_multi_seed(
         "Havuzlanmis %d tohum: %s" % (len(seed_list), ", ".join(str(s) for s in seed_list))
     )
     return pooled
+
+
+# ----------------------------------------------------------------------
+# Eslestirilmis (paired) karsilastirma - K4
+# ----------------------------------------------------------------------
+
+
+def _strip_seed_prefix(game_id: str) -> str:
+    """``s3:cp-012`` -> ``cp-012`` (tohum onekini at)."""
+    head, sep, tail = game_id.partition(":")
+    if sep and head.startswith("s") and head[1:].isdigit():
+        return tail
+    return game_id
+
+
+def _game_means(point: CurvePoint, path: str) -> dict[str, float]:
+    """Bir noktanin kaybini **oyun** duzeyinde ortalar (tohum oneki atilir)."""
+    losses = point.losses.get(path) or []
+    ids = point.game_ids.get(path) or []
+    if not losses or len(ids) != len(losses):
+        return {}
+    buckets: dict[str, list[float]] = {}
+    for gid, value in zip(ids, losses):
+        buckets.setdefault(_strip_seed_prefix(str(gid)), []).append(float(value))
+    return {k: float(np.mean(v)) for k, v in buckets.items()}
+
+
+def paired_curve_comparison(
+    before: CurveReport,
+    after: CurveReport,
+    *,
+    path: str = "policy",
+    resamples: int = BOOTSTRAP_RESAMPLES,
+    seed: int = BOOTSTRAP_SEED,
+) -> dict[str, Any]:
+    """Ayni havuzda kosulmus iki egrinin **eslestirilmis** karsilastirmasi (K4).
+
+    Neden eslestirilmis. Iki egri (ornegin antisimetri artirimi oncesi/sonrasi)
+    **ayni held-out oyunlarini** degerlendirir. Bagimsiz iki ortalama
+    karsilastirmak oyun gurultusunu iki kez sayar; fark **oyun basina**
+    alinirsa ayni oyunun zorlugu sadelesir ve GA daralir.
+
+    Yontem: her noktada oyun basina ortalama kayip alinir, ``fark = sonra -
+    once`` hesaplanir, **oyun** kumeleri uzerinden bootstrap edilir. Negatif
+    fark = sonra daha iyi (ER dustu).
+
+    Doner: ``path``, ``points`` (nokta basina fark), ``meanDiff``,
+    ``ciLow``, ``ciHigh``, ``clusters``, ``resamples``, ``improved``.
+    """
+    by_pos_before = {int(p.positions): p for p in before.points}
+    by_pos_after = {int(p.positions): p for p in after.points}
+    shared = sorted(set(by_pos_before) & set(by_pos_after))
+    if not shared:
+        return {
+            "path": path,
+            "points": [],
+            "meanDiff": float("nan"),
+            "ciLow": float("nan"),
+            "ciHigh": float("nan"),
+            "clusters": 0,
+            "resamples": 0,
+            "improved": None,
+            "note": "ortak nokta yok",
+        }
+
+    point_rows: list[dict[str, Any]] = []
+    #: Tum noktalarin oyun duzeyi farklari (havuzlanmis).
+    pooled_diffs: list[float] = []
+    for positions in shared:
+        mb = _game_means(by_pos_before[positions], path)
+        ma = _game_means(by_pos_after[positions], path)
+        common = sorted(set(mb) & set(ma))
+        diffs = [ma[g] - mb[g] for g in common]
+        pooled_diffs.extend(diffs)
+        point_rows.append(
+            {
+                "positions": int(positions),
+                "multiplier": int(by_pos_after[positions].multiplier),
+                "before": float(np.mean(list(mb.values()))) if mb else float("nan"),
+                "after": float(np.mean(list(ma.values()))) if ma else float("nan"),
+                "diff": float(np.mean(diffs)) if diffs else float("nan"),
+                "clusters": len(common),
+            }
+        )
+
+    if not pooled_diffs:
+        return {
+            "path": path,
+            "points": point_rows,
+            "meanDiff": float("nan"),
+            "ciLow": float("nan"),
+            "ciHigh": float("nan"),
+            "clusters": 0,
+            "resamples": 0,
+            "improved": None,
+            "note": "ortak oyun kimligi yok",
+        }
+
+    values = np.asarray(pooled_diffs, dtype=np.float64)
+    mean_diff = float(np.mean(values))
+    rng = np.random.default_rng(int(seed))
+    draws = np.empty(int(resamples), dtype=np.float64)
+    for i in range(int(resamples)):
+        picked = rng.integers(0, values.size, size=values.size)
+        draws[i] = float(np.mean(values[picked]))
+    low = float(np.percentile(draws, 2.5))
+    high = float(np.percentile(draws, 97.5))
+    return {
+        "path": path,
+        "points": point_rows,
+        "meanDiff": mean_diff,
+        "ciLow": low,
+        "ciHigh": high,
+        "clusters": int(values.size),
+        "resamples": int(resamples),
+        #: GA tamamen sifirin altinda mi? (sonra anlamli olarak daha iyi)
+        "improved": bool(high < 0.0),
+        "note": "negatif fark = sonra daha iyi (ER dustu)",
+    }
 
 
 # ----------------------------------------------------------------------
@@ -778,6 +990,19 @@ def build_markdown(report: CurveReport, *, title: str = "Faz 7-R - Ogrenme egris
     lines.append("> kolonu tek basina okunmalidir. In-sample kolonu bir ER")
     lines.append("> **degildir**: birimi yanindaki sutunda yazilidir.")
     lines.append("")
+    if report.corpus:
+        lines.append("### 1.1 Korpus")
+        lines.append("")
+        lines.append("| Alan | Deger |")
+        lines.append("|---|---|")
+        for key in sorted(report.corpus):
+            lines.append("| `%s` | %s |" % (key, report.corpus[key]))
+        lines.append("")
+        lines.append(
+            "Korpus **acikca** yazilir: egri hangi veri uzerinde kosuldugu "
+            "bilinmeden okunamaz (K4)."
+        )
+        lines.append("")
     lines.append("## 2. Egim (ER / log2 veri)")
     lines.append("")
     lines.append(
@@ -840,29 +1065,74 @@ def build_markdown(report: CurveReport, *, title: str = "Faz 7-R - Ogrenme egris
     if report.saturation:
         lines.append("## 4. Doygunluk fiti `ER = a*N^-b + c`")
         lines.append("")
-        lines.append("| Yol | a | b | c (taban) | RMSE | Nokta |")
-        lines.append("|---|---|---|---|---|---|")
+        lines.append("| Yol | a | b | c (taban) | c %95 GA | RMSE | Nokta | Yeniden ornekleme |")
+        lines.append("|---|---|---|---|---|---|---|---|")
         for path in CURVE_PATHS:
             entry = report.saturation.get(path)
             if entry is None:
                 continue
             lines.append(
-                "| `%s` | %s | %s | **%s** | %s | %d |"
+                "| `%s` | %s | %s | **%s** | [%s; %s] | %s | %d | %d |"
                 % (
                     path,
                     _fmt(entry.get("a")),
                     _fmt(entry.get("b")),
                     _fmt(entry.get("c")),
+                    _fmt(entry.get("cCiLow")),
+                    _fmt(entry.get("cCiHigh")),
                     _fmt(entry.get("rmse")),
                     int(entry.get("n", 0)),
+                    int(entry.get("resamples", 0)),
                 )
             )
         lines.append("")
         lines.append(
             "`c` **taban parametresidir**: veri sonsuza giderken ER'nin indigi "
             "deger. Log-egim modeli taban tasimaz (ER sifira iner), ki bu "
-            "gercek degildir."
+            "gercek degildir. `c` icin GA **oyun kumeleri** uzerinden bootstrap "
+            "ile hesaplanir; nokta tahmini tek basina kanit sayilmaz (Kural 3)."
         )
+        lines.append("")
+    if report.paired:
+        paired = report.paired
+        lines.append("## 4.1 Eslestirilmis (paired) karsilastirma")
+        lines.append("")
+        lines.append(
+            "Ayni held-out oyunlari uzerinde **once/sonra** farki. Fark oyun "
+            "basina alinir; ayni oyunun zorlugu sadelesir ve GA daralir."
+        )
+        lines.append("")
+        rows = paired.get("points") or []
+        if rows:
+            lines.append("| Carpan | Pozisyon | Once | Sonra | Fark | Kume |")
+            lines.append("|---|---|---|---|---|---|")
+            for row in rows:
+                lines.append(
+                    "| %dx | %d | %s | %s | %s | %d |"
+                    % (
+                        int(row.get("multiplier", 0)),
+                        int(row.get("positions", 0)),
+                        _fmt(row.get("before")),
+                        _fmt(row.get("after")),
+                        _fmt(row.get("diff")),
+                        int(row.get("clusters", 0)),
+                    )
+                )
+            lines.append("")
+        lines.append(
+            "Havuzlanmis fark: **%s** %95 GA [%s; %s], kume %d, yeniden "
+            "ornekleme %d. **Sonra anlamli olarak daha iyi: %s**"
+            % (
+                _fmt(paired.get("meanDiff")),
+                _fmt(paired.get("ciLow")),
+                _fmt(paired.get("ciHigh")),
+                int(paired.get("clusters", 0)),
+                int(paired.get("resamples", 0)),
+                "EVET" if paired.get("improved") else "HAYIR",
+            )
+        )
+        lines.append("")
+        lines.append("Negatif fark = sonra daha iyi (ER dustu).")
         lines.append("")
     lines.append("## 5. Karar")
     lines.append("")
@@ -930,6 +1200,25 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", type=Path, default=None, help="cikti JSON")
     p.add_argument("--markdown", type=Path, default=None, help="cikti Markdown")
     p.add_argument(
+        "--corpus",
+        action="append",
+        default=None,
+        metavar="ANAHTAR=DEGER",
+        help="korpus kumesi (tekrarlanabilir); raporda acikca yazilir (K4)",
+    )
+    p.add_argument(
+        "--compare-before",
+        type=Path,
+        default=None,
+        help="onceki rapor JSON'u; eslestirilmis (paired) karsilastirma ekler (K4)",
+    )
+    p.add_argument(
+        "--saturation-resamples",
+        type=int,
+        default=SATURATION_BOOTSTRAP_RESAMPLES,
+        help="taban parametresi c icin kume bootstrap sayisi (0 = kapali)",
+    )
+    p.add_argument(
         "--from-json",
         type=Path,
         default=None,
@@ -939,14 +1228,30 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _parse_corpus(items: Sequence[str] | None) -> dict[str, Any]:
+    """``ANAHTAR=DEGER`` listesini sozluge cevirir."""
+    out: dict[str, Any] = {}
+    for item in items or []:
+        key, sep, value = str(item).partition("=")
+        if not sep or not key:
+            raise SystemExit("learning_curve: --corpus ANAHTAR=DEGER biciminde olmali: %s" % item)
+        out[key.strip()] = value.strip()
+    return out
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.from_json is not None:
-        import json  # noqa: PLC0415
-
         data = json.loads(Path(args.from_json).read_text(encoding="utf-8"))
         report = CurveReport.from_dict(data)
+        if args.compare_before is not None:
+            before = CurveReport.from_dict(
+                json.loads(Path(args.compare_before).read_text(encoding="utf-8"))
+            )
+            report.paired = paired_curve_comparison(
+                before, report, resamples=int(args.resamples)
+            )
         if args.markdown is not None:
             args.markdown.parent.mkdir(parents=True, exist_ok=True)
             args.markdown.write_text(build_markdown(report), encoding="utf-8")
@@ -990,6 +1295,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             multipliers=args.multipliers,
             resamples=args.resamples,
             cluster=not args.no_cluster,
+            saturation_resamples=int(args.saturation_resamples),
             progress=None if args.quiet else (lambda m: print(m)),
         )
     else:
@@ -1003,6 +1309,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             progress=None if args.quiet else (lambda m: print(m)),
         )
         report.seeds = seeds
+    report.corpus = _parse_corpus(args.corpus)
+    if args.compare_before is not None:
+        before = CurveReport.from_dict(
+            json.loads(Path(args.compare_before).read_text(encoding="utf-8"))
+        )
+        report.paired = paired_curve_comparison(
+            before, report, resamples=int(args.resamples)
+        )
     if args.out is not None:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(

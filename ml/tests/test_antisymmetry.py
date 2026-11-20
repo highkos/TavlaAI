@@ -335,3 +335,46 @@ def test_208_symmetrise_cli_contract():
     assert args.out == A.SYMMETRISED_PATH
     assert args.markdown == A.SYMMETRISED_MD_PATH
     assert args.plies == 2
+
+
+def test_252_antisymmetry_report_dict_round_trip():
+    """``from_dict`` kaydedilmis raporu yeniden bicimlendirir (olcum tekrarlanmaz)."""
+    report = A.AntisymmetryReport(
+        count=1000,
+        correlation=-0.9426,
+        mean_abs_sum=0.2827,
+        max_abs_sum=3.5577,
+        sum_within_tol=227,
+        sum_total=24436,
+        vectorizer_checked=24436,
+        vectorizer_mismatches=0,
+        argmax_agreement=392,
+        argmax_total=1000,
+        er_plus=0.0485,
+        er_minus=0.0788,
+        er_diff=-0.0302,
+        er_diff_ci_low=-0.0391,
+        er_diff_ci_high=-0.0216,
+        er_diff_excludes_zero=True,
+        model="ml/runs/rd_aug10k/onnx/model_v10.onnx",
+        notes=["not 1"],
+    )
+    back = A.AntisymmetryReport.from_dict(report.to_dict())
+    assert back.to_dict() == report.to_dict()
+    # Turetilmis alanlar da ayni: kapi karari kaybolmaz.
+    assert back.passed == report.passed
+    assert back.argmax_rate == pytest.approx(report.argmax_rate)
+    assert back.vectorizer_symmetric is True
+    # Markdown ayni sekilde uretilir.
+    assert A.build_markdown(back) == A.build_markdown(report)
+
+
+def test_253_antisymmetry_report_from_dict_tolerates_missing_keys():
+    """Eski/kismi artefaktlar patlamaz; eksikler varsayilana duser."""
+    back = A.AntisymmetryReport.from_dict({"count": 5, "correlation": -0.5})
+    assert back.count == 5
+    assert back.correlation == pytest.approx(-0.5)
+    assert back.corr_min == A.CORR_MIN
+    assert back.sum_tol == A.SUM_TOL
+    assert back.notes == []
+    assert back.passed is False

@@ -8,23 +8,35 @@ degisir. Karar, ER'nin `log2(veri)` basina egiminden verilir.
 
 | Carpan | Pozisyon | ER `policy` | ER `value` | ER `search1` | Kal. egimi | Kal. MAE | In-sample | In-sample birimi | Held-out |
 |---|---|---|---|---|---|---|---|---|---|
-| 1x | 165 | 0.0504 | 0.2114 | - | - | - | 1.1721 | karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2) | 0.0504 |
-| 2x | 330 | 0.0414 | 0.2245 | - | - | - | 0.8910 | karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2) | 0.0414 |
-| 4x | 660 | 0.0341 | 0.1099 | - | - | - | 0.5563 | karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2) | 0.0341 |
-| 8x | 1320 | 0.0267 | 0.0523 | - | - | - | 0.3413 | karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2) | 0.0267 |
-| 16x | 2640 | 0.0215 | 0.0473 | - | - | - | 0.2204 | karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2) | 0.0215 |
-| 32x | 5280 | 0.0166 | 0.0398 | - | - | - | 0.2553 | karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2) | 0.0166 |
+| 1x | 165 | 0.0525 | 0.1915 | - | - | - | 1.0688 | karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2) | 0.0525 |
+| 2x | 330 | 0.0441 | 0.1321 | - | - | - | 0.8408 | karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2) | 0.0441 |
+| 4x | 660 | 0.0355 | 0.0879 | - | - | - | 0.6612 | karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2) | 0.0355 |
+| 8x | 1320 | 0.0276 | 0.0588 | - | - | - | 0.4051 | karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2) | 0.0276 |
+| 16x | 2640 | 0.0236 | 0.0469 | - | - | - | 0.2700 | karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2) | 0.0236 |
+| 32x | 5280 | 0.0184 | 0.0365 | - | - | - | 0.2509 | karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2) | 0.0184 |
+| 64x | 10560 | 0.0158 | 0.0330 | - | - | - | 0.1593 | karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2) | 0.0158 |
 
 > **In-sample metrikler basari sayilmaz** (Kural 5). Held-out
 > kolonu tek basina okunmalidir. In-sample kolonu bir ER
 > **degildir**: birimi yanindaki sutunda yazilidir.
 
+### 1.1 Korpus
+
+| Alan | Deger |
+|---|---|
+| `etiket` | gnubg-2ply |
+| `havuz` | curve_pool_400.npz |
+| `oyun` | 400 |
+| `plies` | 2 |
+
+Korpus **acikca** yazilir: egri hangi veri uzerinde kosuldugu bilinmeden okunamaz (K4).
+
 ## 2. Egim (ER / log2 veri)
 
 | Yol | Kazanc | %95 GA | Ham egim | Nokta | Kume | Yeniden ornekleme |
 |---|---|---|---|---|---|---|
-| `policy` | 0.0067 | [0.0061; 0.0073] | -0.0067 | 6 | 200 | 20000 |
-| `value` | 0.0414 | [0.0396; 0.0449] | -0.0414 | 6 | 200 | 20000 |
+| `policy` | 0.0062 | [0.0059; 0.0065] | -0.0062 | 7 | 400 | 20000 |
+| `value` | 0.0253 | [0.0244; 0.0267] | -0.0253 | 7 | 400 | 20000 |
 
 Kume bootstrap'i: **oyun** (oyun duzeyinde = dogru; pozisyon duzeyinde GA'yi yapay daraltir).
 
@@ -38,36 +50,35 @@ Esik: **0.0050** (ER kazanci / log2 veri).
 
 | Tohum | Kazanc | Karar |
 |---|---|---|
-| 1 | 0.0068 | `olcek` |
-| 2 | 0.0062 | `belirsiz` |
-| 3 | 0.0066 | `olcek` |
-| 4 | 0.0056 | `belirsiz` |
-| 5 | 0.0085 | `olcek` |
+| 1 | 0.0062 | `olcek` |
+| 2 | 0.0059 | `olcek` |
+| 3 | 0.0067 | `olcek` |
+| 4 | 0.0060 | `olcek` |
+| 5 | 0.0062 | `olcek` |
 
-**Tohum oybirligi: YOK.** Havuzlanmis bootstrap tohumlari ek veri gibi ele alir ve GA'yi daraltir; bu yuzden havuz karari tek basina yetmez. `olcek`/`pipeline` icin **tum tohumlarin** ayni karari vermesi gerekir.
+**Tohum oybirligi: VAR.** Havuzlanmis bootstrap tohumlari ek veri gibi ele alir ve GA'yi daraltir; bu yuzden havuz karari tek basina yetmez. `olcek`/`pipeline` icin **tum tohumlarin** ayni karari vermesi gerekir.
 
 ## 4. Doygunluk fiti `ER = a*N^-b + c`
 
-| Yol | a | b | c (taban) | RMSE | Nokta |
-|---|---|---|---|---|---|
-| `policy` | 0.2865 | 0.3500 | **0.0033** | 0.0008 | 6 |
-| `value` | 5.0251 | 0.6000 | **0.0087** | 0.0298 | 6 |
+| Yol | a | b | c (taban) | c %95 GA | RMSE | Nokta | Yeniden ornekleme |
+|---|---|---|---|---|---|---|---|
+| `policy` | 0.2442 | 0.3000 | **0.0003** | [0.0001; 0.0066] | 0.0006 | 7 | 2000 |
+| `value` | 6.1105 | 0.7000 | **0.0223** | [0.0148; 0.0252] | 0.0023 | 7 | 2000 |
 
-`c` **taban parametresidir**: veri sonsuza giderken ER'nin indigi deger. Log-egim modeli taban tasimaz (ER sifira iner), ki bu gercek degildir.
+`c` **taban parametresidir**: veri sonsuza giderken ER'nin indigi deger. Log-egim modeli taban tasimaz (ER sifira iner), ki bu gercek degildir. `c` icin GA **oyun kumeleri** uzerinden bootstrap ile hesaplanir; nokta tahmini tek basina kanit sayilmaz (Kural 3).
 
 ## 5. Karar
 
-**`belirsiz`**
+**`olcek`**
 
-Egim guven araligi esigi kesiyor: **karar verilemez**. Daha fazla nokta ya da daha buyuk korpus gerekir.
+Egim esigin uzerinde: veri ikiye katlandiginda ER olculebilir bicimde dusuyor. **Olcek buyutmek dogru kaldiractir.**
 
 ## 6. Notlar
 
-- tohum 1: kazanc 0.0068 GA [0.0056; 0.0080] -> olcek
-- tohum 2: kazanc 0.0062 GA [0.0049; 0.0076] -> belirsiz
-- tohum 3: kazanc 0.0066 GA [0.0053; 0.0077] -> olcek
-- tohum 4: kazanc 0.0056 GA [0.0044; 0.0067] -> belirsiz
-- tohum 5: kazanc 0.0085 GA [0.0068; 0.0099] -> olcek
-- TOHUM OYBIRLIGI YOK: s1=olcek, s2=belirsiz, s3=olcek, s4=belirsiz, s5=olcek -> havuz karari 'belirsiz' sayilir
+- tohum 1: kazanc 0.0062 GA [0.0055; 0.0069] -> olcek
+- tohum 2: kazanc 0.0059 GA [0.0053; 0.0066] -> olcek
+- tohum 3: kazanc 0.0067 GA [0.0060; 0.0075] -> olcek
+- tohum 4: kazanc 0.0060 GA [0.0053; 0.0066] -> olcek
+- tohum 5: kazanc 0.0062 GA [0.0055; 0.0069] -> olcek
 - Havuzlanmis 5 tohum: 1, 2, 3, 4, 5
 

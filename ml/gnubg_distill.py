@@ -392,6 +392,8 @@ class PolicyPosition:
     best_move: str
     candidates: int
     mapping_failures: int = 0
+    #: K5: en iyi adayin gnubg 6 sinifli dagilimi (``equity.PROB_ORDER``).
+    best_dist: list[float] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -402,24 +404,34 @@ class PolicyPosition:
             "bestMove": self.best_move,
             "candidates": self.candidates,
             "mappingFailures": self.mapping_failures,
+            "bestDist": list(self.best_dist) if self.best_dist else None,
         }
 
 
 @dataclass
 class PolicyDataset:
-    """Ragged aday kumesi: ``x`` [M, 221], ``offsets`` [N+1], ``best`` [N]."""
+    """Ragged aday kumesi: ``x`` [M, 221], ``offsets`` [N+1], ``best`` [N].
+
+    ``dist`` [N, 6] opsiyoneldir; doluysa ``train_policy_head`` 6 sinifli KL
+    terimini de ekler (K5: skaler equity tek basina deger yolunu 4x'ten sonra
+    platoya sokuyordu).
+    """
 
     x: np.ndarray
     offsets: np.ndarray
     best: np.ndarray
     y: np.ndarray
     meta: dict[str, Any] = field(default_factory=dict)
+    dist: np.ndarray | None = None
 
     def __len__(self) -> int:
         return int(self.best.shape[0])
 
     def candidates(self, i: int) -> np.ndarray:
         return self.x[int(self.offsets[i]) : int(self.offsets[i + 1])]
+
+    def has_dist(self) -> bool:
+        return self.dist is not None and int(np.asarray(self.dist).shape[0]) == len(self)
 
     def stats(self) -> dict[str, Any]:
         if len(self) == 0:
@@ -436,6 +448,7 @@ class PolicyDataset:
             "std": float(np.std(y)),
             "min": float(np.min(y)),
             "max": float(np.max(y)),
+            "hasDist": bool(self.has_dist()),
         }
 
 
@@ -475,12 +488,17 @@ def label_policy_positions(
     referee,
     positions: Iterable[tuple[list[int], int, list[int], int, int]],
     *,
+    dists: bool = False,
+    plies: int = DEFAULT_PLIES,
     progress: Callable[[int, int, PolicyPosition | None], None] | None = None,
 ) -> tuple[list[PolicyPosition], list[dict[str, Any]]]:
     """Pozisyonlari gnubg ``hint`` ile **politika** hedefi olarak etiketler.
 
     Etiketlenemeyen pozisyon sessizce atlanmaz; ``skipped`` listesine nedeniyle
     yazilir ve cagiran taraf orani raporlar.
+
+    ``dists=True`` ise en iyi adayin 6 sinifli gnubg dagilimi da (``best_dist``)
+    etiketlenir; bu, ``train_policy_head``'in KL terimi icin gereklidir (K5).
     """
     import gnubg_er  # noqa: PLC0415
     import gnubg_hint  # noqa: PLC0415
@@ -523,6 +541,24 @@ def label_policy_positions(
             )
             for a in case["afterStates"]
         ]
+        best_dist: list[float] | None = None
+        if dists:
+            best_after = case["afterStates"][int(best_index)]
+            # ``HintReferee`` oturumu ``.session`` altinda tutar; dogrudan
+            # ``GnubgSession`` verilmis olabilecegi icin ikisi de kabul edilir.
+            session = getattr(referee, "session", referee)
+            try:
+                tables = session.eval_afterstates(
+                    [best_after["board"]], int(turn), dists=True
+                )
+            except Exception as exc:  # gnubg hatasi: dagilim olmadan devam et
+                skipped.append(
+                    {"index": i, "reason": "dagilim etiketi alinamadi: " + str(exc)}
+                )
+                tables = []
+            if tables:
+                key = "static" if plies == 0 else str(plies)
+                best_dist = tables[0].get(key)
         item = PolicyPosition(
             vectors=vectors,
             best_index=int(best_index),
@@ -532,6 +568,7 @@ def label_policy_positions(
             best_move=str(best_hint.move),
             candidates=len(vectors),
             mapping_failures=len(failures),
+            best_dist=best_dist,
         )
         out.append(item)
         if progress:
@@ -555,32 +592,41 @@ def build_policy_dataset(
     rows: list[list[float]] = []
     best: list[int] = []
     y: list[float] = []
+    dist: list[list[float]] = []
+    have_dist = True
     for p in labeled:
         rows.extend(p.vectors)
         offsets.append(len(rows))
         best.append(int(p.best_index))
         y.append(float(p.best_equity))
+        if p.best_dist is None:
+            have_dist = False
+        else:
+            dist.append([float(v) for v in p.best_dist])
     return PolicyDataset(
         x=np.asarray(rows, dtype=np.float32),
         offsets=np.asarray(offsets, dtype=np.int64),
         best=np.asarray(best, dtype=np.int32),
         y=np.asarray(y, dtype=np.float32),
         meta=dict(meta or {}),
+        dist=np.asarray(dist, dtype=np.float32) if have_dist and dist else None,
     )
 
 
 def save_policy_dataset(dataset: PolicyDataset, path: Path) -> None:
-    """``.npz`` olarak yazar (``x``, ``offsets``, ``best``, ``y``, ``meta``)."""
+    """``.npz`` olarak yazar (``x``, ``offsets``, ``best``, ``y``, ``meta``, ``dist``)."""
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        p,
-        x=dataset.x,
-        offsets=dataset.offsets,
-        best=dataset.best,
-        y=dataset.y,
-        meta=np.asarray(json.dumps(dataset.meta, sort_keys=True)),
-    )
+    payload = {
+        "x": dataset.x,
+        "offsets": dataset.offsets,
+        "best": dataset.best,
+        "y": dataset.y,
+        "meta": np.asarray(json.dumps(dataset.meta, sort_keys=True)),
+    }
+    if dataset.has_dist():
+        payload["dist"] = np.asarray(dataset.dist, dtype=np.float32)
+    np.savez_compressed(p, **payload)
 
 
 def load_policy_dataset(path: Path) -> PolicyDataset:
@@ -591,12 +637,14 @@ def load_policy_dataset(path: Path) -> PolicyDataset:
             raw = data["meta"]
             text = str(raw.item()) if raw.shape == () else str(raw)
             meta = json.loads(text) if text else {}
+        dist = np.asarray(data["dist"], dtype=np.float32) if "dist" in data else None
         return PolicyDataset(
             x=np.asarray(data["x"], dtype=np.float32),
             offsets=np.asarray(data["offsets"], dtype=np.int64),
             best=np.asarray(data["best"], dtype=np.int32),
             y=np.asarray(data["y"], dtype=np.float32),
             meta=meta,
+            dist=dist,
         )
 
 
@@ -625,12 +673,18 @@ def train_policy_head(
     device: str = "cpu",
     seed: int = 0,
     value_weight: float = DEFAULT_VALUE_WEIGHT,
+    dist_weight: float = 0.0,
     progress: Callable[[int, int, float], None] | None = None,
 ) -> dict[str, Any]:
     """Politika kafasini gnubg'nin en iyi hamlesine capraz-entropi ile egitir.
 
-    Kayip: ``CE(logits, best) + value_weight * MSE(equity(best), best_equity)``.
+    Kayip: ``CE(logits, best) + value_weight * MSE(equity(best), best_equity)
+    + dist_weight * KL(gnubg_dagilimi || model_dagilimi)``.
     Politika terimi ER'i dogrudan hedefler; deger terimi yalnizca destek olur.
+
+    ``dist_weight > 0`` icin veri kumesinde 6 sinifli dagilim bulunmalidir (K5).
+    Skaler equity tek basina deger yolunu 4x'ten sonra platoya sokuyordu; tam
+    dagilim hedefi ayni ileri gecislerden cok daha fazla sinyal cikarir.
     """
     import torch  # noqa: PLC0415
     import torch.nn.functional as F  # noqa: PLC0415
@@ -639,6 +693,10 @@ def train_policy_head(
         raise ValueError("bos veri kumesi egitilemez")
     if steps <= 0:
         raise ValueError("steps > 0 olmali")
+    if dist_weight > 0 and not dataset.has_dist():
+        raise ValueError(
+            "dist_weight > 0 icin veri kumesinde 6 sinifli dagilim (dist) gerekli"
+        )
 
     torch.manual_seed(seed)
     n = len(dataset)
@@ -650,6 +708,11 @@ def train_policy_head(
     mt = torch.from_numpy(mask).to(device)
     bt = torch.from_numpy(np.asarray(dataset.best, dtype=np.int64)).to(device)
     yt = torch.from_numpy(np.asarray(dataset.y, dtype=np.float32)).to(device)
+    dt = (
+        torch.from_numpy(np.asarray(dataset.dist, dtype=np.float32)).to(device)
+        if dist_weight > 0
+        else None
+    )
 
     model.to(device)
     model.train()
@@ -668,6 +731,13 @@ def train_policy_head(
         best_probs = probs.gather(1, pick).squeeze(1)
         vloss = F.mse_loss(equity_of_probs(best_probs), yt[idx])
         loss = ce + value_weight * vloss
+        if dt is not None:
+            target = dt[idx]
+            target = target / target.sum(dim=1, keepdim=True).clamp_min(1e-9)
+            kl = F.kl_div(
+                torch.log(best_probs.clamp_min(1e-9)), target, reduction="batchmean"
+            )
+            loss = loss + dist_weight * kl
         opt.zero_grad(set_to_none=True)
         loss.backward()
         opt.step()
@@ -694,6 +764,8 @@ def train_policy_head(
         "count": n,
         "width": int(width),
         "valueWeight": float(value_weight),
+        "distWeight": float(dist_weight),
+        "hasDist": bool(dataset.has_dist()),
         "firstLoss": history[0] if history else None,
         "lastLoss": history[-1] if history else None,
         "top1": (correct / total) if total else float("nan"),
@@ -1200,6 +1272,11 @@ def build_parser() -> argparse.ArgumentParser:
     lp.add_argument("--max-plies", type=int, default=DEFAULT_MAX_PLIES)
     lp.add_argument("--gnubg", type=Path, default=None)
     lp.add_argument("--timeout", type=int, default=60)
+    lp.add_argument(
+        "--dists",
+        action="store_true",
+        help="en iyi adayin 6 sinifli gnubg dagilimini da etiketle (K5)",
+    )
     lp.add_argument("--quiet", action="store_true")
 
     tp = sub.add_parser("train-policy", help="politika kafasini gnubg hamlesine egit")
@@ -1210,6 +1287,12 @@ def build_parser() -> argparse.ArgumentParser:
     tp.add_argument("--lr", type=float, default=DEFAULT_LR)
     tp.add_argument("--batch", type=int, default=DEFAULT_BATCH)
     tp.add_argument("--value-weight", type=float, default=DEFAULT_VALUE_WEIGHT)
+    tp.add_argument(
+        "--dist-weight",
+        type=float,
+        default=0.0,
+        help="6 sinifli KL teriminin agirligi (K5; veri kumesinde dist gerekir)",
+    )
     tp.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
     tp.add_argument("--seed", type=int, default=0)
     tp.add_argument("--json", type=Path, default=None)
@@ -1470,7 +1553,9 @@ def _cmd_label_policy(args: argparse.Namespace) -> int:
         if i % 25 == 0 or i == total:
             print("[%d/%d] %.1f s" % (i, total, time.time() - started), file=sys.stderr)
 
-    labeled, skipped = label_policy_positions(referee, positions, progress=progress)
+    labeled, skipped = label_policy_positions(
+        referee, positions, dists=args.dists, plies=args.plies, progress=progress
+    )
     meta = {
         "kind": "policy",
         "plies": int(args.plies),
@@ -1479,6 +1564,7 @@ def _cmd_label_policy(args: argparse.Namespace) -> int:
         "requested": int(args.positions),
         "labeled": len(labeled),
         "skipped": len(skipped),
+        "dists": bool(args.dists),
         "elapsedSeconds": round(time.time() - started, 2),
         "gnubg": str(exe),
         "license": LICENSE_NOTE,
@@ -1538,6 +1624,7 @@ def _cmd_train_policy(args: argparse.Namespace) -> int:
         device=args.device,
         seed=args.seed,
         value_weight=args.value_weight,
+        dist_weight=args.dist_weight,
         progress=progress,
     )
 

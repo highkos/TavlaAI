@@ -1,0 +1,25 @@
+{
+  "symmetrisedVersion": 1,
+  "model": "runs\\stage_rd\\onnx\\model_v10.onnx",
+  "corpus": "artifacts/reference_corpus_v2.json",
+  "plies": 2,
+  "cases": 1000,
+  "argmaxChanged": 351,
+  "policy": {
+    "rawEr": 0.038488,
+    "symEr": 0.04888,
+    "delta": 0.010392,
+    "ciLow": 0.005082999999999998,
+    "ciHigh": 0.015698024999999994,
+    "improved": false
+  },
+  "value": {
+    "rawEr": 0.20042000000000001,
+    "symEr": 0.19103900000000004,
+    "delta": -0.009381,
+    "ciLow": -0.022421299999999998,
+    "ciHigh": 0.0038520749999999947,
+    "improved": false
+  },
+  "notes": []
+}

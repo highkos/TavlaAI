@@ -302,6 +302,36 @@ class AntisymmetryReport:
             "notes": self.notes,
         }
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "AntisymmetryReport":
+        """``to_dict`` ciktisindan geri kurar.
+
+        Olcum gnubg ile dakikalar surer; kaydedilmis bir raporu yeniden
+        **bicimlendirmek** icin olcumu tekrarlamak gerekmesin.
+        """
+        return cls(
+            count=int(data.get("count", 0)),
+            correlation=float(data.get("correlation", float("nan"))),
+            mean_abs_sum=float(data.get("meanAbsSum", float("nan"))),
+            max_abs_sum=float(data.get("maxAbsSum", float("nan"))),
+            sum_within_tol=int(data.get("sumWithinTol", 0)),
+            sum_total=int(data.get("sumTotal", 0)),
+            vectorizer_checked=int(data.get("vectorizerChecked", 0)),
+            vectorizer_mismatches=int(data.get("vectorizerMismatches", 0)),
+            argmax_agreement=int(data.get("argmaxAgreement", 0)),
+            argmax_total=int(data.get("argmaxTotal", 0)),
+            er_plus=float(data.get("erPlus", float("nan"))),
+            er_minus=float(data.get("erMinus", float("nan"))),
+            er_diff=float(data.get("erDiff", float("nan"))),
+            er_diff_ci_low=float(data.get("erDiffCiLow", float("nan"))),
+            er_diff_ci_high=float(data.get("erDiffCiHigh", float("nan"))),
+            er_diff_excludes_zero=bool(data.get("erDiffExcludesZero", False)),
+            corr_min=float(data.get("corrMin", CORR_MIN)),
+            sum_tol=float(data.get("sumTol", SUM_TOL)),
+            model=str(data.get("model", "")),
+            notes=list(data.get("notes", [])),
+        )
+
 
 def measure_antisymmetry(
     model_path: Path,
@@ -453,9 +483,8 @@ def measure_antisymmetry(
         "girdi simetrisi bu raporda ayrica olculur."
     )
     report.notes.append(
-        "Bu olcum R-D **oncesi** durumdur. R-D egitimi iki perspektif artirimi "
-        "(`augment_perspectives`) veya girdi kanoniklestirmesi kullanmak "
-        "zorunda; kapi R-D sonunda yeniden aranir."
+        "Kapi bir **teshis**tir: `|corr| >= 0.99` bu mimariyle ulasilabilir "
+        "degil. Karar iki bakisli ER (F7-101) ve ppg ile verilir."
     )
     if not report.corr_ok:
         report.notes.append(

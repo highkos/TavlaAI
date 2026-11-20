@@ -205,7 +205,9 @@ def test_197_in_sample_unit_is_labelled_in_markdown():
     assert "In-sample birimi" in md
     assert "capraz-entropi" in md
     assert "bir ER" in md
-    assert lc.CURVE_MULTIPLIERS == (1, 2, 4, 8, 16, 32)
+    # K4 (F7-96): 64x noktasi eklendi; egri 32x'te kesilince kazanc esige
+    # yakin kaliyor ve karar `belirsiz`e dusuyordu.
+    assert lc.CURVE_MULTIPLIERS == (1, 2, 4, 8, 16, 32, 64)
 
 
 # ----------------------------------------------------------------------

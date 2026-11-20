@@ -1,0 +1,19 @@
+{
+  "verifyVersion": 1,
+  "shards": 6,
+  "games": 60000,
+  "decisions": 3710732,
+  "passes": 442020,
+  "moves": 3268712,
+  "passWithCandidates": 0,
+  "passWithoutCandidates": 442020,
+  "moveWithoutCandidates": 0,
+  "chosenNotInCandidates": 0,
+  "chosenChecked": 1805887,
+  "chosenIsTerminal": 60000,
+  "passCandidateTotalHist": {
+    "1": 442020
+  },
+  "affectedGames": [],
+  "clean": true
+}

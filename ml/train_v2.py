@@ -713,6 +713,120 @@ def subsample_policy(
     return [samples[int(i)] for i in idx]
 
 
+# ----------------------------------------------------------------------
+# R-D: perspektif artirimi (F7-94)
+# ----------------------------------------------------------------------
+
+
+def _flip_vectors(vectors: np.ndarray) -> np.ndarray:
+    """Her satiri **karsi bakisa** cevirir (``antisymmetry.flip_perspective``)."""
+    from antisymmetry import flip_perspective
+
+    arr = np.asarray(vectors, dtype=np.float32)
+    out = np.empty_like(arr)
+    for i in range(arr.shape[0]):
+        out[i] = np.asarray(flip_perspective(arr[i]), dtype=np.float32)
+    return out
+
+
+def augment_value_samples(samples: ExclusiveSamples) -> ExclusiveSamples:
+    """Deger orneklerini **iki** perspektifle cogaltir (R-D, F7-94).
+
+    Ayni fiziksel pozisyon ikinci kez, karsi bakistan yazilmis vektorle ve
+    **ters** hedefle girer:
+
+    * ``x``             -> ``flip_perspective(x)``
+    * ``y``             -> ``flip_exclusive(y)`` (``W`` yarisi ``L`` yarisina doner)
+    * ``equity_target`` -> isaret doner
+    * ``best_equity``   -> isaret doner
+    * ``margin``        -> **degismez**: ayni fiziksel aday kumesinin en iyi iki
+      adayi arasindaki fark, bakistan bagimsiz bir buyukluktur.
+
+    Donen ornek sayisi ``2 * len(samples)``; ciftler bitisiktir:
+    ``[s0(+1), s0(-1), s1(+1), s1(-1), ...]``.
+
+    **Neden gerekli.** Modelin iki bakista tutarli olmasi icin ayni pozisyonun
+    iki yazimi da kayba girmelidir; aksi halde ``f(x,+1) = -f(x,-1)`` simetrisi
+    hicbir zaman dayatilmaz (F7-55 kusurunun kok nedeni).
+    """
+    n = len(samples)
+    if n == 0:
+        return samples
+
+    def _pair(original: np.ndarray, flipped: np.ndarray) -> np.ndarray:
+        """``[a0, b0, a1, b1, ...]`` - ciftler bitisik."""
+        out = np.empty((2 * n,) + original.shape[1:], dtype=original.dtype)
+        out[0::2] = original
+        out[1::2] = flipped
+        return out
+
+    x = _pair(samples.x, _flip_vectors(samples.x))
+    y = _pair(samples.y, flip_exclusive(samples.y).astype(np.float32))
+    gi = _pair(samples.game_index, samples.game_index)
+    di = _pair(samples.decision_index, samples.decision_index)
+    margin = (
+        None if samples.margin is None else _pair(samples.margin, samples.margin)
+    )
+    best = (
+        None
+        if samples.best_equity is None
+        else _pair(samples.best_equity, -samples.best_equity)
+    )
+    et = (
+        None
+        if samples.equity_target is None
+        else _pair(samples.equity_target, -samples.equity_target).astype(np.float32)
+    )
+    return ExclusiveSamples(
+        x=x,
+        y=y,
+        game_index=gi,
+        decision_index=di,
+        margin=margin,
+        best_equity=best,
+        equity_target=et,
+    )
+
+
+def augment_policy_samples(samples: Sequence[PolicySample]) -> list[PolicySample]:
+    """Politika orneklerini iki perspektifle cogaltir (R-D, F7-94).
+
+    Aday kumesi **ayni fiziksel afterstate'lerdir**; yalnizca vektorler karsi
+    bakistan yazilir. Bu yuzden hedef dagilim (``target``) ve ``q`` vektor
+    olarak degismez.
+
+    **UYARI (F7-100): bu artirim yanlistir, varsayilan kapalidir.** Hedef
+    *oynayacak tarafin* dagilimidir; girdi cevrilince oynayacak taraf degisir,
+    dolayisiyla hedefin de cevrilmesi gerekir. Shard'larda karsi tarafin hedefi
+    yok. Ayni hedefle cevirmek kafayi ``f(flip(x)) = f(x)`` yani **simetrik**
+    egitir; renk takasi kapisinin aradigi ``argmax(+1) == argmin(-1)``
+    iliskisinin tam tersi. Olculdu: argmax uyumu 0,174 -> 0,018.
+    """
+    out: list[PolicySample] = []
+    for s in samples:
+        out.append(s)
+        out.append(
+            PolicySample(vectors=_flip_vectors(s.vectors), target=s.target, q=s.q)
+        )
+    return out
+
+
+def _double_weights(weights: np.ndarray) -> np.ndarray:
+    """Kritik ornekleme agirliklarini orneklerle ayni sirada ciftler.
+
+    ``augment_*`` ornekleri ``[s0, f0, s1, f1, ...]`` duzeninde cogaltir; bu
+    yuzden agirlik da ``repeat(2)`` ile ciftlenmelidir (``concatenate`` blok
+    verip agirliklari kaydirir). Ciftlemeden sonra toplam 2 olur;
+    ``rng.choice(p=...)`` toplamin 1 olmasini istedigi icin yeniden
+    normalestirilir.
+    """
+    doubled = np.repeat(np.asarray(weights, dtype=np.float64), 2)
+    total = float(doubled.sum())
+    if total <= 0.0:
+        return np.full(doubled.shape[0], 1.0 / doubled.shape[0], dtype=np.float64)
+    return doubled / total
+
+
 def save_probe(
     path: Path,
     value: ExclusiveSamples,
@@ -929,6 +1043,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="deger hedefi: td_lambda (varsayilan) | search_distill (Faz 7 Bolum 5.4)",
     )
     p.add_argument("--no-deterministic", action="store_true", help="deterministik algoritmalari kapat")
+    p.add_argument(
+        "--augment-perspectives",
+        action="store_true",
+        help=(
+            "R-D: deger orneklerini iki perspektifle egit (F7-94, renk takasi kapisi). "
+            "Politika kafasi **artirilmaz**: hedefi oynayacak tarafin dagilimidir ve "
+            "girdi cevrilince hedef de cevrilmelidir; shard'larda karsi tarafin hedefi yok."
+        ),
+    )
+    p.add_argument(
+        "--augment-policy-perspectives",
+        action="store_true",
+        help=(
+            "TESHIS AMACLI, varsayilan kapali: politika orneklerini de cevirir ama "
+            "hedefi ayni birakir. Bu, kafayi **simetrik** egitir; olculdu: renk takasi "
+            "argmax uyumu 0,174 -> 0,018 (F7-100). Uretimde kullanilmaz."
+        ),
+    )
     p.add_argument("--quiet", action="store_true")
     return p
 
@@ -1216,6 +1348,26 @@ def main(argv: list[str] | None = None) -> int:
                     critical_mask_policy(train_policy), boost=critical_boost
                 )
 
+        # R-D (F7-94): perspektif artirimi. Kritik agirliklar **tekil** kararlar
+        # uzerinde hesaplanir, sonra ciftlenir; boylece rapor sayilari sismez.
+        # Agirliklar da orneklerle ayni sirada olmali: `repeat(2)` ic ice
+        # yerlesim verir, `concatenate` ise blok verip agirliklari kaydirirdi.
+        # Ciftlemeden sonra toplam 2 olur; `rng.choice(p=...)` toplamin 1
+        # olmasini istedigi icin yeniden normalestirilir.
+        #
+        # **Yalniz deger kafasi.** Politika hedefi oynayacak tarafin
+        # dagilimidir; girdi cevrilince hedef de cevrilmelidir ve shard'larda
+        # karsi tarafin hedefi yok. Ayni hedefle cevirmek kafayi **simetrik**
+        # egitir; olculdu (F7-100): renk takasi argmax uyumu 0,174 -> 0,018.
+        if args.augment_perspectives:
+            value_samples = augment_value_samples(value_samples)
+            if value_weights is not None:
+                value_weights = _double_weights(value_weights)
+        if args.augment_policy_perspectives:
+            train_policy = augment_policy_samples(train_policy)
+            if policy_weights is not None:
+                policy_weights = _double_weights(policy_weights)
+
         t_tr = time.time()
         stats = train_steps_v2(
             model, optimizer, value_samples, train_policy,
@@ -1390,6 +1542,8 @@ def main(argv: list[str] | None = None) -> int:
         "amp": amp,
         "lam": lam,
         "seed": seed,
+        "augment_perspectives": bool(args.augment_perspectives),
+        "augment_policy_perspectives": bool(args.augment_policy_perspectives),
         "elapsed_seconds": elapsed,
         "best": best,
         "test_access": test_entry,
@@ -1443,7 +1597,33 @@ def main(argv: list[str] | None = None) -> int:
             )
         print("toplam sure      : " + f"{elapsed:.1f}" + " s")
 
+    _release_cuda(device)
     return 0
+
+
+def _release_cuda(device) -> None:
+    """CUDA baglamini **acikca** kapatir (F7-99).
+
+    Windows'ta paralel yuk altinda surec cikisinda ``0xC0000409``
+    (STATUS_STACK_BUFFER_OVERRUN) goruluyordu. Cokme egitim sirasinda degil,
+    yikim sirasinda oluyordu: ``metrics.jsonl`` tam yazilmis oluyordu. Bekleyen
+    asenkron is varken baglamin yikilmasi tetikleyici oldugu icin once
+    senkronize edilir, sonra onbellek bosaltilir. CRT seviyesindeki bir abort
+    her zaman yakalanamaz; bu bir savunmadir, garanti degil.
+    """
+    if device is None or getattr(device, "type", None) != "cuda":
+        return
+    try:
+        import gc  # noqa: PLC0415
+
+        import torch  # noqa: PLC0415
+
+        torch.cuda.synchronize()
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+    except Exception:  # pragma: no cover - savunma
+        pass
 
 
 if __name__ == "__main__":

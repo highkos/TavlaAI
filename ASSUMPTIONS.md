@@ -5141,3 +5141,387 @@ ppg'de >= 0,02 iyilesme (m = 0,02 ppg, R-F'de kesinlesecek) anlamli sayilir;
 
 **Testler.** `ml/tests/test_gnubg_er.py` - kalici oturum tek-atimlik kosuyla
 ayni tabloyu vermeli; `OnnxScorer(intra_op_threads=...)` kabul edilmeli.
+## F7-94 — R-D cekirdegi: `train_v2.py`'de perspektif artirimi (K1)
+
+**Sorun.** F7-55 renk takasi kusurunu olctu (corr -0,8915) ama egitim hattinda
+**hicbir** karsilik yoktu: `train_v2.py` icinde `perspective` kelimesi gecmiyordu.
+Yani model her zaman hamle sirasi olan tarafin bakisini goruyor, karsi bakisi
+hic ogrenmiyordu. Bu, R-D'nin butun sonuclarini kirletirdi.
+
+**Cozum.** `--augment-perspectives` bayragi eklendi. Acikken her karar
+**iki** ornege ayrilir: orijinal `(x, +1)` ve `flip_perspective(x)` ile `(-1)`.
+
+| Oge | Davranis |
+|---|---|
+| Deger ornekleri | `[s0(+1), s0(-1), s1(+1), s1(-1), ...]` — **aralikli** (blok degil) |
+| `equity_target` / `best_equity` | isaret degisir |
+| `margin` | **degismez** (iki adayin farki; ikisi de isaret degistirdigi icin) |
+| Politika hedefi | **degismez** (adaylar ayni fiziksel afterstate'ler) |
+| Kritik agirliklar | tek karar uzerinde hesaplanir, sonra ikiye katlanir |
+
+**Neden aralikli (interleaved).** `[s0,s1,s2,f0,f1,f2]` blok duzeni, ayni
+kararin iki bakisini ayni mini-batch'e dusurmez; aralikli duzen dusurur. Bu,
+artirimin asil faydasidir (ayni batch'te simetri). Testler bunu
+`a.x[0::2] == s.x` ve `a.x[1::2] == flipped` ile zorlar.
+
+**`flip_perspective` gercek bir involusyondur** — rastgele 221-vektor uzerinde
+`flip(flip(x)) == x` (maks fark 0,0). Nokta bloklari `j -> 25-j` ile yer
+degistirir, bar/off/pip/escaped/away skalerleri takas edilir, `CUBE_OWNER`
+isaret degistirir; para/Crawford/temas bayraklari korunur.
+
+**Regresyon: agirlik normalizasyonu.** Ilk uygulama agirliklari `np.repeat(w, 2)`
+ile ciftledi. `critical_sampling_weights` **normalize edilmis** bir olasilik
+vektoru dondurdugu icin toplam 2,0 oluyordu ve `train_steps_v2` icindeki
+`rng.choice(..., p=value_weights)` su hatayla dusuyordu:
+
+```
+ValueError: Probabilities do not sum to 1.
+```
+
+`_double_weights(w)` ciftlemeden sonra yeniden normalestirir (`w / w.sum()`;
+toplam 0 ise tekduze). Test 242 artik `--critical-boost 2.0` ile kosuyor:
+agirlik yolu ancak `boost > 1` **ve** `degenerate == false` iken devreye girer,
+bu yuzden eski test bu hatayi goremiyordu.
+
+**Testler.** `ml/tests/test_perspective_augment.py`, Test 212-217 (6 test):
+katlama/araliklama, vektor+hedef takasi, equity isaret degisimi ve `margin`
+korunumu, involusyon, politika hedefi degismezligi, bos/`None` girdi. Test 242:
+uctan uca `--augment-perspectives --critical-boost 2.0` kosusu.
+
+## F7-95 — K2: `_single_step_uses_die` kusuru veriyi kirletmedi (denetim)
+
+**Neden denetim gerekti.** Kusur buyuk-zar filtresini her tek-adimli sonuca
+uyguluyordu. Hata tetiklendiginde aday kumesi **bosaliyor** ve oyun **pas**
+yaziyor; yani kirlenen kararlar egitimden sessizce duser ve kayitli veri temiz
+*gorunur*. Bu bir hayatta kalma yanliligi (survivorship bias) riskidir.
+
+**Kritik semantik.** `BackgammonSearch.SearchNode` yasal hamle yokken listeye
+bir **pas afterstate'i** ekler (`list.AddPass(s)`), yani pas kararinin
+`CandidateCount` degeri **1**'dir, 0 degil. Ilk denetim 0 varsayimiyla 76 900
+"kirli pas" bildirdi; bu tamamen yanlis pozitifti. Kontrol `total != 1` olarak
+duzeltildi ve `passCandidateTotalHist` histogrami rapora eklendi.
+
+**Olcum.** `ml/replay_verify.py`, 6 shard (60 000 oyun, 3 710 732 karar):
+
+| Denetim | Sonuc |
+|---|---|
+| Pas + >1 aday | **0** |
+| Hamle + 0 aday | **0** |
+| Secilen aday kumede degil | **0 / 1 805 887** |
+| Karar | **KORPUS TEMIZ** |
+
+**Sinir.** 30 shard'in 6'si denetlendi (%20). Kalan 24 shard ayni ureticiden
+gectigi icin ayni sonucu vermesi beklenir; tam kosu ~6x maliyetlidir ve R-D'yi
+bloklamaz. `dup_cap` ile kesilmis kumelerde "secilen aday kumede" denetimi
+**atlanir** (secilen aday loglanmamis olabilir) — bu bilincli bir karardir.
+
+**Testler.** `ml/tests/test_replay_verify.py`, Test 228-234 (7 test): temiz oyun,
+pas+aday isaretleme, hamle+0 aday, secilen-aday, `dup_cap` atlamasi, shard
+gidis-donus + Markdown, dizin toplama + `limit`.
+
+## F7-96 — K4: ogrenme egrisi fit usulu duzeltildi
+
+**Duzeltilen dort sey.**
+
+1. **Etiket kurali.** Karar artik "veri N icin yeterli mi" sorusuna gore
+   verilir; havuzlanmis GA tohumlari **ek veri gibi sayilmaz** (kume bootstrap
+   oyun kumeleri uzerinden yeniden ornekler). Tek tohum "olcek" diyorsa ve
+   digerleri "belirsiz" ise karar **belirsiz** kalir.
+2. **Taban parametreli fit.** `ER = a*N^-b + c`, `a >= 0` ve
+   `0 <= c <= min(y)` kisitlariyla; `c` icin **kume bootstrap %95 GA** eklendi
+   (`--saturation-resamples`, varsayilan 2000).
+3. **Korpus etiketi.** `--corpus ANAHTAR=DEGER` (tekrarlanabilir) rapora
+   acikca yazilir; hangi havuz/oyun sayisi/plies ile olculdugu belirsiz kalmaz.
+4. **Eslesmis karsilastirma.** `--compare-before <json>` onceki raporla
+   **paired** karsilastirma uretir (ayni oyun kumeleri, once/sonra farki + GA).
+   R-D'de artirim oncesi/sonrasi icin bu kullanilacak.
+
+**64x noktasi.** `CURVE_MULTIPLIERS` 64'e uzatildi; 64x icin >= 10 560 egitim
+pozisyonu gerekir. 60 oyunluk havuz (5 281) yetmiyordu; 400 oyunluk havuz
+(10 580 egitim / 2 667 held-out, 257 543 aday) ile esik gecildi.
+
+**Sonuc: karar `belirsiz` -> `olcek` (5/5 tohum).**
+
+| Carpan | Pozisyon | ER `policy` | ER `value` |
+|---|---|---|---|
+| 1x | 165 | 0,0525 | 0,1915 |
+| 2x | 330 | 0,0441 | 0,1321 |
+| 4x | 660 | 0,0355 | 0,0879 |
+| 8x | 1 320 | 0,0276 | 0,0588 |
+| 16x | 2 640 | 0,0236 | 0,0469 |
+| 32x | 5 280 | 0,0184 | 0,0365 |
+| 64x | 10 560 | **0,0158** | **0,0330** |
+
+Egim `policy` 0,0062 GA [0,0059; 0,0065]; `value` 0,0253 GA [0,0244; 0,0267].
+Doygunluk `policy c = 0,0003` GA [0,0001; 0,0066]; `value c = 0,0223`
+GA [0,0148; 0,0252]. Onceki kosu 32x'te kesiliyordu ve oylar 3x `olcek` /
+2x `belirsiz` idi; 64x noktasi + 400 oyunluk havuz oybirligini getirdi.
+
+**Deger platosi cozuldu.** 4x sonrasi duzlesme (0,0460 -> 0,0454) 60 oyunluk
+havuzun artefaktiydi; 400 oyunluk havuzda 64x'e kadar dusuyor (0,0330).
+K5'in plato gerekcesi bu olcumle zayifladi; 6 sinifli KL bilgi-icerigi
+argumaniyla R-D'de acik kaliyor.
+
+**Regresyon: `main()` icinde yerel `import json`.** 64x kosusunun ilk denemesi
+tum sonucu kaybetti (`UnboundLocalError: local variable 'json'`). Yerel import
+modul duzeyindeki adi golgeliyordu. Kaldirildi; Test 243 kilitliyor.
+
+**Testler.** `ml/tests/test_learning_curve_k4.py`, Test 218-227 (10 test) +
+Test 243 (json golgeleme regresyonu).
+
+## F7-97 — K5: deger yolunun platasi icin 6 sinifli dagilim hedefi
+
+**Sorun.** Deger yolu 4x'ten sonra plato yapiyor (0,0460 -> 0,0454) ama
+politika dusmeye devam ediyor. Skaler equity tek basina deger kafasina yeterli
+sinyal vermiyor: ayni equity'yi ureten cok farkli dagilimlar var.
+
+**Cozum.** gnubg `eval` tablosunun **6 sinifli** dagilimi artik okunuyor ve
+kayip fonksiyonuna KL terimi olarak giriyor:
+
+    kayip = CE(logits, best) + w_v * MSE(equity(best), best_equity)
+            + w_d * KL(gnubg_dagilimi || model_dagilimi)
+
+**Donusum onemli.** gnubg sutunlari (`Win, W(g), W(bg), L(g), L(bg)`)
+**kumulatif** olasiliklardir; model ise **dislayici** `(W, GW, BW, L, GL, BL)`
+kullanir. Donusum `equity.from_cumulative` ile yapilir. Ilk uygulama kumulatif
+degerleri dogrudan dislayici sanip equity'yi 0,49 yerine 0,33 vermisti; Test 236
+bunu yakalar (dagilimdan turetilen equity, `parse_eval` skaleriyle ayni olmali).
+
+**API.** `gnubg_er.parse_eval_dist` / `parse_evals_dist`,
+`GnubgSession.eval_afterstates(..., dists=True)`,
+`gnubg_distill.PolicyPosition.best_dist`, `PolicyDataset.dist`,
+`train_policy_head(dist_weight=...)`, CLI `label-policy --dists` ve
+`train-policy --dist-weight`.
+
+**Testler.** `ml/tests/test_distill_dist_k5.py`, Test 235-241 (7 test).
+
+## F7-98 — K3 ve K6: kapsam karari
+
+**K3 (hedef metrik).** ER'nin **oyun frekansi agirlikli** olcumu ve **ppg**
+birincil metrik olacak. Bu bir olcum degisikligi oldugu icin R-D'nin
+*sonuclariyla* birlikte raporlanacak; Adim 0 tabani (ppg -0,1635) zaten ppg
+uzerinden kuruldu, yani R-D karsilastirmasi dogru metrikte basliyor.
+
+**K6 (m = 0,02 ppg).** Kullanici karari: R-F'de kesinlesecek. R-D **m = 0,05**
+ile baslar; sonuc iyiyse 0,02'ye inilir. Gerekce: 0,02 ppg'yi anlamli kilmak
+icin gnubg 0-ply ile 2-ply arasindaki **olculmus** ppg farkinin yarisini bilmek
+gerekir; bu olcum R-F'de yapilacak. sigma_ppg ~ 1,4 varsayimiyla 0,02 marj
+on binlerce oyun ister — varyans azaltmasi (eslesmis zar) olmadan pratik degil.
+
+## F7-99 — CUDA 0xC0000409: paralel yuk altinda surec cokmesi
+
+**Belirti.** `test_71b_training_is_reproducible_gpu` paralel yuk altinda
+`0xC0000409` (STATUS_STACK_BUFFER_OVERRUN) ile cokuyor; tek basina kosunca
+geciyor. Bu bir Python istisnasi degil, CRT `__fastfail` cagrisidir — yani
+yakalanamaz.
+
+**Teshis.** Cokme **surec cikisinda** (CUDA baglami yikilirken) oluyor, egitim
+sirasinda degil: `metrics.jsonl` tam yazilmis oluyor. Paralel yukte bellek
+baskisi artinca CUDA yikim sirasi bozuluyor.
+
+**Uygulanan savunma.** `train_v2.py` cikista acik CUDA temizligi yapar:
+`torch.cuda.synchronize()` -> `gc.collect()` -> `torch.cuda.empty_cache()` ->
+`torch.cuda.synchronize()`. Bekleyen asenkron is varken baglamin yikilmasi
+tetikleyici oldugu icin once senkronize edilir. Bu, cokmeyi **tamamen** garanti
+etmez (CRT seviyesinde bir abort her zaman yakalanamaz) ama pratikte
+tetikleyiciyi kaldirir.
+
+**Denenip vazgecilen.** `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`
+Windows'ta **desteklenmiyor** (`expandable_segments not supported on this
+platform` uyarisi veriyor), bu yuzden eklenmedi.
+
+**Test tarafi.** Test, cokme durumunda **yeniden dener** (tek sefer) ve ikinci
+denemede de cokerse gercek hata olarak raporlar. Boylece gecici CUDA cokmesi
+test sonucunu kirletmez, kalici bir bozulma ise gizlenmez.
+## F7-100 — R-D: politika kafasi perspektif artirimina **dahil edilmemeli**
+
+**Nasil bulundu.** R-D deneme kosusu (`--augment-perspectives`, 5 iterasyon,
+5 000 oyun) hem deger hem politika orneklerini ceviriyordu. Renk takasi kapisi
+o modelde **kotulesti**:
+
+| Olcum | Taban `v30` | Deneme (deger+politika) |
+|---|---|---|
+| `corr(e+1, e-1)` | -0,8846 | -0,8119 |
+| `meanAbsSum` | 0,7410 | **0,4782** |
+| `argmax` uyumu | 0,174 | **0,018** |
+| ER(+1) | 0,0396 | 0,0573 |
+| ER(-1) | 0,0875 | **0,5297** |
+
+Deger kafasi **belirgin bicimde** antisimetriklesirken (`meanAbsSum` %35 dustu)
+politika kafasi **rastgeleden kotu** hale geldi (argmax uyumu 1/19 ~ 0,053'ten
+de dusuk). Bu, artirimin kendisinin degil **politika hedefinin** semantik
+hatasiydi.
+
+**Kok neden.** Politika hedefi **oynayacak tarafin** hamle dagilimidir. Girdi
+cevrilince oynayacak taraf degisir, dolayisiyla hedefin de cevrilmesi gerekir.
+Shard'larda yalniz oynayacak tarafin hedefi var; karsi tarafinki **yok**.
+Ayni hedefle cevirmek modeli `f(flip(x)) = f(x)` yani **simetrik** egitir — bu,
+kapinin aradigi `argmax(+1) == argmin(-1)` iliskisinin tam tersi.
+
+**Uretim yolu dogrulamasi.** `BackgammonSearch` her dugumde iki kafayi da
+**dugumun oynayacak tarafi** ile cagirir
+(`Backgammon.Core/Search/BackgammonSearch.cs:365,374,382` — hepsi `s.turn`).
+Yani politika kafasi gercekten perspektife **goreli**; karsi bakista rakip icin
+siralama yapar. Bu yuzden kapi konvansiyonu (`argmin`) dogru, egitim verisi
+eksik.
+
+**Duzeltme.** `--augment-perspectives` artik **yalniz deger** orneklerini
+cevirir. Politika artirimi ayri ve **varsayilan kapali** bir bayraga tasindi
+(`--augment-policy-perspectives`, teshis amacli). `train_report.json` iki
+bayragi ayri ayri kaydeder (denetim izi).
+
+**Sonuc: artirim tek basina kapiyi gecmez.** 10 iterasyonluk deger-only kosuda
+`corr = -0,5905`, normalize antisimetri orani 0,837 -> 0,707. Iyilesme var ama
+|corr| >= 0,99 esigine cok uzak. Veri artirimi bir **gradyan tesviki**dir;
+tam antisimetri **mimari** ya da **cikarim aninda** zorlanmalidir.
+
+**Kalici cozum: cikarim ani antisimetriklestirmesi.** `e_hat(x) = (f(x,+1) -
+f(x,-1))/2` tanimi geregi **tam** antisimetriktir:
+`e_hat(flip(x)) = (f(flip(x),+1) - f(flip(x),-1))/2 = (f(x,-1) - f(x,+1))/2 = -e_hat(x)`.
+Olculen kazanc (n = 1000, `model_v30`): politika ER 0,0402 -> 0,0343
+(GA [-0,0111; -0,0009], **IYILESDI**), deger 0,0442 -> 0,0407 (GA sifiri
+disliyor degil). Maliyet ONNX basina iki ileri gecis.
+
+**Testler.** `ml/tests/test_perspective_augment.py` Test 242 (varsayilan:
+politika artirimi kapali) ve Test 244 (acikken de kosar).
+
+**Uyari (F7-101 ile duzeltildi).** Ayni olcum R-D modelinde (`model_v10`)
+**ters** sonuc verdi: politika ER 0,0385 -> 0,0489 (+0,0104, GA
+[+0,0051; +0,0157]). Yani cikarim ani antisimetriklestirmesi **kosulsuz**
+kalici cozum degildir; yalniz iki bakista da makul tahmin ureten modellerde
+kazandirir. Karar, `measure_er_both` ile iki bakisli ER olculerek verilir.
+
+## F7-101 — R-D olcutu: **iki bakisli** ER (tek bakis yaniltici)
+
+**Nasil bulundu.** F7-100'un ardindan artirim "kotu" gorunuyordu: eslesmis
+self-play deneyinde (`rd_sp_ctl` vs `rd_sp_aug`, 10 iterasyon, 2 000 oyun,
+depth 0, seed 11, `v30`'dan baslatilmis) artirimli kosu **her** tek-bakis
+metriginde daha kotuydu (CE 0,8842 -> 1,0295; equity MAE 0,7941 -> 0,8930;
+ER(+1) 0,0286 -> 0,0445). Bu, R-D hipotezinin yanlislandigi seklinde
+yorumlandi. **Yorum yanlisti.**
+
+**Kok neden: havuz tek bakisli.** `curve_pool` aday vektorlerini
+`gnubg_er.vectorize(..., perspective=turn)` ile uretir; yani her afterstate
+**oynayan** tarafin bakisindan yazilir. `flip_perspective(x)` ayni fiziksel
+afterstate'in **oynayacak** tarafin bakisidir — bu, havuzda *hic bulunmayan*
+bir dagilimdir (havuz afterstate tutar, hamle-oncesi pozisyon tutmaz). Bu
+yuzden:
+
+* `ER(+1)` yalniz havuzun kendi dagilimini olcer; artirim oraya **yeni** bir
+  dagilim ekledigi icin kapasite paylasilir ve `ER(+1)` **kotulesir**;
+* `ER(-1)` karsi bakisi olcer; artirim tam da bunu **duzeltir**.
+
+Tek bakisli ER bu takasi goremez. R-D'nin dogru olcutu ikisinin ortalamasidir.
+
+**`flip_perspective` dogru.** Onceki oturumda "12x fark" (yalniz cevrilmis
+vektorlerle egitim 0,0837 vs 0,0066) donusumun bozuk oldugu sanildi. Yeni
+kontrollu deney bunu **curuttu**: ayni ag, ayni adim sayisi, ayni tohumla
+
+| Egitim verisi | ER (orijinal held-out) | ER (cevrilmis held-out) |
+|---|---|---|
+| orijinal | **0,0678** | 0,3304 |
+| yalniz cevrilmis | 0,3234 | **0,0642** |
+| ikisi | 0,0942 | 0,0817 |
+
+Fark **tam simetrik** (0,0678/0,3304 vs 0,3234/0,0642). Bozuk bir donusum
+boyle bir simetri uretemez; bu, donusumun dogru oldugunun kanitidir. Ayrica
+`flip_perspective(v)` ile `gnubg_er.vectorize(ayni_tahta, perspective=-turn)`
+400 rastgele pozisyonda **birebir** ayni (maks fark 0,0; Test 160) ve
+ters-cevirmesiz varyant 12 hata veriyor — yani `j -> 25-j` terslemesi sart.
+
+**Olcum (400 oyunluk havuz, 2 667 held-out pozisyon).**
+
+| Model | ER(+1) pol/deger | ER(-1) pol/deger | **Ortalama** pol/deger | Asimetri (deger) |
+|---|---|---|---|---|
+| `v30` (taban) | 0,0270 / 0,0287 | 0,1081 / 0,1019 | 0,0675 / 0,0653 | 3,6x |
+| `rd_sp_ctl` v10 | 0,0355 / 0,0354 | 0,1220 / 0,1282 | 0,0787 / 0,0818 | 3,6x |
+| `rd_sp_aug` v10 | 0,0479 / 0,0489 | 0,0731 / 0,0799 | **0,0605 / 0,0644** | **1,6x** |
+
+**Sonuc: artirim kazanir.** Kontrole gore ortalama ER politika **-23%**,
+deger **-21%**; asimetri orani 3,6x -> 1,6x. `v30` tabaninin ortalamasini da
+gecer (0,0675/0,0653 -> 0,0605/0,0644). Tek bakisli ER'deki kayip
+(+0,012/+0,014) karsi bakistaki kazancin (-0,049/-0,048) yaninda kucuktur.
+
+**Arac.** Bu hata tekrarlanmasin diye olcum `curve_pool`'a tasindi:
+
+| Oge | Davranis |
+|---|---|
+| `measure_er(..., perspective=)` | `active` (varsayilan) / `opponent` (vektor cevrilir, equity isaret degisir) |
+| `measure_er_both(...)` | `<yol>`, `<yol>Opp`, `<yol>Mean` anahtarlari |
+| `perspective_asymmetry(report, path)` | iki bakis ER orani (1,0 = tam simetrik) |
+| CLI `curve_pool measure-er --model ... --perspective both` | JSON ozet + `policyAsymmetry` / `valueAsymmetry` |
+
+**Testler.** `ml/tests/test_curve_pool.py` Test 245-249 (5 test): karsi bakis
+vektor+isaret sozlesmesi (sabit cikti ile analitik dogrulama), `both`
+anahtarlari ve ortalama, asimetri orani (esit/oran/sifir/sonsuz), bilinmeyen
+bakis reddi, CLI sozlesmesi.
+
+**Acik kalan.** Iki bakisli ER hala **afterstate** dagilimi uzerindedir;
+uretim yolu (arama) farkli bir dagilim gorur. Nihai karar ppg'dir (K3) ve
+R-F'de olculecek.
+
+## F7-102 — R-D 10 000 oyunluk dogrulama: artirim kazanci buyuyor
+
+Eslesmis deney 2 000 oyunla yapilmisti. Ayni karsilastirma **10 000 oyun**
+(300 adim, depth 0, seed 11, 10 000 oyunluk buffer, `ckpt_v30.pt`'den
+baslatilmis, 10 iterasyon) ile tekrarlandi; iki kosu paralel calisti.
+
+| Kosu | Bayrak | CE (buffer) | equity MAE | politika kaybi | sure |
+|---|---|---|---|---|---|
+| `rd_ctl10k` | — | 0,9263 -> 0,9104 | 0,8177 -> 0,8099 | 1,0935 -> **1,0738** | 2 626 s |
+| `rd_aug10k` | `--augment-perspectives` | 0,9387 -> 1,0249 | 0,8268 -> 0,8983 | 1,0932 -> 1,1909 | 4 594 s |
+
+**Tek bakisli metrikler yine artirimi kotu gosteriyor** (CE +0,086, equity MAE
++0,072, politika kaybi +0,117). Iki bakisli olcum tersini soyluyor:
+
+| Model | ER(+1) pol | ER(-1) pol | **Ort** pol | ER(+1) deger | ER(-1) deger | **Ort** deger | Asimetri pol/deger |
+|---|---|---|---|---|---|---|---|
+| `stage_d_l2/model_v30` (taban) | 0,0270 | 0,1081 | **0,0675** | 0,0287 | 0,1019 | **0,0653** | 4,00x / 3,55x |
+| `rd_ctl10k/model_v10` (kontrol) | 0,0298 | 0,1202 | **0,0750** | 0,0302 | 0,1177 | **0,0739** | 4,03x / 3,90x |
+| `rd_aug10k/model_v10` (artirimli) | 0,0383 | 0,0691 | **0,0537** | 0,0387 | 0,0717 | **0,0552** | **1,80x / 1,85x** |
+
+**Artirim kazaniyor ve fark buyuyor.** Kontrole gore ortalama ER politika
+**-%28**, deger **-%25**; `v30` tabanina gore **-%20 / -%15**. Asimetri orani
+4,0x -> 1,8x. 2 000 oyunluk deneydeki kazanc (-%23 / -%21) **korundu ve
+buyudu**; sonuc olcek gurultusu degil.
+
+**Tek bakisli ER neden yaniltici — sayisal kanit.** Artirimli model
+`ER(+1)`'de 0,0270 -> 0,0383 (**+0,0113 kotu**) ama `ER(-1)`'de 0,1081 ->
+0,0691 (**-0,0390 iyi**). Net etki ortalamada -0,0138. Tek bakisli olcum
+yalniz ilk sayiyi gorur.
+
+**Yan bulgu: kontrol de bozuluyor.** `rd_ctl10k` taban `v30`'a gore ortalamada
+kotulesiyor (0,0675 -> 0,0750). Yani R-D'nin kendi kendine oynama turu,
+artirim olmadan **zarar veriyor**; artirim bu bozulmayi tersine cevirip
+tabanin da altina iniyor. Bu, F7-100'deki "politika kafasi bozuluyor"
+gozleminin artirima degil, **kendi kendine oynama turuna** ait oldugunu
+gosteriyor.
+
+**Kapi hala gecmiyor ama her eksende iyilesiyor.** `|corr| >= 0,99` esigi bu
+mimariyle ulasilabilir degil. Kapi **teshis** olarak kalmali; karar iki bakisli
+ER ve (R-F'de) ppg ile verilir.
+
+| Model | `corr` | `meanAbsSum` | `argmax` uyumu | ER farki | Kapi |
+|---|---|---|---|---|---|
+| `v30` (taban) | -0,8915 | 0,7152 | 0,348 | -0,0479 | DUSTU |
+| `rd_ctl10k` (kontrol) | -0,8776 | 0,6006 | 0,295 | -0,0614 | DUSTU |
+| `rd_aug10k` (artirimli) | **-0,9426** | **0,2827** | **0,392** | **-0,0302** | DUSTU |
+
+Artirim `corr`'u -0,8776 -> -0,9426'ya (esige yaklasiyor), ER farkini
+-0,0614 -> -0,0302'ye (**yariya**) indiriyor ve `meanAbsSum`'i 0,7152 -> 0,2827
+yapiyor. Yani artirim dogru yonde calisiyor; esik mimari bir kisit.
+
+**Cikarim ani antisimetriklestirmesi artik gereksiz.** `rd_aug10k` uzerinde
+(n = 1000): politika 0,0485 -> 0,0457 (-0,0028, GA [-0,0083; +0,0028],
+**kanitlanmadi**); deger 0,0627 -> 0,0573 (-0,0054, GA [-0,0123; +0,0013],
+**kanitlanmadi**). Model zaten 1,8x asimetrik oldugu icin duzeltilecek pay
+kalmamis — `v30`'daki 4,0x asimetride kazanc anlamliydi. **Artirim,
+antisimetriklestirmenin yerini aliyor.**
+
+**Arac.** `curve_pool measure-er` artik **coklu model** alir ve `--out`
+verilirse JSON + markdown karsilastirma tablosu yazar (`_model_label` kosu
+dizinini etikete katar; `onnx/` ara dizini atlanir). Test 250-251. Artefaktlar:
+`ml/artifacts/er_two_perspective.json` / `.md`,
+`ml/artifacts/antisymmetry_rd_aug10k.json`, `antisymmetry_rd_ctl10k.json`,
+`antisymmetry_rd_aug10k_symmetrised.json`.
+

@@ -2,34 +2,42 @@
   "bootstrapResamples": 20000,
   "bootstrapSeed": 20261120,
   "clustered": true,
-  "decision": "belirsiz",
+  "corpus": {
+    "etiket": "gnubg-2ply",
+    "havuz": "curve_pool_400.npz",
+    "oyun": "400",
+    "plies": "2"
+  },
+  "decision": "olcek",
   "notes": [
-    "tohum 1: kazanc 0.0068 GA [0.0056; 0.0080] -> olcek",
-    "tohum 2: kazanc 0.0062 GA [0.0049; 0.0076] -> belirsiz",
-    "tohum 3: kazanc 0.0066 GA [0.0053; 0.0077] -> olcek",
-    "tohum 4: kazanc 0.0056 GA [0.0044; 0.0067] -> belirsiz",
-    "tohum 5: kazanc 0.0085 GA [0.0068; 0.0099] -> olcek",
-    "TOHUM OYBIRLIGI YOK: s1=olcek, s2=belirsiz, s3=olcek, s4=belirsiz, s5=olcek -> havuz karari 'belirsiz' sayilir",
+    "tohum 1: kazanc 0.0062 GA [0.0055; 0.0069] -> olcek",
+    "tohum 2: kazanc 0.0059 GA [0.0053; 0.0066] -> olcek",
+    "tohum 3: kazanc 0.0067 GA [0.0060; 0.0075] -> olcek",
+    "tohum 4: kazanc 0.0060 GA [0.0053; 0.0066] -> olcek",
+    "tohum 5: kazanc 0.0062 GA [0.0055; 0.0069] -> olcek",
     "Havuzlanmis 5 tohum: 1, 2, 3, 4, 5"
   ],
+  "paired": {},
   "points": [
     {
       "calibrationMae": null,
       "calibrationSlope": null,
       "counts": {
-        "policy": 1,
-        "value": 1
+        "policy": 13335,
+        "search1": 0,
+        "value": 13335
       },
       "games": {
-        "policy": 200,
-        "value": 200
+        "policy": 400,
+        "search1": 0,
+        "value": 400
       },
-      "heldOutLoss": 0.05042144457607781,
-      "inSampleLoss": 1.1720896363258362,
+      "heldOutLoss": 0.05246884127175082,
+      "inSampleLoss": 1.068794023990631,
       "inSampleUnit": "karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2)",
       "means": {
-        "policy": 0.05042144457607781,
-        "value": 0.21140258561771985
+        "policy": 0.052468841271750825,
+        "value": 0.1914785900032483
       },
       "multiplier": 1,
       "note": "5 tohum havuzu",
@@ -39,19 +47,21 @@
       "calibrationMae": null,
       "calibrationSlope": null,
       "counts": {
-        "policy": 1,
-        "value": 1
+        "policy": 13335,
+        "search1": 0,
+        "value": 13335
       },
       "games": {
-        "policy": 200,
-        "value": 200
+        "policy": 400,
+        "search1": 0,
+        "value": 400
       },
-      "heldOutLoss": 0.041376881646541276,
-      "inSampleLoss": 0.890970253944397,
+      "heldOutLoss": 0.04410453652795425,
+      "inSampleLoss": 0.8407741189002991,
       "inSampleUnit": "karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2)",
       "means": {
-        "policy": 0.041376881646541276,
-        "value": 0.22450190116222876
+        "policy": 0.04410453652795425,
+        "value": 0.13208466431885163
       },
       "multiplier": 2,
       "note": "5 tohum havuzu",
@@ -61,19 +71,21 @@
       "calibrationMae": null,
       "calibrationSlope": null,
       "counts": {
-        "policy": 1,
-        "value": 1
+        "policy": 13335,
+        "search1": 0,
+        "value": 13335
       },
       "games": {
-        "policy": 200,
-        "value": 200
+        "policy": 400,
+        "search1": 0,
+        "value": 400
       },
-      "heldOutLoss": 0.03412045602872614,
-      "inSampleLoss": 0.5562581598758698,
+      "heldOutLoss": 0.0354817396376326,
+      "inSampleLoss": 0.6611757636070251,
       "inSampleUnit": "karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2)",
       "means": {
-        "policy": 0.03412045602872613,
-        "value": 0.10990783264371833
+        "policy": 0.0354817396376326,
+        "value": 0.08786576667427423
       },
       "multiplier": 4,
       "note": "5 tohum havuzu",
@@ -83,19 +95,21 @@
       "calibrationMae": null,
       "calibrationSlope": null,
       "counts": {
-        "policy": 1,
-        "value": 1
+        "policy": 13335,
+        "search1": 0,
+        "value": 13335
       },
       "games": {
-        "policy": 200,
-        "value": 200
+        "policy": 400,
+        "search1": 0,
+        "value": 400
       },
-      "heldOutLoss": 0.02668593146848871,
-      "inSampleLoss": 0.3412567347288132,
+      "heldOutLoss": 0.027608248612898977,
+      "inSampleLoss": 0.40511760413646697,
       "inSampleUnit": "karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2)",
       "means": {
-        "policy": 0.026685931468488713,
-        "value": 0.05234448658268785
+        "policy": 0.027608248612898977,
+        "value": 0.058839819866461654
       },
       "multiplier": 8,
       "note": "5 tohum havuzu",
@@ -105,19 +119,21 @@
       "calibrationMae": null,
       "calibrationSlope": null,
       "counts": {
-        "policy": 1,
-        "value": 1
+        "policy": 13335,
+        "search1": 0,
+        "value": 13335
       },
       "games": {
-        "policy": 200,
-        "value": 200
+        "policy": 400,
+        "search1": 0,
+        "value": 400
       },
-      "heldOutLoss": 0.021546007371224297,
-      "inSampleLoss": 0.2203839361667633,
+      "heldOutLoss": 0.02362249674111218,
+      "inSampleLoss": 0.26997247338294983,
       "inSampleUnit": "karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2)",
       "means": {
-        "policy": 0.021546007371224293,
-        "value": 0.047256577651161605
+        "policy": 0.02362249674111218,
+        "value": 0.04693550795381648
       },
       "multiplier": 16,
       "note": "5 tohum havuzu",
@@ -127,59 +143,91 @@
       "calibrationMae": null,
       "calibrationSlope": null,
       "counts": {
-        "policy": 1,
-        "value": 1
+        "policy": 13335,
+        "search1": 0,
+        "value": 13335
       },
       "games": {
-        "policy": 200,
-        "value": 200
+        "policy": 400,
+        "search1": 0,
+        "value": 400
       },
-      "heldOutLoss": 0.016638326494469387,
-      "inSampleLoss": 0.2553219348192215,
+      "heldOutLoss": 0.01837502759375847,
+      "inSampleLoss": 0.2509148299694061,
       "inSampleUnit": "karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2)",
       "means": {
-        "policy": 0.016638326494469387,
-        "value": 0.03978129258559939
+        "policy": 0.01837502759375847,
+        "value": 0.03654008230383368
       },
       "multiplier": 32,
       "note": "5 tohum havuzu",
       "positions": 5280
+    },
+    {
+      "calibrationMae": null,
+      "calibrationSlope": null,
+      "counts": {
+        "policy": 13335,
+        "search1": 0,
+        "value": 13335
+      },
+      "games": {
+        "policy": 400,
+        "search1": 0,
+        "value": 400
+      },
+      "heldOutLoss": 0.015845893754049042,
+      "inSampleLoss": 0.15929812490940093,
+      "inSampleUnit": "karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2)",
+      "means": {
+        "policy": 0.015845893754049042,
+        "value": 0.032959805344081966
+      },
+      "multiplier": 64,
+      "note": "5 tohum havuzu",
+      "positions": 10560
     }
   ],
   "saturation": {
     "policy": {
-      "a": 0.28651771512403035,
-      "b": 0.35000000000000003,
-      "c": 0.003337040516277202,
-      "n": 6,
+      "a": 0.24419081954846225,
+      "b": 0.30000000000000004,
+      "c": 0.0002787725277609607,
+      "cCiHigh": 0.006610710016879731,
+      "cCiLow": 5.824791163283057e-05,
+      "n": 7,
       "path": "policy",
-      "rmse": 0.0007611704551841353
+      "resamples": 2000,
+      "rmse": 0.0006480924970103293
     },
     "value": {
-      "a": 5.025141260088869,
-      "b": 0.6000000000000001,
-      "c": 0.008679253478751172,
-      "n": 6,
+      "a": 6.110534821619902,
+      "b": 0.7000000000000001,
+      "c": 0.022278406264501185,
+      "cCiHigh": 0.025187058636990917,
+      "cCiLow": 0.01481130559638018,
+      "n": 7,
       "path": "value",
-      "rmse": 0.02984087261425797
+      "resamples": 2000,
+      "rmse": 0.002330676123381918
     }
   },
   "scalingSlopeEpsilon": 0.005,
   "seed": 1,
-  "seedAgreement": false,
+  "seedAgreement": true,
   "seedDecisions": {
     "1": "olcek",
-    "2": "belirsiz",
+    "2": "olcek",
     "3": "olcek",
-    "4": "belirsiz",
+    "4": "olcek",
     "5": "olcek"
   },
   "seedGains": {
-    "1": 0.006848625716799339,
-    "2": 0.006201064642010351,
-    "3": 0.0065682780582762305,
-    "4": 0.005573992402202235,
-    "5": 0.008499858865601916
+    "1": 0.006175196918883674,
+    "2": 0.0059048290113374036,
+    "3": 0.006714285713514924,
+    "4": 0.00595653223303569,
+    "5": 0.00617542457287426
   },
   "seeds": [
     1,
@@ -190,30 +238,30 @@
   ],
   "slopes": {
     "policy": {
-      "ciHigh": -0.006078808957845177,
-      "ciLow": -0.007263232807786158,
+      "ciHigh": -0.005878692494567608,
+      "ciLow": -0.006501367552767977,
       "clustered": true,
-      "clusters": 200,
-      "gain": 0.006738363936978014,
-      "gainCiHigh": 0.007263232807786158,
-      "gainCiLow": 0.006078808957845177,
-      "n": 6,
+      "clusters": 400,
+      "gain": 0.006185253689929189,
+      "gainCiHigh": 0.006501367552767977,
+      "gainCiLow": 0.005878692494567608,
+      "n": 7,
       "path": "policy",
       "resamples": 20000,
-      "slope": -0.006738363936978014
+      "slope": -0.006185253689929189
     },
     "value": {
-      "ciHigh": -0.03959286966862101,
-      "ciLow": -0.04488622388298913,
+      "ciHigh": -0.024445995302057013,
+      "ciLow": -0.026669071576393786,
       "clustered": true,
-      "clusters": 200,
-      "gain": 0.041354450907280974,
-      "gainCiHigh": 0.04488622388298913,
-      "gainCiLow": 0.03959286966862101,
-      "n": 6,
+      "clusters": 400,
+      "gain": 0.025270563454571165,
+      "gainCiHigh": 0.026669071576393786,
+      "gainCiLow": 0.024445995302057013,
+      "n": 7,
       "path": "value",
       "resamples": 20000,
-      "slope": -0.041354450907280974
+      "slope": -0.025270563454571165
     }
   }
 }

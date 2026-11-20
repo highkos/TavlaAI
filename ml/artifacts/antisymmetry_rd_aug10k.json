@@ -1,0 +1,32 @@
+{
+  "count": 1000,
+  "model": "ml\\runs\\rd_aug10k\\onnx\\model_v10.onnx",
+  "correlation": -0.9425696594828685,
+  "meanAbsSum": 0.28269992505863706,
+  "maxAbsSum": 1.9108053233940154,
+  "sumWithinTol": 456,
+  "sumTotal": 24436,
+  "vectorizerChecked": 24436,
+  "vectorizerMismatches": 0,
+  "vectorizerSymmetric": true,
+  "argmaxAgreement": 392,
+  "argmaxTotal": 1000,
+  "argmaxRate": 0.392,
+  "erPlus": 0.048525000000000006,
+  "erMinus": 0.07877100000000001,
+  "erDiff": -0.030246,
+  "erDiffCiLow": -0.039093125,
+  "erDiffCiHigh": -0.021568900000000002,
+  "erDiffExcludesZero": true,
+  "corrMin": 0.99,
+  "sumTol": 0.001,
+  "corrOk": false,
+  "erOk": false,
+  "passed": false,
+  "notes": [
+    "Girdi vektoru renk takasinda simetrikse kusur **modelde**dir; girdi simetrisi bu raporda ayrica olculur.",
+    "Kapi bir **teshis**tir: `|corr| >= 0.99` bu mimariyle ulasilabilir degil. Karar iki bakisli ER (F7-101) ve ppg ile verilir.",
+    "KORELASYON KAPISI DUSTU: |corr| = 0.9426 < 0.99",
+    "ER FARKI KAPISI DUSTU: GA [-0.0391; -0.0216] sifiri disliyor"
+  ]
+}

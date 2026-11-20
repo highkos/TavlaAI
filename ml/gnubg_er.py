@@ -408,19 +408,50 @@ def parse_hint(text: str) -> list[HintMove]:
     return moves
 
 
+def _eval_key(label: str) -> str:
+    label = label.replace(" ", "")
+    return "static" if label == "static" else label.replace("ply", "")
+
+
 def parse_eval(text: str) -> dict[str, float]:
     """``eval`` tablosundaki cubeless equity'leri ``{"static": .., "1": .., "2": ..}`` olarak doner."""
     result: dict[str, float] = {}
     for match in _EVAL_RE.finditer(text):
-        label = match.group("label").replace(" ", "")
-        if label == "static":
-            key = "static"
-        else:
-            key = label.replace("ply", "")
         numbers = re.findall(_NUMBER, match.group("rest"))
         if len(numbers) < 6:
             continue
-        result[key] = parse_number(numbers[5])
+        result[_eval_key(match.group("label"))] = parse_number(numbers[5])
+    return result
+
+
+def parse_eval_dist(text: str) -> dict[str, list[float]]:
+    """``eval`` tablosundaki **6 sinifli** olasilik dagilimini derinlik basina doner.
+
+    gnubg sutunlari ``Win  W(g)  W(bg)  L(g)  L(bg)  Equity`` sirasindadir ve
+    bunlar **kumulatif** olasiliklardir (``W(g)`` backgammon kazanclarini da
+    kapsar). Model ise ``equity.PROB_ORDER`` = ``(W, GW, BW, L, GL, BL)``
+    **dislayici** siniflarini kullanir; donusum ``equity.from_cumulative`` ile
+    yapilir. ``L`` sutunu gnubg'de basilmaz, ``1 - Win`` olarak turetilir.
+
+    K5: deger kafasi yalnizca skaler equity ile egitildiginde 4x'ten sonra plato
+    yapiyordu; tam dagilim hedefi deger yoluna cok daha fazla bilgi verir.
+    """
+    import equity  # noqa: PLC0415
+
+    result: dict[str, list[float]] = {}
+    for match in _EVAL_RE.finditer(text):
+        numbers = re.findall(_NUMBER, match.group("rest"))
+        if len(numbers) < 6:
+            continue
+        win = parse_number(numbers[0])
+        exclusive = equity.from_cumulative(
+            win,
+            parse_number(numbers[1]),
+            parse_number(numbers[2]),
+            parse_number(numbers[3]),
+            parse_number(numbers[4]),
+        )
+        result[_eval_key(match.group("label"))] = [float(v) for v in exclusive]
     return result
 
 
@@ -468,6 +499,12 @@ def parse_evals(text: str) -> list[dict[str, float]]:
     """
     blocks = text.split("The pip counts are:")[1:]
     return [parse_eval(block) for block in blocks]
+
+
+def parse_evals_dist(text: str) -> list[dict[str, list[float]]]:
+    """``parse_evals``'in 6 sinifli dagilim varyanti (K5)."""
+    blocks = text.split("The pip counts are:")[1:]
+    return [parse_eval_dist(block) for block in blocks]
 
 
 # ----------------------------------------------------------------------
@@ -691,18 +728,21 @@ class GnubgSession:
         return table, text
 
     def eval_afterstates(
-        self, boards: Sequence[Sequence[int]], turn: int
-    ) -> list[dict[str, float]]:
+        self, boards: Sequence[Sequence[int]], turn: int, *, dists: bool = False
+    ) -> list[dict[str, Any]]:
         """Birden çok tahtayi **tek** gnubg surecinde degerlendirir.
 
         Her tahta için pip sayilari dogrulanir. Tek surec kullanmak, afterstate sayisi
         onlarca olan pozisyonlarda ölçümü dakikalar yerine saniyelere indirir.
+
+        ``dists=True`` ise degerler skaler equity yerine 6 sinifli olasilik
+        dagilimidir (``equity.PROB_ORDER`` sirasinda); K5 icin gereklidir.
         """
         if not boards:
             return []
 
         if self.persistent:
-            return self._eval_afterstates_persistent(boards, turn)
+            return self._eval_afterstates_persistent(boards, turn, dists=dists)
 
         commands = self._preamble()
         for board in boards:
@@ -714,29 +754,11 @@ class GnubgSession:
             commands.append("eval")
         text = self.run(commands)
 
-        pips = parse_pipcounts(text)
-        tables = parse_evals(text)
-        if len(pips) != len(boards) or len(tables) != len(boards):
-            raise GnubgError(
-                "toplu eval çıktısı eksik (pip %d, tablo %d, tahta %d)"
-                % (len(pips), len(tables), len(boards))
-            )
-
-        for board, (monster_pips, gnubg_pips), table in zip(boards, pips, tables):
-            expected_monster = pip_count(board, -1)
-            expected_gnubg = pip_count(board, 1)
-            if monster_pips != expected_monster or gnubg_pips != expected_gnubg:
-                raise GnubgError(
-                    "tahta yuklenmedi (pip MONSTER %d/%d, gnubg %d/%d)"
-                    % (monster_pips, expected_monster, gnubg_pips, expected_gnubg)
-                )
-            if not table:
-                raise GnubgError("eval çıktısı ayristirilamadi")
-        return tables
+        return self._parse_eval_blocks(text, boards, dists=dists)
 
     def _eval_afterstates_persistent(
-        self, boards: Sequence[Sequence[int]], turn: int
-    ) -> list[dict[str, float]]:
+        self, boards: Sequence[Sequence[int]], turn: int, *, dists: bool = False
+    ) -> list[dict[str, Any]]:
         """``eval_afterstates``'in kalici surec uzerinden hizli yolu."""
         self._start()
         commands: list[str] = []
@@ -755,8 +777,15 @@ class GnubgSession:
             raise GnubgError("sentinel pip satiri bulunamadi")
         text = text[:cut]
 
+        return self._parse_eval_blocks(text, boards, dists=dists)
+
+    @staticmethod
+    def _parse_eval_blocks(
+        text: str, boards: Sequence[Sequence[int]], *, dists: bool
+    ) -> list[dict[str, Any]]:
+        """Toplu ``eval`` ciktisini pip dogrulamasiyla birlikte ayristirir."""
         pips = parse_pipcounts(text)
-        tables = parse_evals(text)
+        tables = parse_evals_dist(text) if dists else parse_evals(text)
         if len(pips) != len(boards) or len(tables) != len(boards):
             raise GnubgError(
                 "toplu eval ciktisi eksik (pip %d, tablo %d, tahta %d)"

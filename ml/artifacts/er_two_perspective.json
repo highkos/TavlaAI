@@ -1,0 +1,41 @@
+[
+  {
+    "model": "ml\\runs\\stage_d_l2\\onnx\\model_v30.onnx",
+    "perspective": "both",
+    "policy": 0.027025496522074668,
+    "policyAsymmetry": 3.9986265245724546,
+    "policyMean": 0.06754518187749152,
+    "policyOpp": 0.10806486723290838,
+    "positions": 2667,
+    "value": 0.028724034044590934,
+    "valueAsymmetry": 3.548161461097985,
+    "valueMean": 0.06532077232443748,
+    "valueOpp": 0.10191751060428403
+  },
+  {
+    "model": "ml\\runs\\rd_ctl10k\\onnx\\model_v10.onnx",
+    "perspective": "both",
+    "policy": 0.029796025090696194,
+    "policyAsymmetry": 4.032567454668025,
+    "policyMean": 0.07497525307495478,
+    "policyOpp": 0.12015448105921336,
+    "positions": 2667,
+    "value": 0.030176227712955913,
+    "valueAsymmetry": 3.8995278750243316,
+    "valueMean": 0.07392463442135461,
+    "valueOpp": 0.11767304112975331
+  },
+  {
+    "model": "ml\\runs\\rd_aug10k\\onnx\\model_v10.onnx",
+    "perspective": "both",
+    "policy": 0.038332583139593604,
+    "policyAsymmetry": 1.8030186205222043,
+    "policyMean": 0.053723472156498184,
+    "policyOpp": 0.06911436117340276,
+    "positions": 2667,
+    "value": 0.03867491514974263,
+    "valueAsymmetry": 1.8529075538392614,
+    "valueMean": 0.05516797878739662,
+    "valueOpp": 0.07166104242505061
+  }
+]

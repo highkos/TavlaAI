@@ -1022,7 +1022,9 @@ def test_127j_policy_position_to_dict() -> None:
         "bestMove",
         "candidates",
         "mappingFailures",
+        "bestDist",
     }
+    assert data["bestDist"] is None
 
 
 def _policy_dataset(n: int = 3):

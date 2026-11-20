@@ -107,6 +107,12 @@ def make_shard(
     return path
 
 
+#: Windows'ta paralel yuk altinda surec cikisinda gorulen CUDA abort kodu
+#: (STATUS_STACK_BUFFER_OVERRUN). Bu bir Python istisnasi degil, CRT
+#: ``__fastfail`` cagrisidir; yakalanamaz. F7-99.
+CUDA_ABORT_CODE = 0xC0000409
+
+
 def run_train(out_dir: Path, shard_dir: Path, *extra: str, timeout: int = 1800) -> subprocess.CompletedProcess:
     cmd = [
         sys.executable,
@@ -120,6 +126,10 @@ def run_train(out_dir: Path, shard_dir: Path, *extra: str, timeout: int = 1800) 
         *extra,
     ]
     proc = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=timeout)
+    if proc.returncode == CUDA_ABORT_CODE:
+        # Gecici CUDA yikim cokmesi: tek sefer yeniden dene. Kalici bir bozulma
+        # ikinci denemede de coker ve asagidaki assert ile gorunur olur.
+        proc = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=timeout)
     assert proc.returncode == 0, "train_v2 basarisiz:\n" + proc.stdout + "\n" + proc.stderr
     return proc
 

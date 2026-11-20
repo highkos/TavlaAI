@@ -142,3 +142,155 @@ def test_175_curve_pool_train_fn_contract():
         train_fn(10_000, 0)
     with pytest.raises(cp.CurvePoolError):
         train_fn(0, 0)
+
+
+class _ConstantModel:
+    """Girdiden bagimsiz sabit cikti: ER farki yalnizca equity isaretinden gelir."""
+
+    def eval(self) -> None:
+        return None
+
+    def __call__(self, x):
+        torch = pytest.importorskip("torch")
+        n = int(x.shape[0])
+        probs = torch.zeros(n, 6)
+        probs[:, 0] = 1.0
+        # Tum logitler esit -> argmax her zaman 0. secenegi.
+        logits = torch.zeros(n)
+        return [probs, logits]
+
+
+def test_245_curve_pool_measure_er_opponent_perspective():
+    """Karsi bakis: vektorler cevrilir **ve** equity'ler isaret degistirir (F7-101)."""
+    pytest.importorskip("torch")
+    pool = _synthetic_pool()
+    indices = pool.held_out_indices()
+    model = _ConstantModel()
+
+    active = cp.measure_er(model, pool, indices, paths=("value",))
+    opponent = cp.measure_er(
+        model, pool, indices, paths=("value",), perspective=cp.PERSPECTIVE_OPPONENT
+    )
+    # Sabit secim (0) icin: active = max(e) - e[0], opponent = -min(e) + e[0].
+    expected_active = []
+    expected_opponent = []
+    for i in indices:
+        e = pool.candidate_equities(i)
+        expected_active.append(float(np.max(e)) - float(e[0]))
+        expected_opponent.append(-float(np.min(e)) + float(e[0]))
+    assert active["value"] == pytest.approx(expected_active, abs=1e-5)
+    assert opponent["value"] == pytest.approx(expected_opponent, abs=1e-5)
+    # Iki bakis ayni sey degildir: havuz afterstate'leri tek bakistan tasir.
+    assert active["value"] != pytest.approx(opponent["value"], abs=1e-6)
+
+
+def test_246_curve_pool_measure_er_both_keys_and_mean():
+    pytest.importorskip("torch")
+    pool = _synthetic_pool()
+    indices = pool.held_out_indices()
+    report = cp.measure_er_both(_ConstantModel(), pool, indices)
+    assert set(report) == {
+        "policy",
+        "value",
+        "policyOpp",
+        "valueOpp",
+        "policyMean",
+        "valueMean",
+    }
+    for path in ("policy", "value"):
+        assert len(report[path]) == len(indices)
+        assert report[path + "Mean"] == pytest.approx(
+            [(a + b) / 2.0 for a, b in zip(report[path], report[path + "Opp"])], abs=1e-9
+        )
+
+
+def test_247_curve_pool_perspective_asymmetry():
+    assert cp.perspective_asymmetry({"value": [0.02], "valueOpp": [0.02]}) == pytest.approx(1.0)
+    assert cp.perspective_asymmetry({"value": [0.02], "valueOpp": [0.08]}) == pytest.approx(4.0)
+    assert cp.perspective_asymmetry({"value": [0.08], "valueOpp": [0.02]}) == pytest.approx(4.0)
+    assert cp.perspective_asymmetry({"value": [0.0], "valueOpp": [0.0]}) == pytest.approx(1.0)
+    assert cp.perspective_asymmetry({"value": [0.0], "valueOpp": [0.05]}) == float("inf")
+
+
+def test_248_curve_pool_measure_er_rejects_unknown_perspective():
+    pytest.importorskip("torch")
+    pool = _synthetic_pool()
+    with pytest.raises(cp.CurvePoolError):
+        cp.measure_er(_ConstantModel(), pool, pool.held_out_indices(), perspective="both")
+
+
+def test_249_curve_pool_cli_measure_er_contract():
+    parser = cp.build_parser()
+    args = parser.parse_args(["measure-er", "--model", "m.onnx"])
+    assert args.command == "measure-er"
+    assert args.model == ["m.onnx"]
+    assert args.perspective == cp.PERSPECTIVE_BOTH
+    assert args.pool == cp.POOL_PATH
+    assert args.out is None
+    args = parser.parse_args(
+        ["measure-er", "--model", "m.onnx", "--perspective", "opponent", "--limit", "5"]
+    )
+    assert args.perspective == cp.PERSPECTIVE_OPPONENT
+    assert args.limit == 5
+    # Birden fazla model karsilastirma tablosu uretir (F7-101).
+    args = parser.parse_args(["measure-er", "--model", "a.onnx", "b.onnx", "c.onnx"])
+    assert args.model == ["a.onnx", "b.onnx", "c.onnx"]
+    with pytest.raises(SystemExit):
+        parser.parse_args(["measure-er", "--model", "m.onnx", "--perspective", "yanlis"])
+
+
+def test_250_curve_pool_build_er_markdown_columns():
+    """Karsilastirma tablosu iki bakisi ve ortalamayi ayri sutunlarda verir (F7-101)."""
+    rows = [
+        {
+            "model": "runs/a/model_v30.onnx",
+            "positions": 200,
+            "perspective": cp.PERSPECTIVE_BOTH,
+            "policy": 0.0270,
+            "policyOpp": 0.1081,
+            "policyMean": 0.0675,
+            "value": 0.0287,
+            "valueOpp": 0.1019,
+            "valueMean": 0.0653,
+            "policyAsymmetry": 4.0,
+            "valueAsymmetry": 3.6,
+        },
+        {
+            "model": "runs/b/model_v10.onnx",
+            "positions": 200,
+            "perspective": cp.PERSPECTIVE_BOTH,
+            "policy": 0.0479,
+            "policyOpp": 0.0731,
+            "policyMean": 0.0605,
+            "value": 0.0489,
+            "valueOpp": 0.0799,
+            "valueMean": 0.0644,
+            "policyAsymmetry": 1.5,
+            "valueAsymmetry": 1.6,
+        },
+    ]
+    md = cp.build_er_markdown(rows, "artifacts/curve_pool_400.npz")
+    assert "F7-101" in md
+    assert "artifacts/curve_pool_400.npz" in md
+    assert "200 held-out" in md
+    # Baslik satiri hem bakislari hem ortalamayi adlandirir.
+    header = next(line for line in md.splitlines() if line.startswith("| Model"))
+    for token in ("ER(+1) pol", "ER(-1) pol", "**Ort** pol", "**Ort** deger"):
+        assert token in header
+    # Her model icin bir satir; kosu dizini + dosya adi, ortalama kalin yazilir.
+    body = [line for line in md.splitlines() if line.startswith("| `")]
+    assert len(body) == 2
+    assert "a/model_v30.onnx" in body[0] and "**0.0675**" in body[0]
+    assert "b/model_v10.onnx" in body[1] and "**0.0605**" in body[1]
+    assert "3.60x" in body[0]
+    assert "1.60x" in body[1]
+
+
+def test_251_curve_pool_model_label_disambiguates_runs():
+    """Ayni dosya adi farkli kosularda tekrar eder; etiket kosu dizinini tasir."""
+    assert (
+        cp._model_label("ml/runs/rd_ctl10k/onnx/model_v10.onnx") == "rd_ctl10k/model_v10.onnx"
+    )
+    assert cp._model_label("model_v10.onnx") == "model_v10.onnx"
+    assert cp._model_label("a/b/c.onnx") == "b/c.onnx"
+    assert cp._model_label("a/onnx/c.onnx") == "a/c.onnx"
