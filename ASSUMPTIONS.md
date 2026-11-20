@@ -5525,3 +5525,65 @@ dizinini etikete katar; `onnx/` ara dizini atlanir). Test 250-251. Artefaktlar:
 `ml/artifacts/antisymmetry_rd_aug10k.json`, `antisymmetry_rd_ctl10k.json`,
 `antisymmetry_rd_aug10k_symmetrised.json`.
 
+
+## F7-103 — K3: oyun sikligina agirlikli ER (hedef metrik)
+
+**Sorun.** `curve_pool` pozisyonlari `corpus2` katmanlamasindan gelir ve bu
+katmanlama **temas agirliklidir** (`PHASE_SHARES = contact 0,60 / bar 0,25 /
+race 0,15`). Oynanan oyunlarda dagilim farklidir, dolayisiyla ham ER oynanan
+yolu temsil etmez: havuzda fazla temsil edilen faz ER'yi domine eder.
+
+**Olculen gercek dagilim.** `real_phase_shares` shard'lardan olcer. **Tum
+adaylar** sayilir (`cand_vectors`), yalniz secilen hamle degil: model uretimde
+her adayi degerlendirir, secilen aday ise vurusa egilimlidir ve "bar" payini
+sisirir (yalniz-secilen olcumu bar 0,451 / temas 0,377 / yaris 0,172 veriyordu;
+tum-aday olcumu asagidaki gibi). `stage_d_l2` shard 1, 10 000 oyun:
+
+| Faz | Havuz payi (2 667 held-out) | Gercek oyun payi (shard 1) | Agirlik |
+|---|---|---|---|
+| contact | 0,6970 | 0,5219 | 0,75x |
+| race | 0,1159 | 0,1292 | 1,12x |
+| bar | 0,1871 | 0,3488 | **1,86x** |
+
+Havuz temasi 1,34x fazla, bar'i 1,86x eksik temsil ediyor.
+
+**Yontem.** `game_frequency_weights(pool, indices, target)` her pozisyona
+`target[faz] / have[faz]` agirligi verir, ortalamayi 1'e normalize eder
+(agirlikli ER ayni olcekte kalir), havuzda bulunmayan fazi dusurup kalanlari
+yeniden normalize eder. `measure_er` / `measure_er_both` / `measure_summary`
+`weights=` alir; ham liste pozisyon basina kalir, agirlik yalnizca ozetler.
+`phase_of_vector` fazi vektorden okur: bar > yaris > temas (`ACTIVE_BAR` /
+`OPP_BAR` / `IS_CONTACT`). `bearoff` / `closed` `HEADLINE_PHASES` disinda
+oldugu icin temas/yarisa katlanir — bilincli.
+
+**Sonuc — karar degismiyor, gucleniyor.** 2 667 held-out pozisyon, iki bakisli
+ER:
+
+| Model | Ort pol | **Agirlikli pol** | Fark | Ort deger | **Agirlikli deger** | Fark |
+|---|---|---|---|---|---|---|
+| `stage_d_l2/model_v30` | 0,0675 | **0,0646** | -4,4% | 0,0653 | **0,0633** | -3,1% |
+| `rd_ctl10k/model_v10` | 0,0750 | **0,0713** | -4,9% | 0,0739 | **0,0698** | -5,5% |
+| `rd_aug10k/model_v10` | 0,0537 | **0,0492** | -8,5% | 0,0552 | **0,0500** | -9,3% |
+
+Agirliklandirma **tum** modellerin ER'sini dusuruyor (havuzun temas fazlaligi
+ER'yi sisiriyordu) ve **artirimin kazanci buyuyor**:
+
+- kontrole karsi: agirliksiz -28,4% pol / -25,3% deger -> agirlikli **-31,0% /
+  -28,4%**
+- `v30` tabanina karsi: agirliksiz -20,5% / -15,5% -> agirlikli **-23,8% /
+  -21,0%**
+
+Yani K3'nin "ham ER yanli" uyarisi dogru, ama duzeltme R-D lehine. **Hedef
+metrik artik agirlikli ER'dir; R-F bu metrigi kullanir.**
+
+**Arac.** `curve_pool measure-er --weight-by-game-frequency [--shard-dir ...]
+[--shard-limit N]`; `--out` artik kendini tanimlayan bir sozluk yazar
+(`pool`, `perspective`, `positions`, `weighted`, `realShares`, `shardDir`,
+`shardLimit`, `models`) ve markdown'a K3 bolumunu ekler. Test 254-262.
+Artefaktlar: `ml/artifacts/er_weighted.json` / `.md` (agirlikli),
+`ml/artifacts/er_two_perspective.json` / `.md` (agirliksiz, ayni sema).
+
+**Acik kalan.** (a) Gercek paylar tek shard'dan (10 000 oyun) olculdu; 30
+shard'in tamami daha dar bir GA verir ama paylar oyun sayisiyla hizli
+sabitlenir. (b) ER hala **afterstate** duzeyinde; ppg eslesmesi R-F'de
+olculecek. (c) `m = 0,02 ppg` esigi kullanici karari, R-F'de netlesecek.

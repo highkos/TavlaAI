@@ -294,3 +294,192 @@ def test_251_curve_pool_model_label_disambiguates_runs():
     assert cp._model_label("model_v10.onnx") == "model_v10.onnx"
     assert cp._model_label("a/b/c.onnx") == "b/c.onnx"
     assert cp._model_label("a/onnx/c.onnx") == "a/c.onnx"
+
+
+def _phase_pool(phases: list[str]) -> cp.CurvePool:
+    """Fazi vektor bayraklariyla kodlanmis kucuk havuz (K3 testleri)."""
+    rows: list[np.ndarray] = []
+    offsets = [0]
+    best: list[int] = []
+    y: list[float] = []
+    cand_equity: list[float] = []
+    game_ids: list[str] = []
+    split: list[str] = []
+    for k, phase in enumerate(phases):
+        block = np.zeros((2, gnubg_er.VECTOR_SIZE), dtype=np.float32)
+        for row in block:
+            if phase == "bar":
+                row[gnubg_er.ACTIVE_BAR] = 1.0
+                row[gnubg_er.IS_CONTACT] = 1.0
+            elif phase == "race":
+                row[gnubg_er.IS_CONTACT] = 0.0
+            else:
+                row[gnubg_er.IS_CONTACT] = 1.0
+        rows.append(block)
+        offsets.append(offsets[-1] + 2)
+        best.append(0)
+        y.append(0.0)
+        cand_equity.extend([0.0, -1.0])
+        game_ids.append("g%d" % k)
+        split.append(cp.SPLIT_HELD_OUT)
+    return cp.CurvePool(
+        x=np.concatenate(rows, axis=0),
+        offsets=np.asarray(offsets, dtype=np.int64),
+        best=np.asarray(best, dtype=np.int32),
+        y=np.asarray(y, dtype=np.float32),
+        cand_equity=np.asarray(cand_equity, dtype=np.float32),
+        game_ids=game_ids,
+        split=split,
+        meta={"poolVersion": cp.POOL_VERSION},
+    )
+
+
+def test_254_phase_of_vector_reads_bar_race_contact():
+    """Faz vektorden okunur: bar > yaris > temas (K3)."""
+    bar = np.zeros(gnubg_er.VECTOR_SIZE, dtype=np.float32)
+    bar[gnubg_er.OPP_BAR] = 2.0
+    bar[gnubg_er.IS_CONTACT] = 1.0
+    assert cp.phase_of_vector(bar) == "bar"
+
+    race = np.zeros(gnubg_er.VECTOR_SIZE, dtype=np.float32)
+    race[gnubg_er.IS_CONTACT] = 0.0
+    assert cp.phase_of_vector(race) == "race"
+
+    contact = np.zeros(gnubg_er.VECTOR_SIZE, dtype=np.float32)
+    contact[gnubg_er.IS_CONTACT] = 1.0
+    assert cp.phase_of_vector(contact) == "contact"
+
+
+def test_255_phase_shares_sum_to_one():
+    """Faz paylari 1'e toplar; bilinmeyen faz yok."""
+    pool = _phase_pool(["contact", "contact", "race", "bar"])
+    shares = cp.phase_shares(pool, pool.held_out_indices())
+    assert set(shares) == set(cp.HEADLINE_PHASES)
+    assert shares["contact"] == pytest.approx(0.5)
+    assert shares["race"] == pytest.approx(0.25)
+    assert shares["bar"] == pytest.approx(0.25)
+    assert sum(shares.values()) == pytest.approx(1.0)
+
+
+def test_256_game_frequency_weights_upweight_underrepresented_phase():
+    """Korpus temas agirlikli; gercek oyun yaris agirlikliysa yaris agirlanir."""
+    pool = _phase_pool(["contact", "contact", "contact", "race"])
+    indices = pool.held_out_indices()
+    target = {"contact": 0.5, "race": 0.5, "bar": 0.0}
+    w = cp.game_frequency_weights(pool, indices, target)
+    assert w.shape == (4,)
+    # Ortalama 1'e normalize: agirlikli ER ayni olcekte kalir.
+    assert float(np.mean(w)) == pytest.approx(1.0)
+    # Yaris (havuzda 1/4, hedefte 1/2) temasdan (3/4 -> 1/2) daha agir.
+    assert w[3] > w[0]
+    assert w[0] == pytest.approx(w[1])
+    assert w[1] == pytest.approx(w[2])
+
+
+def test_257_game_frequency_weights_skip_absent_phase():
+    """Havuzda olmayan faz hedefte varsa atlanir, paylar yeniden normalize edilir."""
+    pool = _phase_pool(["contact", "race"])
+    indices = pool.held_out_indices()
+    w = cp.game_frequency_weights(pool, indices, {"contact": 0.2, "race": 0.2, "bar": 0.6})
+    assert float(np.mean(w)) == pytest.approx(1.0)
+    # Bar hic yok; kalan iki faz esit paya normalize edilir -> esit agirlik.
+    assert w[0] == pytest.approx(w[1])
+
+
+def test_258_game_frequency_weights_degenerate_target_is_uniform():
+    """Hedef tamamen sifirsa agirlik uygulanamaz; duz agirlik doner."""
+    pool = _phase_pool(["contact", "race"])
+    w = cp.game_frequency_weights(pool, pool.held_out_indices(), {})
+    assert np.allclose(w, 1.0)
+
+
+def test_259_weighted_mean_matches_manual_and_rejects_length_mismatch():
+    """Agirlikli ortalama elle hesapla ayni; uzunluk uyusmazligi hata verir."""
+    values = [1.0, 3.0]
+    weights = np.asarray([0.25, 0.75], dtype=np.float64)
+    assert cp.weighted_mean(values, weights) == pytest.approx(2.5)
+    assert cp.weighted_mean(values, None) == pytest.approx(2.0)
+    assert cp.weighted_mean([], None) == 0.0
+    with pytest.raises(cp.CurvePoolError):
+        cp.weighted_mean(values, np.asarray([1.0], dtype=np.float64))
+
+
+def test_260_measure_summary_reports_weighted_fields():
+    """``measure_summary`` agirlik verilince ``*Weighted`` alanlarini yazar (K3)."""
+    pool = _phase_pool(["contact", "contact", "race", "bar"])
+    indices = pool.held_out_indices()
+    weights = cp.game_frequency_weights(
+        pool, indices, {"contact": 0.2, "race": 0.4, "bar": 0.4}
+    )
+
+    class _Model:
+        def eval(self) -> None:
+            return None
+
+        def __call__(self, x):
+            import torch
+
+            n = int(x.shape[0])
+            probs = torch.full((n, 6), 1.0 / 6.0)
+            # Her pozisyonun 2 adayi var; tek indisli adayi (kotu equity) sec.
+            logits = torch.tensor([0.0, 1.0] * (n // 2), dtype=torch.float32)
+            return [probs, logits]
+
+    original = cp._load_onnx_model
+    cp._load_onnx_model = lambda _p: _Model()
+    try:
+        summary = cp.measure_summary(
+            Path("m.onnx"), pool, indices, perspective=cp.PERSPECTIVE_ACTIVE, weights=weights
+        )
+    finally:
+        cp._load_onnx_model = original
+    assert summary["weighted"] is True
+    assert "policyWeighted" in summary and "valueWeighted" in summary
+    assert summary["phaseShares"]["contact"] == pytest.approx(0.5)
+    # Model her zaman kotu adayi secer -> kayip 1.0; agirlikli ortalama da 1.0.
+    assert summary["policy"] == pytest.approx(1.0)
+    assert summary["policyWeighted"] == pytest.approx(1.0)
+
+
+def test_261_measure_er_cli_accepts_weight_flags():
+    """CLI K3 bayraklarini kabul eder ve varsayilanlari dogru kurar."""
+    parser = cp.build_parser()
+    args = parser.parse_args(
+        ["measure-er", "--model", "m.onnx", "--weight-by-game-frequency"]
+    )
+    assert args.weight_by_game_frequency is True
+    assert args.shard_dir == "ml/runs/stage_d_l2/shards"
+    assert args.shard_limit == 1
+    plain = parser.parse_args(["measure-er", "--model", "m.onnx"])
+    assert plain.weight_by_game_frequency is False
+
+
+def test_262_build_er_markdown_adds_weighted_section():
+    """Agirlikli satirlar markdown'a K3 bolumu ekler; agirliksizda eklemez."""
+    rows = [
+        {
+            "model": "runs/a/onnx/model_v1.onnx",
+            "positions": 100,
+            "policy": 0.02,
+            "policyOpp": 0.08,
+            "policyMean": 0.05,
+            "value": 0.02,
+            "valueOpp": 0.08,
+            "valueMean": 0.05,
+            "policyAsymmetry": 4.0,
+            "valueAsymmetry": 4.0,
+            "weighted": True,
+            "policyMeanWeighted": 0.04,
+            "valueMeanWeighted": 0.045,
+            "phaseShares": {"contact": 0.7, "race": 0.1, "bar": 0.2},
+        }
+    ]
+    md = cp.build_er_markdown(rows, "p.npz", {"contact": 0.5, "race": 0.15, "bar": 0.35})
+    assert "Oyun sikligina agirlikli ER (K3)" in md
+    assert "| bar | 0.2000 | 0.3500 | 1.75x |" in md
+    assert "| contact | 0.7000 | 0.5000 | 0.71x |" in md
+    assert "**0.0400**" in md
+    assert "-20.0%" in md
+
+    plain = cp.build_er_markdown([dict(rows[0], weighted=False)], "p.npz")
+    assert "Oyun sikligina agirlikli ER (K3)" not in plain

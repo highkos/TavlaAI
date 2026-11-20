@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1377** | ~8 dk 30 s | ✅ 1377/1377 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1862** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1386** | ~8 dk 30 s | ✅ 1386/1386 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **1871** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -2479,7 +2479,7 @@ Bölüm 5.1.6 üç yol tanımlar ve **kullanıcı onayı** ister. Ölçüm sonra
 ### 21.9 Doğrulama
 
 ```
-ml/tests                     1377/1377  (3 yavaş/koşullu test atlanır)
+ml/tests                     1386/1386  (3 yavaş/koşullu test atlanır)
 Backgammon.Tests             285/285
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
@@ -2930,10 +2930,10 @@ Ayrı bir `EquityCubeAdvisor` işi gerektirir.
 Backgammon.Tests             297/297   (29 dk 56 s)
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
-ml/tests                    1377/1377  (3 yavaş/koşullu test atlanır)
+ml/tests                    1386/1386  (3 yavaş/koşullu test atlanır)
 ```
 
-Toplam **1862**. Derleme 0 uyarı / 0 hata.
+Toplam **1871**. Derleme 0 uyarı / 0 hata.
 
 
 ## 30. Faz 7-R Aşama R-B — ölçüm altyapısı (F7-55 – F7-62)
@@ -3054,7 +3054,7 @@ Tek çekirdek 2-ply `hint`: ortalama **0,562 s**/pozisyon. 4 süreçte
 ### 30.10 Doğrulama
 
 ```
-ml/tests                    1377/1377  (3 yavaş/koşullu test atlanır)
+ml/tests                    1386/1386  (3 yavaş/koşullu test atlanır)
 ```
 
 Test 128–133 yeşil. `test_docs_consistency.py` 21/21 yeşil.
@@ -3862,7 +3862,7 @@ ile ONNX oturumları çekirdek başına ayrıldı.
 
 **Yeni testler.** `ml/tests/test_gnubg_er.py`: kalıcı oturum tek-atımlık koşuyla
 aynı tabloyu vermeli (durum taşımamalı), `OnnxScorer(intra_op_threads=...)`
-kabul edilmeli. Pytest toplamı **1377**.
+kabul edilmeli. Pytest toplamı **1386**.
 ### 36.12 K1 — Perspektif artırımı ve antisimetrikleştirme (F7-94)
 
 **Kök neden doğrulandı.** `ml/train_v2.py` içinde `perspective` kelimesi hiç
@@ -4267,3 +4267,65 @@ Test 250–251. Artefaktlar: `ml/artifacts/er_two_perspective.json` / `.md`,
 `antisymmetry_rd_aug10k_symmetrised.json`.
 
 
+
+### 36.21 K3 — oyun sıklığına ağırlıklı ER (hedef metrik)
+
+**Sorun.** `curve_pool` pozisyonları `corpus2` katmanlamasından gelir ve bu
+katmanlama **temas ağırlıklıdır** (`PHASE_SHARES = contact 0,60 / bar 0,25 /
+race 0,15`). Oynanan oyunlarda dağılım farklıdır, dolayısıyla ham ER oynanan
+yolu temsil etmez: havuzda fazla temsil edilen faz ER'yi domine eder.
+
+**Ölçülen gerçek dağılım.** `real_phase_shares` shard'lardan ölçer. **Tüm
+adaylar** sayılır (`cand_vectors`), yalnız seçilen hamle değil: model üretimde
+her adayı değerlendirir, seçilen aday ise vuruşa eğilimlidir ve "bar" payını
+şişirir (yalnız-seçilen ölçümü bar 0,451 / temas 0,377 / yarış 0,172 veriyordu).
+`stage_d_l2` shard 1, 10 000 oyun:
+
+| Faz | Havuz payı (2 667 held-out) | Gerçek oyun payı (shard 1) | Ağırlık |
+|---|---|---|---|
+| contact | 0,6970 | 0,5219 | 0,75x |
+| race | 0,1159 | 0,1292 | 1,12x |
+| bar | 0,1871 | 0,3488 | **1,86x** |
+
+Havuz teması 1,34x fazla, bar'ı 1,86x eksik temsil ediyor.
+
+**Yöntem.** `game_frequency_weights(pool, indices, target)` her pozisyona
+`target[faz] / have[faz]` ağırlığı verir, ortalamayı 1'e normalize eder
+(ağırlıklı ER aynı ölçekte kalır), havuzda bulunmayan fazı düşürüp kalanları
+yeniden normalize eder. `measure_er` / `measure_er_both` / `measure_summary`
+`weights=` alır; ham liste pozisyon başına kalır, ağırlık yalnızca özetler.
+`phase_of_vector` fazı vektörden okur: bar > yarış > temas (`ACTIVE_BAR` /
+`OPP_BAR` / `IS_CONTACT`). `bearoff` / `closed` `HEADLINE_PHASES` dışında
+olduğu için temas/yarışa katlanır — bilinçli.
+
+**Sonuç — karar değişmiyor, güçleniyor.** 2 667 held-out pozisyon, iki bakışlı
+ER:
+
+| Model | Ort pol | **Ağırlıklı pol** | Fark | Ort değer | **Ağırlıklı değer** | Fark |
+|---|---|---|---|---|---|---|
+| `stage_d_l2/model_v30` | 0,0675 | **0,0646** | −4,4% | 0,0653 | **0,0633** | −3,1% |
+| `rd_ctl10k/model_v10` | 0,0750 | **0,0713** | −4,9% | 0,0739 | **0,0698** | −5,5% |
+| `rd_aug10k/model_v10` | 0,0537 | **0,0492** | −8,5% | 0,0552 | **0,0500** | −9,3% |
+
+Ağırlıklandırma **tüm** modellerin ER'sini düşürüyor (havuzun temas fazlalığı
+ER'yi şişiriyordu) ve **artırımın kazancı büyüyor**:
+
+- kontrole karşı: ağırlıksız −28,4% pol / −25,3% değer → ağırlıklı **−31,0% /
+  −28,4%**
+- `v30` tabanına karşı: ağırlıksız −20,5% / −15,5% → ağırlıklı **−23,8% /
+  −21,0%**
+
+Yani K3'nin "ham ER yanlı" uyarısı doğru, ama düzeltme R-D lehine. **Hedef
+metrik artık ağırlıklı ER'dir; R-F bu metriği kullanır.**
+
+**Araç.** `curve_pool measure-er --weight-by-game-frequency [--shard-dir ...]
+[--shard-limit N]`; `--out` artık kendini tanımlayan bir sözlük yazar
+(`pool`, `perspective`, `positions`, `weighted`, `realShares`, `shardDir`,
+`shardLimit`, `models`) ve markdown'a K3 bölümünü ekler. Test 254–262.
+Artefaktlar: `ml/artifacts/er_weighted.json` / `.md` (ağırlıklı),
+`ml/artifacts/er_two_perspective.json` / `.md` (ağırlıksız, aynı şema).
+
+**Açık kalan.** (a) Gerçek paylar tek shard'dan (10 000 oyun) ölçüldü; 30
+shard'ın tamamı daha dar bir GA verir ama paylar oyun sayısıyla hızlı sabitlenir.
+(b) ER hâlâ **afterstate** düzeyinde; ppg eşleşmesi R-F'de ölçülecek.
+(c) `m = 0,02 ppg` eşiği kullanıcı kararı, R-F'de netleşecek.

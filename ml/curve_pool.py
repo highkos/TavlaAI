@@ -42,6 +42,7 @@ if str(HERE) not in sys.path:
 import corpus2  # noqa: E402
 import gnubg_distill  # noqa: E402
 import gnubg_er  # noqa: E402
+import shards  # noqa: E402
 
 #: Havuz surumu (semada degisiklik olursa artar).
 POOL_VERSION = 1
@@ -73,6 +74,10 @@ PERSPECTIVE_ACTIVE = "active"
 PERSPECTIVE_OPPONENT = "opponent"
 PERSPECTIVE_BOTH = "both"
 PERSPECTIVES = (PERSPECTIVE_ACTIVE, PERSPECTIVE_OPPONENT, PERSPECTIVE_BOTH)
+
+#: Baslik ER'sine giren fazlar (``corpus2.HEADLINE_PHASES`` ile ayni).
+#: ``bearoff``/``closed`` teshis kumesidir; agirliklandirmaya girmez.
+HEADLINE_PHASES = ("contact", "race", "bar")
 
 
 class CurvePoolError(RuntimeError):
@@ -442,6 +447,115 @@ def _flip_rows(x: np.ndarray) -> np.ndarray:
     return out.reshape(x.shape)
 
 
+# ----------------------------------------------------------------------
+# K3: oyun sikligina agirlikli ER
+# ----------------------------------------------------------------------
+
+
+def phase_of_vector(vector: Sequence[float]) -> str:
+    """Vektorden baslik fazi (``bar`` > ``race`` > ``contact``).
+
+    ``er_harness.classify_phase`` tahta ister; havuz yalnizca vektor tutar.
+    Baslik fazlari icin vektor yeterlidir: bar sayaclari ve ``IS_CONTACT``
+    bayragi tasinir. ``bearoff``/``closed`` ayrimi teshis kumesine aittir ve
+    burada ``contact``/``race``e duser.
+    """
+    v = np.asarray(vector, dtype=np.float32)
+    if float(v[gnubg_er.ACTIVE_BAR]) > 0.0 or float(v[gnubg_er.OPP_BAR]) > 0.0:
+        return "bar"
+    if float(v[gnubg_er.IS_CONTACT]) <= 0.0:
+        return "race"
+    return "contact"
+
+
+def phase_shares(pool: CurvePool, indices: Sequence[int]) -> dict[str, float]:
+    """Verilen pozisyonlarin faz paylari (``HEADLINE_PHASES`` uzerinde)."""
+    counts = {p: 0 for p in HEADLINE_PHASES}
+    for i in indices:
+        counts[phase_of_vector(pool.candidates(int(i))[0])] += 1
+    total = sum(counts.values())
+    if total == 0:
+        return {p: 0.0 for p in HEADLINE_PHASES}
+    return {p: counts[p] / total for p in HEADLINE_PHASES}
+
+
+def game_frequency_weights(
+    pool: CurvePool,
+    indices: Sequence[int],
+    target: dict[str, float],
+) -> np.ndarray:
+    """Korpus katmanli oldugu icin ham ER yanlidir; bu agirliklar duzeltir.
+
+    ``target`` gercek oyunlarda olculen faz paylaridir (``real_phase_shares``).
+    Agirlik ``target[faz] / havuz[faz]``; ortalamasi 1'e normalize edilir, boylece
+    agirlikli ER ayni olcekte kalir. Havuzda hic bulunmayan bir faz hedefte
+    varsa agirlik **uygulanamaz**; bu durumda o faz atlanir ve paylar yeniden
+    normalize edilir (sessizce yutulmaz, ``notes`` icin cagirana bildirilir).
+    """
+    have = phase_shares(pool, indices)
+    usable = {p: target.get(p, 0.0) for p in HEADLINE_PHASES if have.get(p, 0.0) > 0.0}
+    total = sum(usable.values())
+    if total <= 0.0:
+        return np.ones(len(indices), dtype=np.float64)
+    usable = {p: v / total for p, v in usable.items()}
+    weights = np.empty(len(indices), dtype=np.float64)
+    for row, i in enumerate(indices):
+        phase = phase_of_vector(pool.candidates(int(i))[0])
+        weights[row] = usable.get(phase, 0.0) / have[phase]
+    mean = float(np.mean(weights))
+    return weights / mean if mean > 0.0 else np.ones(len(indices), dtype=np.float64)
+
+
+def real_phase_shares(shard_dir: Path, *, limit: int = 0) -> dict[str, float]:
+    """Gercek oyunlarda fazlarin **olculen** karar payi (shard'lardan).
+
+    ``corpus2.real_game_phase_weights`` ile ayni tanim, ama girdi shard
+    dosyalaridir: korpusun kendi katmanlamasi degil, oynanan oyunlarin gercek
+    dagilimi olculur.
+
+    **Tum adaylar** sayilir (``cand_vectors``), yalniz secilen hamle degil:
+    model uretimde her adayi degerlendirir, secilen aday ise vurusa egilimlidir
+    ve "bar" payini sisirir. ``cand_vectors`` yoksa ``chosen_vector``a duser.
+    """
+    paths = sorted(Path(shard_dir).glob("**/*.bgsp.gz"))
+    if limit > 0:
+        paths = paths[:limit]
+    if not paths:
+        raise CurvePoolError("shard bulunamadi: %s" % shard_dir)
+    counts = {p: 0 for p in HEADLINE_PHASES}
+    for path in paths:
+        _, games = shards.read_shard(path)
+        for game in games:
+            for decision in game.decisions:
+                block = decision.cand_vectors
+                if block is None or block.shape[0] == 0:
+                    if decision.chosen_vector is None:
+                        continue
+                    block = np.asarray([decision.chosen_vector], dtype=np.float32)
+                for row in block:
+                    counts[phase_of_vector(row)] += 1
+    total = sum(counts.values())
+    if total == 0:
+        raise CurvePoolError("shard'larda karar yok: %s" % shard_dir)
+    return {p: counts[p] / total for p in HEADLINE_PHASES}
+
+
+def weighted_mean(values: Sequence[float], weights: np.ndarray | None) -> float:
+    """Agirlikli ortalama (``weights`` yoksa duz ortalama)."""
+    if not values:
+        return 0.0
+    arr = np.asarray(values, dtype=np.float64)
+    if weights is None:
+        return float(np.mean(arr))
+    w = np.asarray(weights, dtype=np.float64)
+    if w.shape[0] != arr.shape[0]:
+        raise CurvePoolError(
+            "agirlik uzunlugu uyusmuyor: %d != %d" % (w.shape[0], arr.shape[0])
+        )
+    total = float(np.sum(w))
+    return float(np.sum(arr * w) / total) if total > 0.0 else float(np.mean(arr))
+
+
 def measure_er(
     model,
     pool: CurvePool,
@@ -450,6 +564,7 @@ def measure_er(
     paths: Sequence[str] = ("policy", "value"),
     device: str = "cpu",
     perspective: str = PERSPECTIVE_ACTIVE,
+    weights: np.ndarray | None = None,
 ) -> dict[str, list[float]]:
     """Held-out pozisyonlarda **pozisyon duzeyinde** ER kayiplari.
 
@@ -463,6 +578,9 @@ def measure_er(
     afterstate'ler her zaman *oynayan* tarafin bakisindadir, dolayisiyla
     ``active`` olcumu karsi bakisi hic sinamaz. Iki bakisi birlikte olcmek icin
     ``measure_er_both`` kullanin.
+
+    ``weights`` (K3) verilirse kayiplar **agirlikli** ortalamayla ozetlenir
+    (``weighted_mean``); ham liste her zaman pozisyon basina dondurulur.
     """
     import torch  # noqa: PLC0415
 
@@ -512,6 +630,7 @@ def measure_er_both(
     *,
     paths: Sequence[str] = ("policy", "value"),
     device: str = "cpu",
+    weights: np.ndarray | None = None,
 ) -> dict[str, list[float]]:
     """Iki bakisli ER (F7-101).
 
@@ -519,8 +638,13 @@ def measure_er_both(
     (karsi bakis) ve ``<yol>Mean`` (ikisinin pozisyon duzeyinde ortalamasi).
     ``Mean`` R-D'nin dogru olcutudur: artirim tek bakisi kotulestirip digerini
     duzeltiyorsa, karar ortalamaya gore verilir.
+
+    ``weights`` (K3) yalnizca **ozetlemede** kullanilir; dondurulen listeler
+    ham pozisyon kayiplaridir.
     """
-    active = measure_er(model, pool, indices, paths=paths, device=device)
+    active = measure_er(
+        model, pool, indices, paths=paths, device=device, weights=weights
+    )
     opponent = measure_er(
         model,
         pool,
@@ -528,6 +652,7 @@ def measure_er_both(
         paths=paths,
         device=device,
         perspective=PERSPECTIVE_OPPONENT,
+        weights=weights,
     )
     out: dict[str, list[float]] = {}
     for path in paths:
@@ -685,6 +810,19 @@ def build_parser():
     )
     er.add_argument("--limit", type=int, default=0, help="ilk N held-out pozisyon")
     er.add_argument("--out", default=None, help="JSON cikti yolu (opsiyonel)")
+    er.add_argument(
+        "--weight-by-game-frequency",
+        action="store_true",
+        help="K3: ER'yi gercek oyun faz paylarina gore agirliklandir",
+    )
+    er.add_argument(
+        "--shard-dir",
+        default="ml/runs/stage_d_l2/shards",
+        help="gercek faz paylarinin olculecegi shard dizini",
+    )
+    er.add_argument(
+        "--shard-limit", type=int, default=1, help="pay olcumu icin ilk N shard (0 = hepsi)"
+    )
     return p
 
 
@@ -713,13 +851,21 @@ def measure_summary(
     indices: Sequence[int],
     *,
     perspective: str = PERSPECTIVE_BOTH,
+    weights: np.ndarray | None = None,
 ) -> dict[str, Any]:
-    """Tek model icin ER ozeti (``measure-er`` ciktisi)."""
+    """Tek model icin ER ozeti (``measure-er`` ciktisi).
+
+    ``weights`` (K3) verilirse ``<yol>Weighted`` alanlari da yazilir: korpus
+    katmanli oldugu icin ham ortalama temas agirliklidir, agirlikli ortalama
+    gercek oyun sikligina gore duzeltir.
+    """
     model = _load_onnx_model(model_path)
     if perspective == PERSPECTIVE_BOTH:
-        report = measure_er_both(model, pool, indices)
+        report = measure_er_both(model, pool, indices, weights=weights)
     else:
-        report = measure_er(model, pool, indices, perspective=perspective)
+        report = measure_er(
+            model, pool, indices, perspective=perspective, weights=weights
+        )
     summary: dict[str, Any] = {
         "model": str(model_path),
         "positions": len(indices),
@@ -727,9 +873,14 @@ def measure_summary(
     }
     for key, values in report.items():
         summary[key] = float(np.mean(values)) if values else None
+        if weights is not None:
+            summary[key + "Weighted"] = weighted_mean(values, weights) if values else None
     if perspective == PERSPECTIVE_BOTH:
         summary["policyAsymmetry"] = perspective_asymmetry(report, "policy")
         summary["valueAsymmetry"] = perspective_asymmetry(report, "value")
+    if weights is not None:
+        summary["weighted"] = True
+        summary["phaseShares"] = phase_shares(pool, indices)
     return summary
 
 
@@ -750,8 +901,12 @@ def _model_label(path: str) -> str:
     return p.name
 
 
-def build_er_markdown(rows: Sequence[dict[str, Any]], pool_path: str) -> str:
-    """``measure-er`` satirlarindan karsilastirma tablosu (F7-101)."""
+def build_er_markdown(
+    rows: Sequence[dict[str, Any]],
+    pool_path: str,
+    real_shares: dict[str, float] | None = None,
+) -> str:
+    """``measure-er`` satirlarindan karsilastirma tablosu (F7-101, K3)."""
     lines = [
         "# Iki bakisli ER karsilastirmasi (F7-101)",
         "",
@@ -780,6 +935,59 @@ def build_er_markdown(rows: Sequence[dict[str, Any]], pool_path: str) -> str:
             )
         )
     lines.append("")
+
+    if any(r.get("weighted") for r in rows):
+        lines.extend(
+            [
+                "## Oyun sikligina agirlikli ER (K3)",
+                "",
+                "Havuz temas agirliklidir; gercek oyunlarda faz paylari farklidir.",
+                "`game_frequency_weights` her pozisyonu `hedef/havuz` oraniyla",
+                "agirliklandirir (ortalama 1'e normalize), boylece agirlikli ER",
+                "oynanan dagilimi temsil eder.",
+                "",
+            ]
+        )
+        if real_shares:
+            pool_shares = rows[0].get("phaseShares") or {}
+            lines.extend(
+                [
+                    "| Faz | Havuz payi | Gercek oyun payi | Agirlik |",
+                    "|---|---|---|---|",
+                ]
+            )
+            for phase in HEADLINE_PHASES:
+                have = pool_shares.get(phase, 0.0)
+                want = real_shares.get(phase, 0.0)
+                ratio = (want / have) if have > 0 else 0.0
+                lines.append(
+                    "| %s | %.4f | %.4f | %.2fx |" % (phase, have, want, ratio)
+                )
+            lines.append("")
+        lines.extend(
+            [
+                "| Model | Ort pol | **Agirlikli pol** | Fark | Ort deger | **Agirlikli deger** | Fark |",
+                "|---|---|---|---|---|---|---|",
+            ]
+        )
+        for r in rows:
+            pm = r.get("policyMean") or 0.0
+            pw = r.get("policyMeanWeighted") or 0.0
+            vm = r.get("valueMean") or 0.0
+            vw = r.get("valueMeanWeighted") or 0.0
+            lines.append(
+                "| `%s` | %.4f | **%.4f** | %+.1f%% | %.4f | **%.4f** | %+.1f%% |"
+                % (
+                    _model_label(r["model"]),
+                    pm,
+                    pw,
+                    (100.0 * (pw - pm) / pm) if pm else 0.0,
+                    vm,
+                    vw,
+                    (100.0 * (vw - vm) / vm) if vm else 0.0,
+                )
+            )
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -795,23 +1003,47 @@ def main(argv: Sequence[str] | None = None) -> int:
         indices = pool.held_out_indices()
         if args.limit > 0:
             indices = indices[: args.limit]
+        weights = None
+        target: dict[str, float] | None = None
+        if args.weight_by_game_frequency:
+            target = real_phase_shares(Path(args.shard_dir), limit=args.shard_limit)
+            weights = game_frequency_weights(pool, indices, target)
+            print(
+                "gercek faz paylari: %s"
+                % json.dumps({k: round(v, 4) for k, v in target.items()}, sort_keys=True)
+            )
+            print(
+                "havuz faz paylari : %s"
+                % json.dumps(
+                    {k: round(v, 4) for k, v in phase_shares(pool, indices).items()},
+                    sort_keys=True,
+                )
+            )
         rows = [
             measure_summary(
-                Path(m), pool, indices, perspective=args.perspective
+                Path(m), pool, indices, perspective=args.perspective, weights=weights
             )
             for m in args.model
         ]
-        payload: Any = rows[0] if len(rows) == 1 else rows
+        payload: Any = {
+            "pool": str(args.pool),
+            "perspective": args.perspective,
+            "positions": rows[0]["positions"] if rows else 0,
+            "weighted": bool(args.weight_by_game_frequency),
+            "realShares": target,
+            "shardDir": args.shard_dir if args.weight_by_game_frequency else None,
+            "shardLimit": args.shard_limit if args.weight_by_game_frequency else None,
+            "models": rows,
+        }
         if args.out:
             out = Path(args.out)
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(
                 json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
             )
-            if len(rows) > 1:
-                out.with_suffix(".md").write_text(
-                    build_er_markdown(rows, str(args.pool)), encoding="utf-8"
-                )
+            out.with_suffix(".md").write_text(
+                build_er_markdown(rows, str(args.pool), target), encoding="utf-8"
+            )
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
 

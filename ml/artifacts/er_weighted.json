@@ -1,0 +1,90 @@
+{
+  "models": [
+    {
+      "model": "ml\\runs\\stage_d_l2\\onnx\\model_v30.onnx",
+      "perspective": "both",
+      "phaseShares": {
+        "bar": 0.1871016122984627,
+        "contact": 0.6970378702662168,
+        "race": 0.11586051743532058
+      },
+      "policy": 0.027025496522074668,
+      "policyAsymmetry": 3.9986265245724546,
+      "policyMean": 0.06754518187749152,
+      "policyMeanWeighted": 0.0645609995803938,
+      "policyOpp": 0.10806486723290838,
+      "policyOppWeighted": 0.10284029814303187,
+      "policyWeighted": 0.026281701017755718,
+      "positions": 2667,
+      "value": 0.028724034044590934,
+      "valueAsymmetry": 3.548161461097985,
+      "valueMean": 0.06532077232443748,
+      "valueMeanWeighted": 0.06329629292882796,
+      "valueOpp": 0.10191751060428403,
+      "valueOppWeighted": 0.09882129851379602,
+      "valueWeighted": 0.027771287343859925,
+      "weighted": true
+    },
+    {
+      "model": "ml\\runs\\rd_ctl10k\\onnx\\model_v10.onnx",
+      "perspective": "both",
+      "phaseShares": {
+        "bar": 0.1871016122984627,
+        "contact": 0.6970378702662168,
+        "race": 0.11586051743532058
+      },
+      "policy": 0.029796025090696194,
+      "policyAsymmetry": 4.032567454668025,
+      "policyMean": 0.07497525307495478,
+      "policyMeanWeighted": 0.0712859836846416,
+      "policyOpp": 0.12015448105921336,
+      "policyOppWeighted": 0.1134832998097276,
+      "policyWeighted": 0.029088667559555637,
+      "positions": 2667,
+      "value": 0.030176227712955913,
+      "valueAsymmetry": 3.8995278750243316,
+      "valueMean": 0.07392463442135461,
+      "valueMeanWeighted": 0.0698250204238847,
+      "valueOpp": 0.11767304112975331,
+      "valueOppWeighted": 0.11079352213068218,
+      "valueWeighted": 0.02885651871708726,
+      "weighted": true
+    },
+    {
+      "model": "ml\\runs\\rd_aug10k\\onnx\\model_v10.onnx",
+      "perspective": "both",
+      "phaseShares": {
+        "bar": 0.1871016122984627,
+        "contact": 0.6970378702662168,
+        "race": 0.11586051743532058
+      },
+      "policy": 0.038332583139593604,
+      "policyAsymmetry": 1.8030186205222043,
+      "policyMean": 0.053723472156498184,
+      "policyMeanWeighted": 0.04915971695559606,
+      "policyOpp": 0.06911436117340276,
+      "policyOppWeighted": 0.062354304436054026,
+      "policyWeighted": 0.035965129475138115,
+      "positions": 2667,
+      "value": 0.03867491514974263,
+      "valueAsymmetry": 1.8529075538392614,
+      "valueMean": 0.05516797878739662,
+      "valueMeanWeighted": 0.0500184374659138,
+      "valueOpp": 0.07166104242505061,
+      "valueOppWeighted": 0.0642244851739782,
+      "valueWeighted": 0.03581238975784942,
+      "weighted": true
+    }
+  ],
+  "perspective": "both",
+  "pool": "ml/artifacts/curve_pool_400.npz",
+  "positions": 2667,
+  "realShares": {
+    "bar": 0.3488404868251381,
+    "contact": 0.5219312064323711,
+    "race": 0.12922830674249078
+  },
+  "shardDir": "ml/runs/stage_d_l2/shards",
+  "shardLimit": 1,
+  "weighted": true
+}
