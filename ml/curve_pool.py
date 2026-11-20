@@ -243,6 +243,47 @@ def _label_case(
     return vectors, [float(e) for e in equities]
 
 
+def _label_game(
+    game_id: str,
+    records: Sequence[dict[str, Any]],
+    session: gnubg_er.GnubgSession,
+) -> tuple[list[tuple[list[list[float]], list[float]]], int]:
+    """Bir oyunun tum karar noktalarini etiketler; (etiketler, atlanan)."""
+    out: list[tuple[list[list[float]], list[float]]] = []
+    skipped = 0
+    for k, record in enumerate(records):
+        case = corpus2._case_from_record(record, "%s-%02d" % (game_id, k))
+        if case is None:
+            skipped += 1
+            continue
+        labeled = _label_case(session, case)
+        if labeled is None:
+            skipped += 1
+            continue
+        vectors, equities = labeled
+        if len(vectors) < 2:
+            skipped += 1
+            continue
+        out.append((vectors, equities))
+    return out, skipped
+
+
+_LABEL_WORKER: dict[str, Any] = {}
+
+
+def _init_label_worker(gnubg: str, plies: int, timeout: int, persistent: bool) -> None:
+    _LABEL_WORKER["session"] = gnubg_er.GnubgSession(
+        Path(gnubg), plies=plies, timeout=timeout, persistent=persistent
+    )
+
+
+def _worker_label_game(
+    task: tuple[str, Sequence[dict[str, Any]]],
+) -> tuple[list[tuple[list[list[float]], list[float]]], int]:
+    game_id, records = task
+    return _label_game(game_id, records, _LABEL_WORKER["session"])
+
+
 def build_pool(
     *,
     games: int = DEFAULT_GAMES,
@@ -253,13 +294,22 @@ def build_pool(
     seed: int = 0,
     timeout: int = 120,
     max_plies: int = MAX_GAME_PLIES,
+    persistent: bool = True,
+    workers: int = 1,
     progress: Callable[[str], None] | None = None,
 ) -> CurvePool:
-    """Oyun oynar, tum adaylari etiketler ve oyun duzeyinde boler."""
+    """Oyun oynar, tum adaylari etiketler ve oyun duzeyinde boler.
+
+    ``persistent`` gnubg'yi tek surecte tutar; etiketleme 3-5 kat hizlanir.
+    ``workers > 1`` etiketlemeyi **surec** duzeyinde paralellestirir; her surec
+    kendi kalici gnubg oturumunu acar. Sonuc sirasi korunur (``imap``).
+    """
     if games <= 0:
         raise CurvePoolError("games > 0 olmali")
     if not 0 < held_out_games < games:
         raise CurvePoolError("0 < held_out_games < games olmali")
+    if workers < 1:
+        raise CurvePoolError("workers >= 1 olmali")
 
     records = _play_games(games, model_path=model_path, seed=seed, max_plies=max_plies)
     if progress:
@@ -273,7 +323,6 @@ def build_pool(
     held_games = set(ordered_games[:held_out_games])
 
     exe = Path(gnubg) if gnubg else gnubg_er.find_gnubg()
-    session = gnubg_er.GnubgSession(exe, plies=plies, timeout=timeout)
 
     rows: list[np.ndarray] = []
     offsets: list[int] = [0]
@@ -284,20 +333,9 @@ def build_pool(
     split: list[str] = []
     skipped = 0
 
-    for game_id in ordered_games:
-        for k, record in enumerate(by_game[game_id]):
-            case = corpus2._case_from_record(record, "%s-%02d" % (game_id, k))
-            if case is None:
-                skipped += 1
-                continue
-            labeled = _label_case(session, case)
-            if labeled is None:
-                skipped += 1
-                continue
-            vectors, equities = labeled
-            if len(vectors) < 2:
-                skipped += 1
-                continue
+    def _consume(game_id: str, labeled: list[tuple[list[list[float]], list[float]]]) -> None:
+        nonlocal skipped
+        for vectors, equities in labeled:
             rows.append(np.asarray(vectors, dtype=np.float32))
             offsets.append(offsets[-1] + len(vectors))
             best.append(int(np.argmax(equities)))
@@ -305,8 +343,35 @@ def build_pool(
             cand_equity.extend(equities)
             game_ids.append(game_id)
             split.append(SPLIT_HELD_OUT if game_id in held_games else SPLIT_TRAIN)
-            if progress and len(best) % 50 == 0:
-                progress("%d pozisyon etiketlendi" % len(best))
+        if progress and len(best) and len(best) % 50 < len(labeled):
+            progress("%d pozisyon etiketlendi" % len(best))
+
+    if workers == 1:
+        session = gnubg_er.GnubgSession(
+            exe, plies=plies, timeout=timeout, persistent=persistent
+        )
+        try:
+            for game_id in ordered_games:
+                labeled, game_skipped = _label_game(game_id, by_game[game_id], session)
+                skipped += game_skipped
+                _consume(game_id, labeled)
+        finally:
+            session.close()
+    else:
+        import multiprocessing as mp  # noqa: PLC0415
+
+        ctx = mp.get_context("spawn")
+        tasks = [(game_id, by_game[game_id]) for game_id in ordered_games]
+        with ctx.Pool(
+            processes=workers,
+            initializer=_init_label_worker,
+            initargs=(str(exe), plies, timeout, persistent),
+        ) as pool:
+            for game_id, (labeled, game_skipped) in zip(
+                ordered_games, pool.imap(_worker_label_game, tasks)
+            ):
+                skipped += game_skipped
+                _consume(game_id, labeled)
 
     if not best:
         raise CurvePoolError("hicbir pozisyon etiketlenemedi")
@@ -475,6 +540,10 @@ def make_train_fn(
             "slope": None,
             "mae": None,
             "inSampleLoss": result.get("lastLoss"),
+            "inSampleUnit": (
+                "karisik: capraz-entropi (nat/pozisyon) + %.2f*MSE (equity^2)"
+                % float(value_weight)
+            ),
             "heldOutLoss": policy_mean,
             "note": "epochs=%d batch=%d steps=%d profile=%s" % (epochs, batch, steps, profile),
         }
@@ -504,7 +573,19 @@ def build_parser():
     build.add_argument("--plies", type=int, default=DEFAULT_PLIES)
     build.add_argument("--seed", type=int, default=0)
     build.add_argument("--timeout", type=int, default=120)
+    build.add_argument(
+        "--no-persistent",
+        dest="persistent",
+        action="store_false",
+        help="gnubg'yi her cagride yeniden baslat (yavas, varsayilan degil)",
+    )
     build.add_argument("--out", default=POOL_PATH)
+    build.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="etiketleme icin paralel surec sayisi (her surec kendi gnubg oturumu)",
+    )
     build.add_argument("--quiet", action="store_true")
 
     show = sub.add_parser("show", help="havuz ozeti")
@@ -527,6 +608,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         plies=args.plies,
         seed=args.seed,
         timeout=args.timeout,
+        persistent=args.persistent,
+        workers=args.workers,
         progress=None if args.quiet else (lambda m: print(m)),
     )
     save_pool(pool, Path(args.out))

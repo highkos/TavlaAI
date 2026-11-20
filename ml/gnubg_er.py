@@ -33,10 +33,14 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
+import queue
 import re
 import shutil
 import subprocess
 import sys
+import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Sequence
@@ -357,6 +361,12 @@ _HINT_PREFIX_RE = re.compile(r"^(?:Cubeful|Cubeless)\s+\d+-ply\s+")
 
 _EVAL_RE = re.compile(r"^\s*(?P<label>static|\d+\s*ply):\s*(?P<rest>.+)$", re.MULTILINE)
 
+#: ``show pipcount`` ciktisinin sabit on eki; kalici surecte senkron isareti olarak da kullanilir.
+_PIP_MARKER = "The pip counts are:"
+
+#: Kalici gnubg surecinden tek seferde okunan bayt sayisi.
+_READ_CHUNK = 65536
+
 _PIP_RE = re.compile(
     r"The pip counts are:\s*(?P<xname>\S+)\s+(?P<xpips>\d+),\s*(?P<oname>\S+)\s+(?P<opips>\d+)\."
 )
@@ -470,12 +480,130 @@ class GnubgError(RuntimeError):
 
 
 class GnubgSession:
-    """``gnubg-cli``'yi metin modunda calistiran ince sarmalayici."""
+    """``gnubg-cli``'yi metin modunda calistiran ince sarmalayici.
 
-    def __init__(self, exe: Path, *, plies: int = DEFAULT_PLIES, timeout: int = DEFAULT_TIMEOUT) -> None:
+    ``persistent=True`` verilirse tek bir gnubg sureci acik tutulur ve
+    ``eval_afterstates`` cagrilari o surece beslenir. Olculdu: surec baslatma
+    cagri basina ~0,45 s; kalici surecte ayni is ~0,01 s. Uzun mac
+    simulasyonlarinda (``ml/vs_gnubg.py``) bu, olcumu saatler yerine
+    dakikalara indirir.
+    """
+
+    def __init__(
+        self,
+        exe: Path,
+        *,
+        plies: int = DEFAULT_PLIES,
+        timeout: int = DEFAULT_TIMEOUT,
+        persistent: bool = False,
+    ) -> None:
         self.exe = Path(exe)
         self.plies = plies
         self.timeout = timeout
+        self.persistent = persistent
+        self._proc: subprocess.Popen[bytes] | None = None
+        self._queue: queue.Queue[bytes] | None = None
+        self._reader: threading.Thread | None = None
+        self._buffer = ""
+
+    # -- kalici surec --------------------------------------------------
+
+    def _start(self) -> None:
+        """Kalici gnubg surecini (gerekiyorsa) baslatir ve onsozu yazar."""
+        if self._proc is not None:
+            return
+        try:
+            self._proc = subprocess.Popen(
+                [str(self.exe), "-t"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                bufsize=0,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:  # pragma: no cover - ortam bagimli
+            raise GnubgError("gnubg calistirilamadi: %s" % exc) from exc
+
+        self._queue = queue.Queue()
+        sink = self._queue
+        proc = self._proc
+
+        def _pump() -> None:
+            assert proc is not None and proc.stdout is not None
+            fd = proc.stdout.fileno()
+            while True:
+                try:
+                    chunk = os.read(fd, _READ_CHUNK)
+                except OSError:  # pragma: no cover - surec kapanirken
+                    break
+                if not chunk:
+                    break
+                sink.put(chunk)
+
+        self._reader = threading.Thread(target=_pump, daemon=True)
+        self._reader.start()
+        self._write(self._preamble())
+        self._write(["show pipcount"])
+        self._read_blocks(1)
+
+    def _write(self, commands: Iterable[str]) -> None:
+        assert self._proc is not None and self._proc.stdin is not None
+        payload = "\n".join(list(commands)) + "\n"
+        try:
+            self._proc.stdin.write(payload.encode("ascii", "replace"))
+            self._proc.stdin.flush()
+        except (OSError, ValueError) as exc:  # pragma: no cover - ortam bagimli
+            raise GnubgError("gnubg'ye yazilamadi: %s" % exc) from exc
+
+    def _read_blocks(self, count: int) -> str:
+        """``count`` adet **tam** ``show pipcount`` blogu okunana kadar bekler.
+
+        gnubg etkilesimli modda istem isareti basmadigi icin senkronizasyon
+        ``show pipcount`` satiriyla yapilir: cagiran taraf komutlarin sonuna
+        bir **sentinel** ``show pipcount`` ekler, boylece son blogun ciktisi da
+        tamamlanmis olur.
+
+        Sayim ``_PIP_RE`` ile yapilir; sabit onek (``_PIP_MARKER``) ile saymak
+        yaniltir cunku onek okundugunda satirin geri kalani henuz gelmemis
+        olabilir ve bir sonraki okumaya kayar.
+        """
+        assert self._queue is not None
+        deadline = time.monotonic() + self.timeout
+        while True:
+            if len(_PIP_RE.findall(self._buffer)) >= count:
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise GnubgError(
+                    "gnubg zaman asimi (%d/%d blok)"
+                    % (len(_PIP_RE.findall(self._buffer)), count)
+                )
+            try:
+                chunk = self._queue.get(timeout=min(remaining, 0.5))
+            except queue.Empty:
+                continue
+            self._buffer += chunk.decode("utf-8", "replace")
+        text, self._buffer = self._buffer, ""
+        return text
+
+    def close(self) -> None:
+        """Kalici sureci kapatir (acilmamissa hicbir sey yapmaz)."""
+        proc, self._proc = self._proc, None
+        self._queue = None
+        self._buffer = ""
+        if proc is None:
+            return
+        try:
+            if proc.stdin is not None:
+                proc.stdin.close()
+            proc.wait(timeout=10)
+        except (OSError, subprocess.SubprocessError):  # pragma: no cover - ortam bagimli
+            proc.kill()
+
+    def __enter__(self) -> "GnubgSession":
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.close()
 
     def run(self, commands: Iterable[str]) -> str:
         """Komutlari tek bir gnubg surecine besler ve stdout'u doner."""
@@ -495,18 +623,40 @@ class GnubgSession:
         err = (proc.stderr or b"").decode("utf-8", "replace")
         return out + err
 
-    def _preamble(self) -> list[str]:
+    def _settings(self) -> list[str]:
+        """Oyun durumundan bagimsiz ayar komutlari.
+
+        ``set cache 0`` zorunludur: gnubg degerlendirme onbellegi ayni tahta
+        ikinci kez degerlendirildiginde farkli bir ``1 ply`` degeri donduruyor
+        (0,819 -> 0,815, F7-90). Ayni tahta bir partide tekrar olusabildigi
+        (orn. rakip dans edince) ve toplu cagrilarda da tekrar edebildigi icin
+        onbellek kapatilir.
+
+        ``set evaluation chequerplay evaluation plies`` **en sonda** gelmelidir:
+        ardindan gelen ``cubeful`` komutu ``1 ply`` sutununu sifirliyor.
+        """
         return [
             "set cube use off",
-            "new game",
-            "set evaluation chequerplay evaluation plies %d" % self.plies,
             "set evaluation chequerplay evaluation cubeful off",
+            "set evaluation chequerplay evaluation plies %d" % self.plies,
+            "set cache 0",
         ]
 
+    def _preamble(self) -> list[str]:
+        return ["set cube use off", "new game"] + self._settings()[1:]
+
     def load_board(self, board: Sequence[int], turn: int) -> list[str]:
-        """Tahtayi yukleyen komut dizisini doner (sira ve pip dogrulamasi dahil değil)."""
+        """Tahtayi yukleyen komut dizisini doner (sira ve pip dogrulamasi dahil değil).
+
+        ``set board simple`` dizisi **sira kimdeyse onun** bakis acisiyla yorumlanir;
+        ``board_to_simple`` ise sabit olarak MONSTER (X) eksenini uretir. Bu yuzden
+        once MONSTER'i siraya almak zorunludur -- aksi halde tahta sessizce
+        aynalanir (F7-90). Tek surecte ``new game`` bunu sagliyordu; kalici surecte
+        saglamaz, bu yuzden burada acikca yazilir.
+        """
         simple = board_to_simple(board)
         return [
+            "set turn %d" % gnubg_turn(-1),
             "set board simple " + " ".join(str(v) for v in simple),
             "set turn %d" % gnubg_turn(turn),
         ]
@@ -551,6 +701,9 @@ class GnubgSession:
         if not boards:
             return []
 
+        if self.persistent:
+            return self._eval_afterstates_persistent(boards, turn)
+
         commands = self._preamble()
         for board in boards:
             # ``set board`` yalnizca oyun basindayken kabul edilir; ilk tahtadan sonra
@@ -579,6 +732,47 @@ class GnubgSession:
                 )
             if not table:
                 raise GnubgError("eval çıktısı ayristirilamadi")
+        return tables
+
+    def _eval_afterstates_persistent(
+        self, boards: Sequence[Sequence[int]], turn: int
+    ) -> list[dict[str, float]]:
+        """``eval_afterstates``'in kalici surec uzerinden hizli yolu."""
+        self._start()
+        commands: list[str] = []
+        for board in boards:
+            commands.extend(self._settings())
+            commands.extend(self.load_board(board, turn))
+            commands.append("show pipcount")
+            commands.append("eval")
+        commands.append("show pipcount")  # sentinel: son blogun bittigini bildirir
+        self._write(commands)
+        text = self._read_blocks(len(boards) + 1)
+
+        # Sentinel blogunu at; ``parse_evals`` pip satirlarina gore boluyor.
+        cut = text.rfind(_PIP_MARKER)
+        if cut < 0:  # pragma: no cover - savunma
+            raise GnubgError("sentinel pip satiri bulunamadi")
+        text = text[:cut]
+
+        pips = parse_pipcounts(text)
+        tables = parse_evals(text)
+        if len(pips) != len(boards) or len(tables) != len(boards):
+            raise GnubgError(
+                "toplu eval ciktisi eksik (pip %d, tablo %d, tahta %d)"
+                % (len(pips), len(tables), len(boards))
+            )
+
+        for board, (monster_pips, gnubg_pips), table in zip(boards, pips, tables):
+            expected_monster = pip_count(board, -1)
+            expected_gnubg = pip_count(board, 1)
+            if monster_pips != expected_monster or gnubg_pips != expected_gnubg:
+                raise GnubgError(
+                    "tahta yuklenmedi (pip MONSTER %d/%d, gnubg %d/%d)"
+                    % (monster_pips, expected_monster, gnubg_pips, expected_gnubg)
+                )
+            if not table:
+                raise GnubgError("eval ciktisi ayristirilamadi")
         return tables
 
     @staticmethod
@@ -664,11 +858,19 @@ class OnnxScorer:
         ``OutcomeDistribution.Equity`` ile ayni ifadedir (Test 53).
     """
 
-    def __init__(self, model_path: Path) -> None:
+    def __init__(self, model_path: Path, *, intra_op_threads: int | None = None) -> None:
         import onnxruntime as ort  # yerel import: gnubg yoksa bile modul import edilebilsin
 
         self.model_path = Path(model_path)
-        self.session = ort.InferenceSession(str(self.model_path), providers=["CPUExecutionProvider"])
+        options = ort.SessionOptions()
+        if intra_op_threads is not None:
+            # Coklu **surec** paralelliginde her surec tek is parcacigi kullanmali;
+            # aksi halde N surec x M is parcacigi cekirdekleri asiri abone eder.
+            options.intra_op_num_threads = int(intra_op_threads)
+            options.inter_op_num_threads = 1
+        self.session = ort.InferenceSession(
+            str(self.model_path), sess_options=options, providers=["CPUExecutionProvider"]
+        )
         self.input_name = self.session.get_inputs()[0].name
         outputs = [o.name for o in self.session.get_outputs()]
         self.probs_name = "probs" if "probs" in outputs else None

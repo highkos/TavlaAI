@@ -259,3 +259,79 @@ def test_167_antisymmetry_cli():
         parser.parse_args(["measure"])
     with pytest.raises(SystemExit):
         parser.parse_args([])
+
+
+# ----------------------------------------------------------------------
+# Cikarim aninda antisimetriklestirme (Test 204-208)
+# ----------------------------------------------------------------------
+
+
+def test_204_symmetrise_value_is_difference_not_mean():
+    """``e_hat = (e+ - e-) / 2`` -- **fark**, ortalama degil.
+
+    F7-55'teki basarisiz "naif duzeltme" logit'leri **ortaliyordu**; iki bakis
+    ayni pozisyonu zit isaretle puanladigi icin ortalama sifira coker.
+    """
+    assert A.symmetrise_value(0.8, -0.8) == pytest.approx(0.8)
+    assert A.symmetrise_value(0.8, 0.8) == pytest.approx(0.0)
+    assert A.symmetrise_value(0.0, 0.0) == pytest.approx(0.0)
+    # Kusurlu model: iki bakis zit isaretli degil.
+    assert A.symmetrise_value(0.6, -0.4) == pytest.approx(0.5)
+    # Ortalama alsaydik 0,1 cikardi -- yanlis.
+    assert (0.6 + -0.4) / 2 == pytest.approx(0.1)
+
+
+def test_205_symmetrise_logits_is_difference():
+    plus = [1.0, 2.0, 3.0]
+    minus = [-1.0, -2.0, -3.0]
+    out = A.symmetrise_logits(plus, minus)
+    assert out == pytest.approx([1.0, 2.0, 3.0])
+    # Kusurlu: siralama degisebilir.
+    out2 = A.symmetrise_logits([0.0, 1.0], [0.0, -1.0])
+    assert out2 == pytest.approx([0.0, 1.0])
+    with pytest.raises(A.AntisymmetryError):
+        A.symmetrise_logits([1.0], [1.0, 2.0])
+
+
+def test_206_symmetrised_report_delta_and_gate():
+    report = A.SymmetrisedReport(model="m.onnx", corpus="c.json", plies=2)
+    report.cases = 4
+    report.raw_policy = [0.10, 0.10, 0.10, 0.10]
+    report.sym_policy = [0.05, 0.05, 0.05, 0.05]
+    report.raw_value = [0.20, 0.20, 0.20, 0.20]
+    report.sym_value = [0.20, 0.20, 0.20, 0.20]
+    delta, low, high = report.policy_delta
+    assert delta == pytest.approx(-0.05)
+    assert high < 0.0
+    assert report.policy_improved is True
+    vdelta, vlow, vhigh = report.value_delta
+    assert vdelta == pytest.approx(0.0)
+    assert report.value_improved is False
+    payload = report.to_dict()
+    assert payload["policy"]["improved"] is True
+    assert payload["value"]["improved"] is False
+    assert payload["cases"] == 4
+
+
+def test_207_symmetrised_markdown_has_both_paths():
+    report = A.SymmetrisedReport(model="m.onnx", corpus="c.json", plies=2)
+    report.cases = 2
+    report.raw_policy = [0.10, 0.10]
+    report.sym_policy = [0.05, 0.05]
+    report.raw_value = [0.20, 0.20]
+    report.sym_value = [0.15, 0.15]
+    report.argmax_changed = 1
+    md = A.build_symmetrised_markdown(report)
+    assert "`policy`" in md
+    assert "`value`" in md
+    assert "IYILESDI" in md
+    assert "argmax" in md.lower()
+
+
+def test_208_symmetrise_cli_contract():
+    parser = A.build_parser()
+    args = parser.parse_args(["symmetrise", "--model", "m.onnx"])
+    assert args.command == "symmetrise"
+    assert args.out == A.SYMMETRISED_PATH
+    assert args.markdown == A.SYMMETRISED_MD_PATH
+    assert args.plies == 2

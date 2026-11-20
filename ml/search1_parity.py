@@ -315,6 +315,66 @@ class ParityReport:
         return self.count - len(self.decisive_cases)
 
     @property
+    def tie_cases(self) -> list[CaseParity]:
+        """``decisive`` olmayan (ust-2 fark <= ``TIE_TOL``) vakalar."""
+        return [c for c in self.cases if not c.decisive]
+
+    @property
+    def tie_agree(self) -> int:
+        return sum(1 for c in self.tie_cases if c.argmax_agree)
+
+    @property
+    def tie_rate(self) -> float:
+        n = len(self.tie_cases)
+        return self.tie_agree / float(n) if n else float("nan")
+
+    def exclusion_analysis(self) -> dict[str, Any]:
+        """**Disarida kalan** vakalarin analizi (F7-88).
+
+        Soru: "kararli" filtresi bir **secim yanliligi** yaratiyor mu? Yani
+        disarida kalan 143 vaka, gercek uyusmazliklari sakliyor olabilir mi?
+
+        Olculenler:
+
+        * disarida kalan vaka sayisi ve bunlarin argmax uyusma orani,
+        * disarida kalanlarin ust-2 fark dagilimi (medyan, maksimum),
+        * disarida kalan uyusmazliklarin ust-2 farki -- **sifira yakin mi?**
+
+        Yorum: disarida kalanlarin tamami ``top2_gap <= TIE_TOL`` bolgesinde,
+        yani iki arama skoru 0,02 icinde. Bu bolgede argmax matematiksel
+        olarak tanimsizdir (kayan nokta toplama sirasi belirler). Eger
+        disarida kalan uyusmazliklarin ust-2 farki **sifira yakin**sa, filtre
+        gercek bir kusuru saklamiyor; yalnizca tanimsiz bolgeyi disarida
+        birakiyor.
+        """
+        ties = self.tie_cases
+        if not ties:
+            return {
+                "tieCount": 0,
+                "tieAgree": 0,
+                "tieRate": float("nan"),
+                "tieGapMedian": float("nan"),
+                "tieGapMax": float("nan"),
+                "tieMismatchGaps": [],
+                "biasSuspected": False,
+            }
+        gaps = np.asarray([c.top2_gap for c in ties], dtype=np.float64)
+        mismatch_gaps = [float(c.top2_gap) for c in ties if not c.argmax_agree]
+        # Yanlilik suphesi: disarida kalan bir uyusmazligin ust-2 farki
+        # TIE_TOL'un **yariisindan** buyukse, o vaka gercekten "kararli"
+        # olabilirdi ve filtre onu sakliyor olurdu.
+        bias = any(g > TIE_TOL / 2.0 for g in mismatch_gaps)
+        return {
+            "tieCount": len(ties),
+            "tieAgree": self.tie_agree,
+            "tieRate": self.tie_rate,
+            "tieGapMedian": float(np.median(gaps)),
+            "tieGapMax": float(np.max(gaps)),
+            "tieMismatchGaps": mismatch_gaps,
+            "biasSuspected": bool(bias),
+        }
+
+    @property
     def agree_ci(self) -> tuple[float, float]:
         """Kararli vakalar uzerinde argmax uyusmasinin %95 GA'si."""
         cases = self.decisive_cases
@@ -369,6 +429,7 @@ class ParityReport:
             "argmaxOk": self.argmax_ok,
             "tieTol": TIE_TOL,
             "tieCount": self.tie_count,
+            "exclusion": self.exclusion_analysis(),
             "decisiveCount": len(self.decisive_cases),
             "decisiveAgree": self.decisive_agree,
             "decisiveRate": self.decisive_rate,
@@ -510,9 +571,46 @@ def build_markdown(report: ParityReport) -> str:
         "",
         "**Karar: %s**" % ("GECTI" if report.passed else "DUSTU"),
         "",
-        "## Notlar",
+        "## Disarida kalanlar (secim yanliligi kontrolu)",
+        "",
+        "Kapi **kararli** vakalarda islenir: ust-2 fark `> %s` olanlar. "
+        "Disarida kalanlar asagida raporlanir; amac, filtrenin gercek bir "
+        "uyusmazligi saklamadigini gostermektir." % _fmt(TIE_TOL, 2),
         "",
     ]
+    ex = report.exclusion_analysis()
+    lines.append("| Olcum | Deger |")
+    lines.append("|---|---|")
+    lines.append("| Disarida kalan vaka | %d |" % ex["tieCount"])
+    lines.append(
+        "| Bunlarda argmax uyusmasi | %d/%d (%s) |"
+        % (ex["tieAgree"], ex["tieCount"], _fmt(ex["tieRate"]))
+    )
+    lines.append("| Disarida kalanlarin ust-2 farki (medyan) | %s |" % _fmt(ex["tieGapMedian"], 6))
+    lines.append("| Disarida kalanlarin ust-2 farki (maksimum) | %s |" % _fmt(ex["tieGapMax"], 6))
+    lines.append(
+        "| Disarida kalan uyusmazliklarin ust-2 farki | %s |"
+        % (
+            ", ".join(_fmt(g, 6) for g in ex["tieMismatchGaps"])
+            if ex["tieMismatchGaps"]
+            else "-"
+        )
+    )
+    lines.append(
+        "| Yanlilik suphesi (uyusmazlik farki > %s) | %s |"
+        % (_fmt(TIE_TOL / 2.0, 3), "VAR" if ex["biasSuspected"] else "YOK")
+    )
+    lines.append("")
+    if ex["tieMismatchGaps"] and not ex["biasSuspected"]:
+        lines.append(
+            "Disarida kalan uyusmazliklarin tamami ust-2 farki `<= %s` bolgesinde, "
+            "yani argmax'in matematiksel olarak tanimsiz oldugu yerde. Filtre "
+            "gercek bir kusuru **saklamiyor**; yalnizca tanimsiz bolgeyi disarida "
+            "birakiyor." % _fmt(TIE_TOL / 2.0, 3)
+        )
+        lines.append("")
+    lines.append("## Notlar")
+    lines.append("")
     for note in report.notes:
         lines.append("- " + note)
     lines.append("")

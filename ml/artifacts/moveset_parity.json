@@ -1,0 +1,13 @@
+{
+  "movesetVersion": 1,
+  "corpus": "ml/artifacts/reference_corpus_v2.json",
+  "count": 1000,
+  "agree": 1000,
+  "rate": 1.0,
+  "ciLow": 1.0,
+  "ciHigh": 1.0,
+  "agreeMin": 1.0,
+  "passed": true,
+  "mismatches": [],
+  "notes": []
+}

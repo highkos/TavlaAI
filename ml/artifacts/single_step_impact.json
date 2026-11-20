@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "results": [
+    {
+      "label": "search1_corpus",
+      "cases": 1000,
+      "ownDiceHits": 0,
+      "ownDiceRate": 0.0,
+      "opponentRollHits": 210,
+      "opponentRollTotal": 21000,
+      "opponentRollRate": 0.01,
+      "casesWithOpponentHit": 26,
+      "casesWithOpponentRate": 0.026
+    },
+    {
+      "label": "reference_corpus_v2",
+      "cases": 1000,
+      "ownDiceHits": 0,
+      "ownDiceRate": 0.0,
+      "opponentRollHits": 210,
+      "opponentRollTotal": 21000,
+      "opponentRollRate": 0.01,
+      "casesWithOpponentHit": 26,
+      "casesWithOpponentRate": 0.026
+    }
+  ]
+}

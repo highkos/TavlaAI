@@ -49,7 +49,7 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 #: Veri hacmi carpanlari (Faz 7-R Asama R-C, madde 4).
-CURVE_MULTIPLIERS = (1, 2, 4, 8)
+CURVE_MULTIPLIERS = (1, 2, 4, 8, 16, 32)
 
 #: Bootstrap yeniden ornekleme sayisi (Kural 3: >= 10 000).
 BOOTSTRAP_RESAMPLES = 20000
@@ -67,6 +67,23 @@ DECISION_SCALES = "olcek"
 DECISION_PIPELINE = "pipeline"
 DECISION_UNDETERMINED = "belirsiz"
 DECISION_NO_DATA = "veri-yok"
+
+#: In-sample kaybin **birimi**. Kural 5: in-sample metrik basari sayilmaz;
+#: birimi yazilmadan bir ER gibi okunabilir. Bu yuzden her raporda acikca
+#: etiketlenir.
+IN_SAMPLE_UNITS = {
+    "policy": "capraz-entropi (nat/pozisyon)",
+    "value": "MSE (equity^2)",
+    "search1": "MSE (equity^2)",
+    #: ``train_policy_head`` tek bir **birlesik** kayip dondurur; birimi
+    #: iki terimin toplamidir ve ``value_weight`` ile olceklenir.
+    "combined": "karisik: capraz-entropi (nat/pozisyon) + w*MSE (equity^2)",
+}
+
+#: Doygunluk fiti ``ER = a * N^-b + c`` icin alt/ust sinirlar.
+SATURATION_B_MIN = 0.0
+SATURATION_B_MAX = 3.0
+SATURATION_MIN_POINTS = 3
 
 
 # ----------------------------------------------------------------------
@@ -91,6 +108,7 @@ class CurvePoint:
     mae: float | None = None
     in_sample_loss: float | None = None
     held_out_loss: float | None = None
+    in_sample_unit: str = ""
     note: str = ""
 
     @property
@@ -100,6 +118,17 @@ class CurvePoint:
             if values:
                 out[path] = float(np.mean(np.asarray(values, dtype=np.float64)))
         return out
+
+    @property
+    def resolved_in_sample_unit(self) -> str:
+        """In-sample kaybin birimi; olcum yoksa bos.
+
+        Birim **olcumun** degil kayip fonksiyonunun ozelligidir, bu yuzden
+        eski artefaktlarda alan bos olsa bile buradan turetilir.
+        """
+        if self.in_sample_loss is None:
+            return ""
+        return self.in_sample_unit or IN_SAMPLE_UNITS["combined"]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -111,9 +140,39 @@ class CurvePoint:
             "calibrationSlope": self.slope,
             "calibrationMae": self.mae,
             "inSampleLoss": self.in_sample_loss,
+            "inSampleUnit": self.resolved_in_sample_unit,
             "heldOutLoss": self.held_out_loss,
             "note": self.note,
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "CurvePoint":
+        """``to_dict`` ciktisindan geri kurar.
+
+        ``losses``/``game_ids`` JSON'da **ozet** olarak durur (``means``,
+        ``counts``, ``games``); yeniden kurarken ortalama tek elemanli liste
+        olarak tasinir. Boylece ``means`` ve bootstrap kume sayisi korunur.
+        """
+        means = {str(k): float(v) for k, v in (data.get("means") or {}).items()}
+        counts = {str(k): int(v) for k, v in (data.get("counts") or {}).items()}
+        games = {str(k): int(v) for k, v in (data.get("games") or {}).items()}
+        losses = {path: [value] for path, value in means.items()}
+        game_ids = {
+            path: ["g%d" % i for i in range(games.get(path, 0))] for path in means
+        }
+        del counts
+        return cls(
+            multiplier=int(data.get("multiplier", 0)),
+            positions=int(data.get("positions", 0)),
+            losses=losses,
+            game_ids=game_ids,
+            slope=data.get("calibrationSlope"),
+            mae=data.get("calibrationMae"),
+            in_sample_loss=data.get("inSampleLoss"),
+            held_out_loss=data.get("heldOutLoss"),
+            in_sample_unit=str(data.get("inSampleUnit") or ""),
+            note=str(data.get("note") or ""),
+        )
 
 
 @dataclass
@@ -127,6 +186,9 @@ class CurveReport:
     bootstrap_resamples: int = BOOTSTRAP_RESAMPLES
     bootstrap_seed: int = BOOTSTRAP_SEED
     clustered: bool = True
+    seed_decisions: dict[int, str] = field(default_factory=dict)
+    seed_gains: dict[int, float] = field(default_factory=dict)
+    saturation: dict[str, dict[str, float]] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 
     def slope_for(self, path: str) -> float | None:
@@ -140,6 +202,13 @@ class CurveReport:
         Kural 3: nokta tahmini kanit degildir. ``olcek`` demek icin egimin
         **GA alt siniri** esigin uzerinde olmalidir; ``pipeline`` demek icin
         **GA ust siniri** esigin altinda olmalidir. Aksi halde ``belirsiz``.
+
+        **Tohum oybirligi (F7-87).** Havuzlanmis bootstrap tohumlari *ek veri*
+        gibi ele alir ve GA'yi yapay olarak daraltir: ayni oyun kumesi farkli
+        tohumlarda tekrar sayilir. Bu yuzden havuz karari **tek basina**
+        yetmez. Kural: ``olcek``/``pipeline`` demek icin **tum tohumlarin**
+        ayni karari vermesi gerekir; aksi halde ``belirsiz``. Tek tohum
+        yeterli degildir (kullanicinin adim 0 kosulu).
         """
         if not self.points or not self.slopes:
             return DECISION_NO_DATA
@@ -149,10 +218,24 @@ class CurveReport:
         if low is None or high is None:
             return DECISION_UNDETERMINED
         if float(low) >= SCALING_SLOPE_EPSILON:
-            return DECISION_SCALES
-        if float(high) < SCALING_SLOPE_EPSILON:
-            return DECISION_PIPELINE
-        return DECISION_UNDETERMINED
+            pooled = DECISION_SCALES
+        elif float(high) < SCALING_SLOPE_EPSILON:
+            pooled = DECISION_PIPELINE
+        else:
+            return DECISION_UNDETERMINED
+
+        if len(self.seed_decisions) > 1:
+            votes = set(self.seed_decisions.values())
+            if votes != {pooled}:
+                return DECISION_UNDETERMINED
+        return pooled
+
+    @property
+    def seed_agreement(self) -> bool:
+        """Tum tohumlar ayni karari verdi mi?"""
+        if len(self.seed_decisions) <= 1:
+            return True
+        return len(set(self.seed_decisions.values())) == 1
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -164,9 +247,37 @@ class CurveReport:
             "bootstrapResamples": self.bootstrap_resamples,
             "bootstrapSeed": self.bootstrap_seed,
             "clustered": self.clustered,
+            "seedDecisions": {str(k): v for k, v in self.seed_decisions.items()},
+            "seedGains": {str(k): v for k, v in self.seed_gains.items()},
+            "seedAgreement": self.seed_agreement,
+            "saturation": self.saturation,
             "scalingSlopeEpsilon": SCALING_SLOPE_EPSILON,
             "notes": self.notes,
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "CurveReport":
+        """``to_dict`` ciktisindan geri kurar (rapor yeniden uretimi icin)."""
+        report = cls(
+            points=[CurvePoint.from_dict(p) for p in data.get("points") or []],
+            slopes={str(k): dict(v) for k, v in (data.get("slopes") or {}).items()},
+            seed=int(data.get("seed", 0)),
+            seeds=[int(s) for s in data.get("seeds") or []],
+            bootstrap_resamples=int(data.get("bootstrapResamples", BOOTSTRAP_RESAMPLES)),
+            bootstrap_seed=int(data.get("bootstrapSeed", BOOTSTRAP_SEED)),
+            clustered=bool(data.get("clustered", True)),
+            seed_decisions={
+                int(k): str(v) for k, v in (data.get("seedDecisions") or {}).items()
+            },
+            seed_gains={
+                int(k): float(v) for k, v in (data.get("seedGains") or {}).items()
+            },
+            saturation={
+                str(k): dict(v) for k, v in (data.get("saturation") or {}).items()
+            },
+            notes=[str(n) for n in data.get("notes") or []],
+        )
+        return report
 
     def scaling_summary(self) -> dict[str, Any]:
         """``pipeline_health.diagnose(scaling=...)`` icin ozet."""
@@ -297,6 +408,78 @@ def fit_log_slope(
     }
 
 
+def fit_saturation(
+    points: Sequence[CurvePoint],
+    *,
+    path: str = "policy",
+) -> dict[str, float]:
+    """Doygunluk fiti ``ER = a * N^-b + c`` (F7-87).
+
+    Log-egim modeli ``ER = a * N^-b`` **taban parametresi tasimaz**: veri
+    sonsuza giderken ER sifira iner, ki bu gercek degildir. Uc parametreli
+    model ``c`` tabanini tahmin eder; ``c`` "bu mimari ve bu ogretmenle
+    ulasilabilir en iyi ER" sorusunun **olculen** cevabidir.
+
+    Fit: dogrusal olmayan en kucuk kareler (``scipy`` yok; kaba grid + yerel
+    iyilestirme). ``b`` icin ``[0, 3]`` araligi; ``c`` icin ``[0, min(ER)]``.
+
+    Doner: ``a``, ``b``, ``c``, ``rmse``, ``n``. Yetersiz nokta varsa
+    ``nan`` dondurur (sessiz fallback yok, Kural 6).
+    """
+    usable = [p for p in points if p.losses.get(path)]
+    if len(usable) < SATURATION_MIN_POINTS:
+        return {
+            "path": path,
+            "a": float("nan"),
+            "b": float("nan"),
+            "c": float("nan"),
+            "rmse": float("nan"),
+            "n": len(usable),
+        }
+    n = np.asarray([float(p.positions) for p in usable], dtype=np.float64)
+    y = np.asarray([float(np.mean(p.losses[path])) for p in usable], dtype=np.float64)
+    floor = float(np.min(y))
+
+    def rmse(a: float, b: float, c: float) -> float:
+        pred = a * np.power(n, -b) + c
+        return float(np.sqrt(np.mean((pred - y) ** 2)))
+
+    best = (float("nan"), float("nan"), float("nan"), float("inf"))
+    for b in np.linspace(SATURATION_B_MIN, SATURATION_B_MAX, 61):
+        # Verilen b icin model c'de dogrusaldir: en kucuk kareler kapali form.
+        basis = np.power(n, -b)
+        design = np.column_stack([basis, np.ones_like(basis)])
+        try:
+            coef, *_ = np.linalg.lstsq(design, y, rcond=None)
+        except np.linalg.LinAlgError:
+            continue
+        a, c = float(coef[0]), float(coef[1])
+        if a < 0.0 or c < 0.0 or c > floor + 1e-12:
+            continue
+        err = rmse(a, b, c)
+        if err < best[3]:
+            best = (a, float(b), c, err)
+
+    a, b, c, err = best
+    if not np.isfinite(err):
+        return {
+            "path": path,
+            "a": float("nan"),
+            "b": float("nan"),
+            "c": float("nan"),
+            "rmse": float("nan"),
+            "n": len(usable),
+        }
+    return {
+        "path": path,
+        "a": a,
+        "b": b,
+        "c": c,
+        "rmse": err,
+        "n": len(usable),
+    }
+
+
 # ----------------------------------------------------------------------
 # Kosum
 # ----------------------------------------------------------------------
@@ -369,6 +552,11 @@ def run_curve(
             mae=None if raw.get("mae") is None else float(raw["mae"]),
             in_sample_loss=(
                 None if raw.get("inSampleLoss") is None else float(raw["inSampleLoss"])
+            ),
+            in_sample_unit=(
+                ""
+                if raw.get("inSampleLoss") is None
+                else str(raw.get("inSampleUnit") or IN_SAMPLE_UNITS["combined"])
             ),
             held_out_loss=(
                 None if raw.get("heldOutLoss") is None else float(raw["heldOutLoss"])
@@ -486,11 +674,14 @@ def run_curve_multi_seed(
             )
     if not pooled.slopes:
         pooled.notes.append("hicbir noktada kayip yok: egim hesaplanamadi")
-    pooled.notes.append(
-        "Havuzlanmis %d tohum: %s" % (len(seed_list), ", ".join(str(s) for s in seed_list))
-    )
+
+    # Tohum bazli kararlar: havuz karari tek basina yetmez (F7-87).
     for seed, report in zip(seed_list, per_seed):
         entry = report.slopes.get("policy") or {}
+        pooled.seed_decisions[int(seed)] = report.decision
+        gain = entry.get("gain")
+        if gain is not None and np.isfinite(float(gain)):
+            pooled.seed_gains[int(seed)] = float(gain)
         pooled.notes.append(
             "tohum %d: kazanc %s GA [%s; %s] -> %s"
             % (
@@ -501,6 +692,22 @@ def run_curve_multi_seed(
                 report.decision,
             )
         )
+
+    # Doygunluk fiti: taban parametresi ``c`` (F7-87).
+    for path in CURVE_PATHS:
+        if any(p.losses.get(path) for p in pooled.points):
+            pooled.saturation[path] = fit_saturation(pooled.points, path=path)
+
+    if len(seed_list) > 1 and not pooled.seed_agreement:
+        pooled.notes.append(
+            "TOHUM OYBIRLIGI YOK: %s -> havuz karari 'belirsiz' sayilir"
+            % ", ".join(
+                "s%d=%s" % (s, d) for s, d in sorted(pooled.seed_decisions.items())
+            )
+        )
+    pooled.notes.append(
+        "Havuzlanmis %d tohum: %s" % (len(seed_list), ", ".join(str(s) for s in seed_list))
+    )
     return pooled
 
 
@@ -549,25 +756,27 @@ def build_markdown(report: CurveReport, *, title: str = "Faz 7-R - Ogrenme egris
     for path in CURVE_PATHS:
         header += " ER `%s` |" % path
         sep += "---|"
-    header += " Kal. egimi | Kal. MAE | In-sample | Held-out |"
-    sep += "---|---|---|---|"
+    header += " Kal. egimi | Kal. MAE | In-sample | In-sample birimi | Held-out |"
+    sep += "---|---|---|---|---|"
     lines.append(header)
     lines.append(sep)
     for p in report.points:
         means = p.means
-        row = "| %d× | %d |" % (p.multiplier, p.positions)
+        row = "| %dx | %d |" % (p.multiplier, p.positions)
         for path in CURVE_PATHS:
             row += " %s |" % _fmt(means.get(path))
-        row += " %s | %s | %s | %s |" % (
+        row += " %s | %s | %s | %s | %s |" % (
             _fmt(p.slope),
             _fmt(p.mae),
             _fmt(p.in_sample_loss),
+            p.resolved_in_sample_unit or "-",
             _fmt(p.held_out_loss),
         )
         lines.append(row)
     lines.append("")
     lines.append("> **In-sample metrikler basari sayilmaz** (Kural 5). Held-out")
-    lines.append("> kolonu tek basina okunmalidir.")
+    lines.append("> kolonu tek basina okunmalidir. In-sample kolonu bir ER")
+    lines.append("> **degildir**: birimi yanindaki sutunda yazilidir.")
     lines.append("")
     lines.append("## 2. Egim (ER / log2 veri)")
     lines.append("")
@@ -609,14 +818,60 @@ def build_markdown(report: CurveReport, *, title: str = "Faz 7-R - Ogrenme egris
     lines.append("")
     lines.append("Esik: **%s** (ER kazanci / log2 veri)." % _fmt(SCALING_SLOPE_EPSILON))
     lines.append("")
-    lines.append("## 3. Karar")
+    if report.seed_decisions:
+        lines.append("## 3. Tohum bazli kararlar")
+        lines.append("")
+        lines.append("| Tohum | Kazanc | Karar |")
+        lines.append("|---|---|---|")
+        for seed in sorted(report.seed_decisions):
+            lines.append(
+                "| %d | %s | `%s` |"
+                % (seed, _fmt(report.seed_gains.get(seed)), report.seed_decisions[seed])
+            )
+        lines.append("")
+        lines.append(
+            "**Tohum oybirligi: %s.** Havuzlanmis bootstrap tohumlari ek veri "
+            "gibi ele alir ve GA'yi daraltir; bu yuzden havuz karari tek basina "
+            "yetmez. `olcek`/`pipeline` icin **tum tohumlarin** ayni karari "
+            "vermesi gerekir."
+            % ("VAR" if report.seed_agreement else "YOK")
+        )
+        lines.append("")
+    if report.saturation:
+        lines.append("## 4. Doygunluk fiti `ER = a*N^-b + c`")
+        lines.append("")
+        lines.append("| Yol | a | b | c (taban) | RMSE | Nokta |")
+        lines.append("|---|---|---|---|---|---|")
+        for path in CURVE_PATHS:
+            entry = report.saturation.get(path)
+            if entry is None:
+                continue
+            lines.append(
+                "| `%s` | %s | %s | **%s** | %s | %d |"
+                % (
+                    path,
+                    _fmt(entry.get("a")),
+                    _fmt(entry.get("b")),
+                    _fmt(entry.get("c")),
+                    _fmt(entry.get("rmse")),
+                    int(entry.get("n", 0)),
+                )
+            )
+        lines.append("")
+        lines.append(
+            "`c` **taban parametresidir**: veri sonsuza giderken ER'nin indigi "
+            "deger. Log-egim modeli taban tasimaz (ER sifira iner), ki bu "
+            "gercek degildir."
+        )
+        lines.append("")
+    lines.append("## 5. Karar")
     lines.append("")
     lines.append("**`%s`**" % report.decision)
     lines.append("")
     lines.append(DECISION_TEXT.get(report.decision, ""))
     lines.append("")
     if report.notes:
-        lines.append("## 4. Notlar")
+        lines.append("## 6. Notlar")
         lines.append("")
         for note in report.notes:
             lines.append("- " + note)
@@ -674,12 +929,36 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--out", type=Path, default=None, help="cikti JSON")
     p.add_argument("--markdown", type=Path, default=None, help="cikti Markdown")
+    p.add_argument(
+        "--from-json",
+        type=Path,
+        default=None,
+        help="olcum yapmadan, var olan rapor JSON'undan Markdown'i yeniden uret",
+    )
     p.add_argument("--quiet", action="store_true")
     return p
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    if args.from_json is not None:
+        import json  # noqa: PLC0415
+
+        data = json.loads(Path(args.from_json).read_text(encoding="utf-8"))
+        report = CurveReport.from_dict(data)
+        if args.markdown is not None:
+            args.markdown.parent.mkdir(parents=True, exist_ok=True)
+            args.markdown.write_text(build_markdown(report), encoding="utf-8")
+        if args.out is not None:
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            args.out.write_text(
+                json.dumps(report.to_dict(), indent=2, sort_keys=True), encoding="utf-8"
+            )
+        if not args.quiet:
+            print("karar: %s" % report.decision)
+        return 0
+
     sizes = [int(args.base_positions) * int(m) for m in args.multipliers]
 
     if args.pool is None:

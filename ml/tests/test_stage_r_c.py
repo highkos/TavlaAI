@@ -446,7 +446,7 @@ def test_138_curve_markdown_has_all_sections() -> None:
     md = lc.build_markdown(report)
     assert "## 1. Noktalar" in md
     assert "## 2. Egim" in md
-    assert "## 3. Karar" in md
+    assert "## 5. Karar" in md
     assert md.endswith("\n")
 
 

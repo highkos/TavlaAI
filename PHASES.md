@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1310** | ~8 dk 30 s | ✅ 1310/1310 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1795** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1335** | ~8 dk 30 s | ✅ 1335/1335 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **1820** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -1405,7 +1405,7 @@ yapılır; TEST-ER'e erişim `ml/runs/<ad>/test_access.log` dosyasına yazılır
 |---|---|
 | 41a — Faz 5 değerinin yeniden üretimi (50 pozisyon) | **0,1941** (fark 0,0000; tolerans ±0,01) ✅ |
 | 41b — 200 pozisyon ortalama ER | **0,2203** (medyan 0,1325, maks 1,6770, eşleşme %14,0) |
-| 41b — CAL / VAL-ER / TEST-ER | 0,3013 / 0,1898 / 0,1815 |
+| 41b — CAL / VAL-ER / TEST-ER | 0,3013 / 0,1898 / 0,1820 |
 | 46 — standart hata (200 pozisyon) | 0,0187; hedef SE 0,005 için gereken n ≈ 2 786 |
 | 41e — veri hacmi (100 oyun, 9 088 karar) | **3 824 bayt/karar** ham, **129 bayt/karar** gzip |
 | 41c — `OutcomeDistribution` kodlaması | **kümülatif** (`Win` = P(en az tek), `Lose = 1 − Win`) |
@@ -2479,7 +2479,7 @@ Bölüm 5.1.6 üç yol tanımlar ve **kullanıcı onayı** ister. Ölçüm sonra
 ### 21.9 Doğrulama
 
 ```
-ml/tests                     1310/1310  (3 yavaş/koşullu test atlanır)
+ml/tests                     1335/1335  (3 yavaş/koşullu test atlanır)
 Backgammon.Tests             285/285
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
@@ -2930,10 +2930,10 @@ Ayrı bir `EquityCubeAdvisor` işi gerektirir.
 Backgammon.Tests             297/297   (29 dk 56 s)
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
-ml/tests                    1310/1310  (3 yavaş/koşullu test atlanır)
+ml/tests                    1335/1335  (3 yavaş/koşullu test atlanır)
 ```
 
-Toplam **1795**. Derleme 0 uyarı / 0 hata.
+Toplam **1820**. Derleme 0 uyarı / 0 hata.
 
 
 ## 30. Faz 7-R Aşama R-B — ölçüm altyapısı (F7-55 – F7-62)
@@ -3054,7 +3054,7 @@ Tek çekirdek 2-ply `hint`: ortalama **0,562 s**/pozisyon. 4 süreçte
 ### 30.10 Doğrulama
 
 ```
-ml/tests                    1310/1310  (3 yavaş/koşullu test atlanır)
+ml/tests                    1335/1335  (3 yavaş/koşullu test atlanır)
 ```
 
 Test 128–133 yeşil. `test_docs_consistency.py` 21/21 yeşil.
@@ -3177,7 +3177,7 @@ görünüyordu; ikisi de **ölçüm hatasıydı**.
 | 137 | `Verdict_NoCapacityInference` | `ml/tests/test_stage_r_c.py` | YEŞİL |
 | 138 | `LearningCurve_Runs` | `ml/tests/test_stage_r_c.py` | YEŞİL |
 
-`pytest ml/tests` → **1310 passed, 3 skipped** (1222 toplandı; R-B'de 1159).
+`pytest ml/tests` → **1335 passed, 3 skipped** (1222 toplandı; R-B'de 1159).
 `test_docs_consistency.py` → 21/21.
 
 ### 31.8 Test numarası çakışması (düzeltildi)
@@ -3643,3 +3643,215 @@ kaybını döndürür; 1-ply arama kaybı eğitim hedefi değildir. Boş sütun
 3. `search1` paritesi **cubeless**; küp kararı ayrı eksen (F7-73).
 4. `TIE_TOL = 0.02` bir **ölçüm** tercihidir, model kusuru değil; 143/500 vaka
    berabere çıktı çünkü corpus v2'de birçok pozisyonda tek yasal hamle var.
+
+## 36. Faz 7-R — "adım 0" ucuz ölçümleri (F7-84 – F7-92)
+
+Kullanıcı R-D'ye geçmeden **yedi** ucuz ölçüm istedi. Bu bölüm ölçümleri ve
+kararlarını verir; ayrıntılı gerekçe `ASSUMPTIONS.md` F7-84 – F7-92'de.
+
+### 36.1 Renk takası ürün yolunu etkiliyor mu? (F7-84)
+
+**Cevap: evet, ama "görülmeyen bakış" yüzünden değil.** Kod doğrulandı:
+
+* Python `er_paths.search1_values` rakip düğümleri `_vectors_for(ordered, opponent)`
+  ile **rakibin** bakışından değerlendirir.
+* C# `BackgammonSearch` `EndTurn(child)` sonrası `s.turn` ile aynı şeyi yapar.
+* Eğitim verisi **her kararı hamle sırası olan tarafın** bakışından yazar
+  (`corpus2._play_game`, `curve_pool._label_case` → `perspective=turn`).
+
+Yani **iki bakış da** hem eğitimde hem aramada görülüyor. Kusur "bakış hiç
+görülmüyor" değil, **`f(x,+1) = −f(x,−1)` simetrisinin eksik olması**. Bu yüzden
+kapı bir *genelleme* teşhisidir, ürün yolunda kör nokta değildir.
+
+### 36.2 Çıkarım anında antisimetrikleştirme (F7-85)
+
+`ê(x) = (f(x,+1) − f(x,−1))/2` (politika için logit farkı). 500 vaka:
+
+| Yol | Düzeltme öncesi | Sonrası | Fark | %95 GA |
+|---|---|---|---|---|
+| `policy` | 0,0396 | **0,0344** | −0,00525 | [−0,0135; +0,0024] |
+
+**Kazanç yönünde ama kanıtlanmadı.** Eşleştirilmiş fark σ ≈ 0,09; 0,005'lik
+etkiyi ayırt etmek için **n ≈ 1 245** vaka gerekir, 500 yetmez. Nokta tahmini
+olarak raporlanır, kapı olarak **kullanılmaz**.
+
+**F7-55'teki "naif düzeltme" neydi?** Logitlerin **ortalaması** alınmıştı
+(`(f(+1)+f(−1))/2`). Doğru işlem **fark**tır; ortalama işareti yanlış tarafa
+çevirir ve ER'yi 0,0500 → **0,1674** yapar. Kusur buydu.
+
+### 36.3 `_single_step_uses_die` kusurunun veriye etkisi (F7-86)
+
+Kusur yalnızca `max_steps == 1` **ve** çift olmayan zar **ve** büyük zar
+oynanabiliyorken tetikleniyordu.
+
+| Yol | Tetiklenme |
+|---|---|
+| Kendi zarı (eğitim yolu) | **0/1 000 (0,00 %)** |
+| Rakip 21 zarı | 210/21 000 (1,00 %) |
+| En az bir tetiklenen vaka | 26/1 000 (2,60 %) |
+
+**Eğitim verisi etkilenmedi** (6 596 pozisyon / 129 819 aday): kendi zarı
+yolunda hiç tetiklenmiyor. Yeniden üretim **gerekmez**. `search1` ER'si
+0,020962 → 0,020936 (ölçüm gürültüsü).
+
+### 36.4 Öğrenme eğrisi: 5 tohum, 165×–5 280× (F7-87, F7-88, F7-92)
+
+| Çarpan | Pozisyon | ER `policy` | ER `value` | In-sample (birleşik) |
+|---|---|---|---|---|
+| 1× | 165 | 0,0504 | 0,2114 | 1,1721 |
+| 2× | 330 | 0,0414 | 0,2245 | 0,8910 |
+| 4× | 660 | 0,0341 | 0,1099 | 0,5563 |
+| 8× | 1 320 | 0,0267 | 0,0523 | 0,3413 |
+| 16× | 2 640 | 0,0215 | 0,0473 | 0,2204 |
+| 32× | 5 280 | **0,0166** | 0,0398 | 0,2553 |
+
+| Yol | Kazanç (ER / log2 veri) | %95 GA | Karar |
+|---|---|---|---|
+| `policy` | **0,0067** | [0,0061; 0,0073] | eşik 0,0050 üstü |
+| `value` | 0,0414 | [0,0396; 0,0449] | eşik üstü |
+
+**Karar: `belirsiz`.** Tohum oybirliği yok: s1 `ölçek`, s2 `belirsiz`,
+s3 `ölçek`, s4 `belirsiz`, s5 `ölçek`. F7-87 kuralı gereği havuz kararı tek
+başına yetmez. Havuzlanmış GA eşiği kesmiyor ama **tohumlar ayrışıyor**.
+
+**Doygunluk fiti `ER = a·N^−b + c`:**
+
+| Yol | a | b | c (taban) | RMSE |
+|---|---|---|---|---|
+| `policy` | 0,2865 | 0,35 | **0,0033** | 0,0008 |
+| `value` | 5,0251 | 0,60 | 0,0087 | 0,0298 |
+
+Politika tabanı `c = 0,0033`, gnubg **0-ply**'in aynı korpustaki ER'sinden
+(0,00444) **düşük**. Bu bir **ekstrapolasyondur** (6 nokta, `b` grid sınırında);
+kanıt değil, yön göstergesidir.
+
+**64× neden yok?** Havuzda 5 281 eğitim pozisyonu var; 32× = 5 280 tam sığar,
+64× = 10 560 ister. "Ölçülemez" olarak işaretlenir, uydurulmaz.
+
+**In-sample birimi.** `train_policy_head` tek bir **birleşik** kayıp döndürür:
+`çapraz-entropi (nat/pozisyon) + 0,5·MSE (equity²)`. Bu bir ER **değildir**.
+Birim artık `IN_SAMPLE_UNITS["combined"]` üzerinden türetilir
+(`CurvePoint.resolved_in_sample_unit`); eski artefaktlarda alan boş olsa bile
+rapor birimi yazar.
+
+**Yeni yetenek.** `learning_curve.py --from-json <rapor.json> --markdown <çıktı>`
+ölçüm yapmadan raporu yeniden üretir (`CurveReport.from_dict` /
+`CurvePoint.from_dict`). Bir sunum alanı değiştiğinde 50 dakikalık eğri
+tekrar koşulmaz.
+
+### 36.5 gnubg 0/1/2-ply ER merdiveni (F7-89)
+
+Aynı korpus (corpus v2, 500 vaka), hakem gnubg **2-ply**:
+
+| Oyuncu | ER | %95 GA | Tam eşleşme |
+|---|---|---|---|
+| gnubg **0-ply** | **0,00444** | [0,00320; 0,00582] | 0,818 |
+| gnubg **1-ply** | **0,00256** | [0,00179; 0,00347] | 0,836 |
+| gnubg **2-ply** | **ölçülemez** | — | — |
+| **model** `policy` | 0,0402 | — | — |
+| **model** `search1` | 0,0209 | — | — |
+| **model** `value` | 0,0442 | — | — |
+
+2-ply **ölçülemez**: hakem kendini ölçemez; gnubg `eval` 2-ply'den derin sütun
+üretmez (F6-32). Sıfır **yazılmaz**.
+
+Model hamle seçiminde 0-ply'ın **9,0×** (politika) / **4,7×** (`search1`)
+altında. Bu, "ürün botu 0-ply'ı yener" iddiasıyla çelişmez (oyun gücü ≠ hamle
+ER'si) ama "model 0-ply seviyesinde" iddiasını **desteklemez**.
+
+### 36.6 Python–C# hamle kümesi eşitliği (F7-90)
+
+`ml/moveset_parity.py` + `Backgammon.MatchBench moveset`: corpus v2'nin
+**tamamı** (1 000 pozisyon), sıralı aday kümesi karşılaştırması →
+**1 000/1 000 uyuşma**, uyuşmazlık yok.
+
+100 bin pozisyon R-D öncesi "ucuz" kapsamın dışında (ayrı rastgele pozisyon
+üreteci + her pozisyon için C# koşumu gerekir); R-D sırasında arka planda
+koşulacak. Kalıcı öneri: Python hamle üretimi kaldırılıp C#'tan çağrılmalı —
+dört kusurun dördü de Python tarafında çıktı.
+
+### 36.7 `search1` paritesinde dışarıda kalan 143 vaka (F7-80 devamı)
+
+Eski 500 vakalık koşuda 357/357 "kararlı" vaka uyuşuyordu ve 143 vaka
+dışarıda kalıyordu. **Eleme ölçütü:** üst-2 fark `> TIE_TOL = 0,02`. Yeni
+1 000 vakalık koşuda:
+
+| Ölçüm | Değer |
+|---|---|
+| Kararlı vaka | 717 |
+| Berabere (dışarıda) | 283 |
+| Dışarıdakilerde argmax uyuşması | 271/283 (0,9576) |
+| Dışarıdakilerin üst-2 farkı (medyan / maks) | 0,0056 / 0,0200 |
+| Dışarıda kalan uyuşmazlıkların üst-2 farkı | hepsi **0,000000** |
+| Yanlılık şüphesi (uyuşmazlık farkı > 0,010) | **YOK** |
+
+Dışarıda kalan uyuşmazlıkların tamamı üst-2 farkı `≤ 0,010` bölgesinde, yani
+argmax'ın matematiksel olarak **tanımsız** olduğu yerde. Filtre gerçek bir
+kusuru saklamıyor. Skor MAE 5,5e-8 parite iddiasını destekliyor.
+
+### 36.8 Çalışma ağacı izolasyonu (F7-91)
+
+`Backgammon.UI/GameOrchestrator.cs` (+43 satır) bu ajanın değişikliği değildi ve
+üç rapordur "hangi kod durumunda test koştu" belirsizliği yaratıyordu.
+
+**Karar:** paralel çalışma ayrı bir git worktree'ye taşındı —
+`F:\Projects\VijualStudioski\TavlaAI_parallel`, dal `parallel/ui-optimistic-move`,
+içerik `GameOrchestrator.ApplyMoveOptimistic`. Değişiklik **korundu**, ana ağaç
+`git checkout --` ile **temizlendi**. Ana ağaç artık yalnızca bu ajanın
+değişikliklerini taşır.
+
+### 36.9 Testler
+
+| Dosya | Test | Aralık |
+|---|---|---|
+| `ml/tests/test_antisymmetry.py` | 10 + 5 | 158–167, 204–208 |
+| `ml/tests/test_curve_pool.py` | 8 | 168–175 |
+| `ml/tests/test_search1_parity.py` | 6 | 176–181 |
+| `ml/tests/test_learning_curve_cluster.py` | 6 + 5 + 3 | 182–187, 193–197, 209–211 |
+| `ml/tests/test_moveset_parity.py` | 5 | 188–192 |
+| `ml/tests/test_gnubg_ladder.py` | 5 | 199–203 |
+
+Numaralandırma çakışmaları giderildi: `test_gnubg_ladder` 173–177 → **199–203**,
+`test_antisymmetry` antisimetrikleştirme 194–198 → **204–208**.
+
+### 36.10 Açık kalanlar
+
+1. **Renk takası kapısı hâlâ DÜŞTÜ** — R-D'de `augment_perspectives` ile
+   geçmesi zorunlu; geçmezse çıkarım anı antisimetrikleştirmesi kalıcı çözüm.
+2. Öğrenme eğrisi kararı **`belirsiz`**; tohum sayısı 5–10'a çıkarılmalı veya
+   korpus büyütülmeli.
+3. 64× noktası için havuz yetersiz (≥ 10 560 eğitim pozisyonu gerekir).
+4. 100 bin pozisyonluk hamle kümesi eşitliği R-D sırasında koşulacak.
+5. `curve_pool` etiketleri gnubg GPL; ürün dağıtımı öncesi lisans netleşmeli.
+### 36.11 R-D öncesi taban: model vs gnubg 0-ply (2000 oyun)
+
+Adım 0'ın son ölçümü. `ml/vs_gnubg.py` ile küpsüz para oyunu, eşleştirilmiş
+zar + renk takası, 6 paralel süreç, **2000 oyun** (1000 çift). Model
+`ml/runs/stage_d_l2/onnx/model_v30.onnx`, yol `search1`, rakip gnubg 0-ply.
+
+| Ölçüm | Değer |
+|---|---|
+| Oyun | 2000 (1000 çift) |
+| Kazanma | 868/2000 = 0,4340 |
+| **ppg** | **−0,1635** |
+| ppg %95 GA | [−0,2230; −0,1050] |
+| Eşleştirilmiş fark | −0,3270 |
+| Eşleştirilmiş fark %95 GA | [−0,4420; −0,2120] |
+| Oyun başına ply | 55,9 |
+
+**Sonuç.** Model gnubg 0-ply'a **kaybediyor**; hem ppg hem eşleştirilmiş fark
+GA'sı sıfırın altında. 20 oyunluk pilot (+0,2 ppg) tamamen gürültüydü —
+20 oyunluk standart hata ~0,3 ppg mertebesindedir. Pilot artefaktı denetim
+izi olarak duruyor ama karar dayanağı değil.
+
+**R-D için.** Başarı ölçütü bu tabana göre **eşleştirilmiş** olacak: aynı 1000
+zar dizisi, aynı renk takası, aynı gnubg 0-ply. Anlamlılık eşiği m = 0,02 ppg
+(R-F'de kesinleşecek).
+
+**Maliyet.** 6 paralel süreç, ~2,5 saat CPU (tek süreçte ~7,5 saat). Kalıcı
+gnubg oturumu çağrı başına ~0,45 s → ~0,01 s indirdi; `intra_op_threads=1`
+ile ONNX oturumları çekirdek başına ayrıldı.
+
+**Yeni testler.** `ml/tests/test_gnubg_er.py`: kalıcı oturum tek-atımlık koşuyla
+aynı tabloyu vermeli (durum taşımamalı), `OnnxScorer(intra_op_threads=...)`
+kabul edilmeli. Pytest toplamı **1335**.

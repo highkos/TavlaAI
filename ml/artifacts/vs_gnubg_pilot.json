@@ -1,0 +1,19 @@
+{
+  "matchVersion": 1,
+  "model": "ml\\runs\\stage_d_l2\\onnx\\model_v30.onnx",
+  "path": "policy",
+  "gnubgPlies": 0,
+  "games": 20,
+  "pairs": 10,
+  "wins": 11,
+  "winRate": 0.55,
+  "ppg": 0.2,
+  "ppgCiLow": -0.35,
+  "ppgCiHigh": 0.75,
+  "ppgStdError": 0.28654015976455155,
+  "pairedDiffMean": 0.4,
+  "pairedDiffCiLow": -0.4,
+  "pairedDiffCiHigh": 1.1,
+  "meanPlies": 60.75,
+  "seed": 0
+}

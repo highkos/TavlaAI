@@ -459,3 +459,42 @@ def test_measure_position_is_self_consistent():
     assert result.equity_loss == pytest.approx(0.0, abs=1e-9)
     assert result.exact_match is True
     assert result.gnubg_best_index == result.model_afterstate_index == 0
+
+
+@requires_gnubg
+def test_gnubg_persistent_session_matches_one_shot():
+    """Kalici surec tek-atimlik kosuyla **ayni** tabloyu vermeli.
+
+    Kalici surec bir performans optimizasyonudur (cagri basina ~0,45 s -> ~0,01 s);
+    olcumu degistirmemelidir. Ayni tahta dizisi iki modda da ayni equity'yi
+    dondurmezse uzun mac simulasyonlari sessizce kayar.
+    """
+    boards = [_start_board()]
+    moved = _start_board()
+    moved[6] += 1
+    moved[5] -= 1
+    boards.append(moved)
+
+    one_shot = G.GnubgSession(GNUBG, plies=2)
+    persistent = G.GnubgSession(GNUBG, plies=2, persistent=True)
+    try:
+        expected = one_shot.eval_afterstates(boards, 1)
+        # Ayni oturumda iki kez: kalici surec durum tasimamali.
+        first = persistent.eval_afterstates(boards, 1)
+        second = persistent.eval_afterstates(boards, 1)
+    finally:
+        persistent.close()
+
+    assert len(first) == len(expected) == 2
+    for got, want in zip(first, expected):
+        assert got["2"] == pytest.approx(want["2"], abs=1e-9)
+    for got, want in zip(second, expected):
+        assert got["2"] == pytest.approx(want["2"], abs=1e-9)
+
+
+def test_onnx_scorer_accepts_intra_op_threads():
+    """``intra_op_threads`` kabul edilmeli; ``None`` varsayilani korur."""
+    scorer = G.OnnxScorer(_stage_d_model(), intra_op_threads=1)
+    assert scorer is not None
+    default = G.OnnxScorer(_stage_d_model())
+    assert default is not None

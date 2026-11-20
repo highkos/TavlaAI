@@ -8,19 +8,34 @@ Derinlik: 1
 
 | Olcum | Deger | Kapi | Durum |
 |---|---|---|---|
-| Argmax uyusmasi (kararli) | 357/357 (1.0000) | `>= 0.99` | GECTI |
-| Skor MAE | 0.00000005 | `<= 0.05` | GECTI |
+| Argmax uyusmasi (kararli) | 717/717 (1.0000) | `>= 0.99` | GECTI |
+| Skor MAE | 0.00000006 | `<= 0.05` | GECTI |
 
 | Ayrinti | Deger |
 |---|---|
 | Argmax uyusmasi %95 GA | [1.0000; 1.0000] |
-| Skor maksimum fark | 0.00000075 |
-| Vaka | 500 |
-| Kararli vaka (ust-2 fark > 0.02) | 357 |
-| Berabere vaka (cikarildi) | 143 |
-| Tum vakalarda argmax uyusmasi | 494/500 (0.9880) |
+| Skor maksimum fark | 0.00000093 |
+| Vaka | 1000 |
+| Kararli vaka (ust-2 fark > 0.02) | 717 |
+| Berabere vaka (cikarildi) | 283 |
+| Tum vakalarda argmax uyusmasi | 988/1000 (0.9880) |
 
 **Karar: GECTI**
+
+## Disarida kalanlar (secim yanliligi kontrolu)
+
+Kapi **kararli** vakalarda islenir: ust-2 fark `> 0.02` olanlar. Disarida kalanlar asagida raporlanir; amac, filtrenin gercek bir uyusmazligi saklamadigini gostermektir.
+
+| Olcum | Deger |
+|---|---|
+| Disarida kalan vaka | 283 |
+| Bunlarda argmax uyusmasi | 271/283 (0.9576) |
+| Disarida kalanlarin ust-2 farki (medyan) | 0.005577 |
+| Disarida kalanlarin ust-2 farki (maksimum) | 0.019977 |
+| Disarida kalan uyusmazliklarin ust-2 farki | 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000 |
+| Yanlilik suphesi (uyusmazlik farki > 0.010) | YOK |
+
+Disarida kalan uyusmazliklarin tamami ust-2 farki `<= 0.010` bolgesinde, yani argmax'in matematiksel olarak tanimsiz oldugu yerde. Filtre gercek bir kusuru **saklamiyor**; yalnizca tanimsiz bolgeyi disarida birakiyor.
 
 ## Notlar
 

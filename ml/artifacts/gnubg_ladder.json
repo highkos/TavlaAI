@@ -1,0 +1,76 @@
+{
+  "ladderVersion": 1,
+  "corpus": "ml/artifacts/reference_corpus_v2.json",
+  "refereePlies": 2,
+  "rungs": [
+    {
+      "playerPlies": 0,
+      "refereePlies": 2,
+      "measurable": true,
+      "count": 500,
+      "skipped": 0,
+      "mean": 0.00444,
+      "ciLow": 0.00319995,
+      "ciHigh": 0.005818,
+      "sigma": 0.015002284395189566,
+      "exactMatchRate": 0.818
+    },
+    {
+      "playerPlies": 1,
+      "refereePlies": 2,
+      "measurable": true,
+      "count": 500,
+      "skipped": 0,
+      "mean": 0.0025580000000000004,
+      "ciLow": 0.001794,
+      "ciHigh": 0.0034699999999999987,
+      "sigma": 0.009661538524133031,
+      "exactMatchRate": 0.836
+    },
+    {
+      "playerPlies": 2,
+      "refereePlies": 2,
+      "measurable": false,
+      "count": 0,
+      "skipped": 0,
+      "mean": null,
+      "ciLow": null,
+      "ciHigh": null,
+      "sigma": null,
+      "exactMatchRate": null,
+      "reason": "Hakem kendi kendini olcemez; 2-ply'in ER'i icin 3-ply/rollout referans gerekir ve gnubg 'eval' 2-ply'den derin sutun uretmez (F6-32). R-F madde 1 uyarinca 'olculemez' isaretlendi."
+    }
+  ],
+  "models": [
+    {
+      "label": "policy",
+      "count": 1000,
+      "mean": 0.040174,
+      "ciLow": 0.035017,
+      "ciHigh": 0.045683,
+      "sigma": 0.086727
+    },
+    {
+      "label": "search1",
+      "count": 1000,
+      "mean": 0.020936,
+      "ciLow": 0.018055,
+      "ciHigh": 0.023963,
+      "sigma": 0.0473
+    },
+    {
+      "label": "value",
+      "count": 1000,
+      "mean": 0.044199,
+      "ciLow": 0.038445,
+      "ciHigh": 0.050356,
+      "sigma": 0.095736
+    }
+  ],
+  "notes": [
+    "Hakem kendi kendini olcemez: oyuncu derinligi < hakem derinligi olmali.",
+    "ER tanimi `gnubg_er.measure_position` ile ayni: max(ref) - ref[argmax_P].",
+    "Ayni korpus, ayni hakem: model ER'si ile dogrudan karsilastirilabilir.",
+    "Model satirlari `ml/artifacts/er_paths_v2.json`'dan okunur; burada yeniden olculmez (tek kaynak)."
+  ]
+}

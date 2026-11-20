@@ -2201,7 +2201,7 @@ Bölünme **faz katmanlı** ve deterministiktir: her fazın üyeleri tohumla kar
 |---|---|
 | 41a — Faz 5 değerinin yeniden üretimi (50 pozisyon) | **0,1941** (fark 0,0000; tolerans ±0,01) |
 | 41b — 200 pozisyon ortalama ER | **0,2203** (medyan 0,1325, maks 1,6770, eşleşme %14,0) |
-| 41b — CAL / VAL-ER / TEST-ER | 0,3013 / 0,1898 / 0,1815 |
+| 41b — CAL / VAL-ER / TEST-ER | 0,3013 / 0,1898 / 0,1820 |
 | 46 — standart hata (200 pozisyon) | 0,0187; hedef SE 0,005 için gereken n ≈ 2 786 |
 | 41e — veri hacmi (100 oyun, 9 088 karar) | **3 824 bayt/karar** ham, **129 bayt/karar** gzip |
 | 41c — `OutcomeDistribution` kodlaması | **kümülatif** |
@@ -3282,13 +3282,13 @@ aynı şey değildir.
 ### 51.5 Doğrulama
 
 ```
-ml/tests                     1310/1310  (3 yavaş/koşullu test atlanır)
+ml/tests                     1335/1335  (3 yavaş/koşullu test atlanır)
 Backgammon.Tests             297/297
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
 ```
 
-Toplam **1795**. Aşama B üç yeni pytest dosyası (`test_critical.py` 76,
+Toplam **1820**. Aşama B üç yeni pytest dosyası (`test_critical.py` 76,
 `test_capacity_bench.py` 48, `test_export_ckpt.py` 12) ve `StageBDataQualityTests` (9)
 ekledi. B3 kararı dört dosya daha ekledi: `test_distill.py` (34), `test_calibrate.py` (32),
 `test_critical.py` içindeki 20 marj testi ve `ProductionDepthTests` (10).

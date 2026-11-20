@@ -56,6 +56,8 @@ namespace Backgammon.MatchBench
                         return RunDumpAfterStates(args);
                     case "search1":
                         return RunSearch1(args);
+                    case "moveset":
+                        return RunMoveSet(args);
                     case "bench":
                         return RunBench(args);
                     case "decision-latency":
@@ -88,6 +90,7 @@ namespace Backgammon.MatchBench
             Console.WriteLine("  Backgammon.MatchBench gen-positions --count 200 --out <json> [--seed 1]");
             Console.WriteLine("  Backgammon.MatchBench cube-dice --positions <in.json> --out <out.json> [--model <onnx>]");
             Console.WriteLine("  Backgammon.MatchBench search1 --positions <in.json> --out <out.json> [--model <onnx>] [--depth 1] [--limit N] [--stride N]");
+            Console.WriteLine("  Backgammon.MatchBench moveset --positions <in.json> --out <out.json> [--limit N] [--stride N]");
             Console.WriteLine("  Backgammon.MatchBench bench --model <onnx> --out <json> [--cuda 0|1] [--buckets 1,8,32,128,512,2048]");
             Console.WriteLine("  Backgammon.MatchBench decision-latency --model <onnx> --out <json> [--depth 2] [--positions 30] [--max-root 4] [--max-inner 4] [--tt-capacity 1048576]");
         }
@@ -750,8 +753,18 @@ namespace Backgammon.MatchBench
         }
 
         /// <summary>
+        /// Korpuslarda <c>phase</c> alanı iki farklı kavramı taşıyabilir: oyun
+        /// fazı (<see cref="GamePhase"/>) veya faz <b>sınıfı</b> (contact/race/bar).
+        /// Faz sınıfı taşıyan korpuslar <b>zar atmadan önceki</b> karar
+        /// noktalarıdır, dolayısıyla oyun fazı <see cref="GamePhase.PreRoll"/>'dur.
+        /// </summary>
+        private static readonly string[] PhaseClassNames = { "contact", "race", "bar", "crashed" };
+
+        /// <summary>
         /// JSON'daki <c>phase</c> alanını çözer. Hem sayı (0..5) hem de
         /// <see cref="GamePhase"/> adı (ör. <c>"Moving"</c>) kabul edilir; büyük/küçük harf duyarsızdır.
+        /// Faz <b>sınıfı</b> adları (contact/race/bar) <see cref="GamePhase.PreRoll"/> olarak
+        /// eşlenir; bu bilinçli ve belgelenmiş bir eşlemedir, sessiz geri düşüş değildir.
         /// </summary>
         private static GamePhase ParsePhase(JsonElement e)
         {
@@ -771,6 +784,14 @@ namespace Backgammon.MatchBench
                 Enum.IsDefined(typeof(GamePhase), parsed))
             {
                 return parsed;
+            }
+
+            foreach (string cls in PhaseClassNames)
+            {
+                if (string.Equals(name, cls, StringComparison.OrdinalIgnoreCase))
+                {
+                    return GamePhase.PreRoll;
+                }
             }
 
             throw new FormatException("phase çözümlenemedi: " + name);
@@ -1257,6 +1278,137 @@ namespace Backgammon.MatchBench
             sb.Append("\n  ],\n  \"count\": ").Append(written).Append("\n}\n");
             WriteText(outPath, sb.ToString());
             Console.WriteLine("dump-afterstates: " + written + " kayit -> " + outPath);
+            return 0;
+        }
+
+        // ------------------------------------------------------------------
+        // moveset — C# yasal hamle kumesi ile Python `reference_gen` esitligi
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Faz 7-R adim 0: <b>Python–C# hamle kumesi esitligi</b>.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <c>tools/reference_gen.py</c> Python'da <b>ikinci bir hamle uretici</b>
+        /// tutuyor. Bu, dort ayri olcum kusurunun kaynagi oldu (F7-80). Kalici
+        /// cozum, iki ureticinin <b>kume esitligini</b> surekli dogrulamaktir.
+        /// </para>
+        /// <para>
+        /// Bu alt komut her vaka icin <see cref="LegalMoveGenerator"/>'in urettigi
+        /// afterstate kumesini (tahta + toplanan tas sayilari) doker. Python tarafi
+        /// ayni kumeyi <c>reference_gen.legal_after_states</c> ile uretir ve
+        /// <c>ml/moveset_parity.py</c> kumeleri karsilastirir.
+        /// </para>
+        /// <para>
+        /// <b>Buyuk-zar kurali dahil:</b> <see cref="LegalMoveGenerator"/> kurali
+        /// uygular; Python tarafi da uygulamak zorundadir. F7-80'deki sayac hatasi
+        /// tam olarak bu kurali bozuyordu.
+        /// </para>
+        /// </remarks>
+        private static int RunMoveSet(string[] args)
+        {
+            string positionsPath = null;
+            string outPath = null;
+            int limit = 0;
+            int stride = 1;
+
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (args[i] == "--positions" && i + 1 < args.Length)
+                {
+                    positionsPath = args[++i];
+                }
+                else if (args[i] == "--out" && i + 1 < args.Length)
+                {
+                    outPath = args[++i];
+                }
+                else if (args[i] == "--limit" && i + 1 < args.Length)
+                {
+                    limit = int.Parse(args[++i], CultureInfo.InvariantCulture);
+                }
+                else if (args[i] == "--stride" && i + 1 < args.Length)
+                {
+                    stride = int.Parse(args[++i], CultureInfo.InvariantCulture);
+                }
+            }
+
+            if (positionsPath == null || outPath == null)
+            {
+                Console.Error.WriteLine("moveset: --positions ve --out zorunlu.");
+                return 2;
+            }
+
+            if (stride < 1)
+            {
+                Console.Error.WriteLine("moveset: --stride >= 1 olmali.");
+                return 2;
+            }
+
+            EngineSettings es = EngineSettings.Default;
+            var list = new AfterStateList();
+
+            using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(positionsPath));
+            JsonElement cases = doc.RootElement.GetProperty("cases");
+
+            var sb = new StringBuilder();
+            sb.Append("{\n  \"cases\": [");
+
+            int index = 0;
+            int seen = 0;
+
+            foreach (JsonElement c in cases.EnumerateArray())
+            {
+                if (seen++ % stride != 0)
+                {
+                    continue;
+                }
+
+                if (limit > 0 && index >= limit)
+                {
+                    break;
+                }
+
+                BackgammonState state = StateFromJson(c);
+                JsonElement dice = c.GetProperty("dice");
+                BackgammonEngine.SetDice(state, dice[0].GetInt32(), dice[1].GetInt32());
+
+                list.Clear();
+                LegalMoveGenerator.GenerateAfterStates(state, es, list);
+
+                sb.Append(index == 0 ? "\n" : ",\n");
+                sb.Append("    {\"name\": ").Append(JsonString(c.GetProperty("name").GetString()));
+                sb.Append(", \"turn\": ").Append(state.turn);
+                sb.Append(", \"count\": ").Append(list.Count);
+                sb.Append(", \"afterStates\": [");
+
+                for (int k = 0; k < list.Count; k++)
+                {
+                    ReadOnlySpan<sbyte> board = list.BoardOf(k);
+                    sb.Append(k == 0 ? "\n" : ",\n");
+                    sb.Append("      {\"board\": [");
+                    for (int p = 0; p < AfterStateList.BoardSize; p++)
+                    {
+                        if (p > 0)
+                        {
+                            sb.Append(", ");
+                        }
+
+                        sb.Append(board[p]);
+                    }
+
+                    sb.Append("], \"whiteOff\": ").Append(list.WhiteBorneOff[k]);
+                    sb.Append(", \"blackOff\": ").Append(list.BlackBorneOff[k]);
+                    sb.Append('}');
+                }
+
+                sb.Append("]}");
+                index++;
+            }
+
+            sb.Append("\n  ]\n}\n");
+            File.WriteAllText(outPath, sb.ToString());
+            Console.WriteLine("moveset: " + index + " vaka -> " + outPath);
             return 0;
         }
 

@@ -469,6 +469,257 @@ def measure_antisymmetry(
     return report
 
 
+# ----------------------------------------------------------------------
+# Cikarim aninda antisimetriklestirme (F7-84)
+# ----------------------------------------------------------------------
+
+SYMMETRISED_PATH = "ml/artifacts/antisymmetry_symmetrised.json"
+SYMMETRISED_MD_PATH = "ml/artifacts/antisymmetry_symmetrised.md"
+
+
+def symmetrise_value(e_plus: float, e_minus: float) -> float:
+    """``e_hat = (f(x,+1) - f(x,-1)) / 2``.
+
+    Antisimetrik bir modelde ``f(x,-1) = -f(x,+1)`` oldugundan bu ifade
+    ``f(x,+1)``'e indirgenir; kusurlu modelde iki bakisin **ortalamasini**
+    alir, yani kusuru yariya indirir. Iki ileri gecis gerektirir.
+
+    **Ortalama degil fark.** Iki bakis ayni fiziksel pozisyonu **zit
+    isaretle** puanlar; bu yuzden dogru simetrizasyon farktir. F7-55'teki
+    basarisiz "naif duzeltme" logit'leri **ortaliyordu** (isaret hatasi).
+    """
+    return 0.5 * (float(e_plus) - float(e_minus))
+
+
+def symmetrise_logits(logits_plus: Sequence[float], logits_minus: Sequence[float]) -> list[float]:
+    """Politika icin ``(logit(+1) - logit(-1)) / 2``.
+
+    Iki bakis **ayni** aday listesini siralar (adaylar hamle yapan tarafin
+    afterstate'leri), dolayisiyla fark anlamlidir. Ortalama almak iki farkli
+    skorlama fonksiyonunu karistirir ve siralalmayi bozar.
+    """
+    if len(logits_plus) != len(logits_minus):
+        raise AntisymmetryError("logit uzunluklari farkli")
+    return [0.5 * (float(a) - float(b)) for a, b in zip(logits_plus, logits_minus)]
+
+
+class SymmetrisedReport:
+    """Cikarim aninda antisimetriklestirmenin ER'ye etkisi."""
+
+    def __init__(self, *, model: str, corpus: str, plies: int) -> None:
+        self.model = model
+        self.corpus = corpus
+        self.plies = int(plies)
+        self.cases = 0
+        self.raw_policy: list[float] = []
+        self.sym_policy: list[float] = []
+        self.raw_value: list[float] = []
+        self.sym_value: list[float] = []
+        self.argmax_changed = 0
+        self.notes: list[str] = []
+
+    def _mean(self, xs: Sequence[float]) -> float:
+        return float(np.mean(xs)) if xs else float("nan")
+
+    @property
+    def raw_policy_er(self) -> float:
+        return self._mean(self.raw_policy)
+
+    @property
+    def sym_policy_er(self) -> float:
+        return self._mean(self.sym_policy)
+
+    @property
+    def raw_value_er(self) -> float:
+        return self._mean(self.raw_value)
+
+    @property
+    def sym_value_er(self) -> float:
+        return self._mean(self.sym_value)
+
+    def _paired(self, before: Sequence[float], after: Sequence[float]) -> tuple[float, float, float]:
+        if not before or len(before) != len(after):
+            return float("nan"), float("nan"), float("nan")
+        diff = np.asarray(after, dtype=np.float64) - np.asarray(before, dtype=np.float64)
+        low, high = _bootstrap_ci(diff, resamples=BOOTSTRAP_RESAMPLES, seed=BOOTSTRAP_SEED)
+        return float(diff.mean()), low, high
+
+    @property
+    def policy_delta(self) -> tuple[float, float, float]:
+        return self._paired(self.raw_policy, self.sym_policy)
+
+    @property
+    def value_delta(self) -> tuple[float, float, float]:
+        return self._paired(self.raw_value, self.sym_value)
+
+    @property
+    def policy_improved(self) -> bool:
+        _, _, high = self.policy_delta
+        return bool(np.isfinite(high) and high < 0.0)
+
+    @property
+    def value_improved(self) -> bool:
+        _, _, high = self.value_delta
+        return bool(np.isfinite(high) and high < 0.0)
+
+    def to_dict(self) -> dict[str, Any]:
+        pd, pl, ph = self.policy_delta
+        vd, vl, vh = self.value_delta
+        return {
+            "symmetrisedVersion": 1,
+            "model": self.model,
+            "corpus": self.corpus,
+            "plies": self.plies,
+            "cases": self.cases,
+            "argmaxChanged": self.argmax_changed,
+            "policy": {
+                "rawEr": self.raw_policy_er,
+                "symEr": self.sym_policy_er,
+                "delta": pd,
+                "ciLow": pl,
+                "ciHigh": ph,
+                "improved": self.policy_improved,
+            },
+            "value": {
+                "rawEr": self.raw_value_er,
+                "symEr": self.sym_value_er,
+                "delta": vd,
+                "ciLow": vl,
+                "ciHigh": vh,
+                "improved": self.value_improved,
+            },
+            "notes": list(self.notes),
+        }
+
+
+def measure_symmetrised(
+    model_path: Path,
+    cases: Sequence[dict[str, Any]],
+    *,
+    gnubg: Path,
+    plies: int = 2,
+    timeout: int = 120,
+    progress: bool = False,
+) -> SymmetrisedReport:
+    """Ayni aday kumesini iki bakistan puanlar, sonra simetrizasyonu olcer.
+
+    Her vaka icin:
+
+    * ``raw``  : ``argmax(logit(+1))`` -- bugunku urun yolu
+    * ``sym``  : ``argmax((logit(+1) - logit(-1)) / 2)``
+    * deger icin ``raw = e(+1)``, ``sym = (e(+1) - e(-1)) / 2``
+
+    Hakem **bir kez** cagrilir; iki kol da ayni referansi kullanir, bu yuzden
+    olculen fark yalnizca **secim** farkidir (Kural 7).
+    """
+    usable, skipped = gnubg_er.split_cases(cases)
+    if not usable:
+        raise AntisymmetryError("kullanilabilir vaka yok")
+    session = gnubg_er.GnubgSession(gnubg, plies=plies, timeout=timeout)
+    scorer = gnubg_er.OnnxScorer(Path(model_path))
+    report = SymmetrisedReport(model=str(model_path), corpus="", plies=plies)
+    if skipped:
+        report.notes.append("%d vaka atlandi (terminal/gecersiz)" % len(skipped))
+
+    for index, case in enumerate(usable, start=1):
+        if progress:
+            print("[%d/%d] %s" % (index, len(usable), case.get("name", "?")), file=sys.stderr)
+        turn = int(case["turn"])
+        after_states = case["afterStates"]
+        if not after_states:
+            continue
+
+        tables = session.eval_afterstates([a["board"] for a in after_states], -turn)
+        equities = [-gnubg_er._equity_at(table, plies) for table in tables]
+        best_equity = max(equities)
+
+        vec_plus = [
+            gnubg_er.vectorize(
+                a["board"], int(a.get("whiteOff", 0)), int(a.get("blackOff", 0)),
+                perspective=turn,
+            )
+            for a in after_states
+        ]
+        vec_minus = [
+            gnubg_er.vectorize(
+                a["board"], int(a.get("whiteOff", 0)), int(a.get("blackOff", 0)),
+                perspective=-turn,
+            )
+            for a in after_states
+        ]
+
+        logits_plus = scorer.logits(vec_plus)
+        logits_minus = scorer.logits(vec_minus)
+        values_plus = scorer.values(vec_plus)
+        values_minus = scorer.values(vec_minus)
+
+        sym_logits = symmetrise_logits(logits_plus, logits_minus)
+        sym_values = [
+            symmetrise_value(a, b) for a, b in zip(values_plus, values_minus)
+        ]
+
+        raw_index = int(np.argmax(logits_plus))
+        sym_index = int(np.argmax(sym_logits))
+        if raw_index != sym_index:
+            report.argmax_changed += 1
+
+        report.raw_policy.append(best_equity - equities[raw_index])
+        report.sym_policy.append(best_equity - equities[sym_index])
+
+        raw_value_index = int(np.argmax(values_plus))
+        sym_value_index = int(np.argmax(sym_values))
+        report.raw_value.append(best_equity - equities[raw_value_index])
+        report.sym_value.append(best_equity - equities[sym_value_index])
+        report.cases += 1
+
+    if report.cases == 0:
+        raise AntisymmetryError("hicbir vaka olculemedi")
+    return report
+
+
+def build_symmetrised_markdown(report: SymmetrisedReport) -> str:
+    pd, pl, ph = report.policy_delta
+    vd, vl, vh = report.value_delta
+    lines = [
+        "# Faz 7-R - Cikarim aninda antisimetriklestirme",
+        "",
+        "Soru: **renk takasi kusurunu egitmeden, cikarimda duzeltebilir miyiz?**",
+        "",
+        "`e_hat = (f(x,+1) - f(x,-1)) / 2`, politika icin `(logit(+1) - logit(-1)) / 2`.",
+        "Iki ileri gecis; bir ONNX cikarimi icin ihmal edilebilir maliyet.",
+        "",
+        "Model: `%s`" % report.model,
+        "Hakem: gnubg %d-ply" % report.plies,
+        "",
+        "| Yol | Ham ER | Simetrik ER | Fark | %95 GA | Karar |",
+        "|---|---|---|---|---|---|",
+        "| `policy` | %.4f | %.4f | %+.4f | [%+.4f; %+.4f] | %s |"
+        % (
+            report.raw_policy_er, report.sym_policy_er, pd, pl, ph,
+            "IYILESDI" if report.policy_improved else "kanitlanmadi",
+        ),
+        "| `value` | %.4f | %.4f | %+.4f | [%+.4f; %+.4f] | %s |"
+        % (
+            report.raw_value_er, report.sym_value_er, vd, vl, vh,
+            "IYILESDI" if report.value_improved else "kanitlanmadi",
+        ),
+        "",
+        "| Ayrinti | Deger |",
+        "|---|---|",
+        "| Vaka | %d |" % report.cases,
+        "| Argmax degisen vaka | %d (%.4f) |"
+        % (report.argmax_changed, report.argmax_changed / max(report.cases, 1)),
+        "",
+    ]
+    if report.notes:
+        lines.append("## Notlar")
+        lines.append("")
+        for note in report.notes:
+            lines.append("- " + note)
+        lines.append("")
+    return "\n".join(lines)
+
+
 def build_markdown(
     report: AntisymmetryReport, *, title: str = "Faz 7-R - Renk takasi (antisimetri)"
 ) -> str:
@@ -561,6 +812,24 @@ def build_parser() -> argparse.ArgumentParser:
     measure.add_argument("--out", default=ANTISYMMETRY_PATH)
     measure.add_argument("--markdown", default=ANTISYMMETRY_MD_PATH)
     measure.add_argument("--progress", action="store_true")
+
+    sym = sub.add_parser(
+        "symmetrise", help="cikarim aninda antisimetriklestirmenin ER etkisi"
+    )
+    sym.add_argument("--model", required=True, help="ONNX model yolu")
+    sym.add_argument(
+        "--cases",
+        default="ml/artifacts/reference_corpus_v2.json",
+        help="vaka dosyasi (varsayilan: corpus v2)",
+    )
+    sym.add_argument("--limit", type=int, default=0, help="ilk N vaka (0 = hepsi)")
+    sym.add_argument("--stride", type=int, default=1, help="her N'inci vaka")
+    sym.add_argument("--plies", type=int, default=2, help="gnubg hakem derinligi")
+    sym.add_argument("--gnubg", default=None, help="gnubg-cli yolu")
+    sym.add_argument("--timeout", type=int, default=120)
+    sym.add_argument("--out", default=SYMMETRISED_PATH)
+    sym.add_argument("--markdown", default=SYMMETRISED_MD_PATH)
+    sym.add_argument("--progress", action="store_true")
     return parser
 
 
@@ -576,7 +845,7 @@ def _load_cases(path: Path) -> list[dict[str, Any]]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.command != "measure":
+    if args.command not in ("measure", "symmetrise"):
         raise AntisymmetryError("bilinmeyen komut: %s" % args.command)
 
     cases = _load_cases(Path(args.cases))
@@ -586,6 +855,39 @@ def main(argv: Sequence[str] | None = None) -> int:
         cases = cases[: args.limit]
 
     gnubg = Path(args.gnubg) if args.gnubg else gnubg_er.find_gnubg()
+
+    if args.command == "symmetrise":
+        sym = measure_symmetrised(
+            Path(args.model),
+            cases,
+            gnubg=gnubg,
+            plies=args.plies,
+            timeout=args.timeout,
+            progress=args.progress,
+        )
+        sym.corpus = str(args.cases)
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(
+            json.dumps(sym.to_dict(), ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        md = Path(args.markdown)
+        md.parent.mkdir(parents=True, exist_ok=True)
+        md.write_text(build_symmetrised_markdown(sym) + "\n", encoding="utf-8")
+
+        pd, pl, ph = sym.policy_delta
+        vd, vl, vh = sym.value_delta
+        print("vaka: %d" % sym.cases)
+        print("policy: %.4f -> %.4f (%+.4f) GA [%+.4f; %+.4f] -> %s" % (
+            sym.raw_policy_er, sym.sym_policy_er, pd, pl, ph,
+            "IYILESDI" if sym.policy_improved else "kanitlanmadi"))
+        print("value : %.4f -> %.4f (%+.4f) GA [%+.4f; %+.4f] -> %s" % (
+            sym.raw_value_er, sym.sym_value_er, vd, vl, vh,
+            "IYILESDI" if sym.value_improved else "kanitlanmadi"))
+        print("argmax degisen: %d/%d" % (sym.argmax_changed, sym.cases))
+        return 0 if (sym.policy_improved or sym.value_improved) else 1
+
     report = measure_antisymmetry(
         Path(args.model),
         cases,

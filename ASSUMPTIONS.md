@@ -4771,3 +4771,373 @@ dondurulmez.
 
 **Testler.** `test_pipeline_health.py` + `test_gnubg_distill.py` +
 `test_stage_r_c.py` -> **315 test** gecti.
+
+## F7-84 - Renk takasi kusuru **urun yolunu** etkiliyor mu? (bakis sorusu)
+
+Kullanici "adim 0" incelemesinde sordu: *"Bu kusur urunde oynanan yolu etkiliyor
+mu? ... Rakip dugumleri arama icinde ters bakisla degerlendiriliyorsa derinlik
+>= 1 aramada dogrudan hata uretir."*
+
+**Cevap: evet, etkiliyor - ama "gorulmemis girdi" degil, "tutarsiz tahmin".**
+
+**Kod kaniti (iki yol da ayni).**
+
+| Yol | Yer | Ne yapiyor |
+|---|---|---|
+| Python `search1` | `ml/er_paths.py:190` | `_vectors_for(ordered, opponent)` - rakibin afterstate'leri **rakip bakisiyla** vektorize edilir |
+| C# urun aramasi | `Backgammon.Core/Search/BackgammonSearch.cs:575` | `EndTurn(child)` sonra `SearchNode(child, ...)`; `SearchNode` `s.turn` ile degerlendirir (satir 365/374/382) |
+
+Yani her iki arama da rakip dugumunu **rakibin** bakisindan puanlar. Derinlik
+>= 1 aramada model `-1` bakisini **her** hamlede gorur.
+
+**Ama bu bakis egitimde gorulmemis degil.** `corpus2._play_game` her karar
+noktasini **oynayacak tarafin** bakisiyla kaydeder (`turn` = mover) ve
+`curve_pool._label_case` vektorleri `perspective=turn` ile kurar. Bir oyun
+boyunca iki taraf da mover oldugu icin **iki bakis da** egitimde vardir.
+
+Kusur sununla ilgili: model "ben oynayacak tarafim" diye ogreniyor ama
+`f(x,+1) = -f(x,-1)` **simetrisini** ogrenmiyor. Arama rakip dugumunu
+degerlendirdiginde bu tutarsizlik dogrudan hataya donusuyor.
+
+**Neden search1 yine de politikadan iyi?** search1 ER 0,0209 < policy 0,0402.
+1-ply arama, tutarsiz deger tahminine ragmen **daha iyi hamle** seciyor: hata
+tek tek dugumlerde var ama argmax'i her zaman bozmuyor. Bu, kusurun maliyetinin
+"arama tamamen bozuk" degil, "arama beklenenden az kazandiriyor" oldugunu
+gosterir.
+
+**Sonuc.** Kusur urun yolunda **gercek**; R-D'de `augment_perspectives` ile
+kapatilacak. Cikarim aninda antisimetriklestirme (F7-85) bir **yedek** cozum.
+
+## F7-85 - Cikarim aninda antisimetriklestirme: kucuk ama **kanitlanmamis** kazanc
+
+Kullanici "egitim yapmadan hizli deney" istedi: `e_hat = (f(x,+1) - f(x,-1))/2`,
+politika icin `(logit(+1) - logit(-1))/2`. `ml/antisymmetry.py` bunu olcer
+(`measure_symmetrised`).
+
+**Olcum (model_v30, corpus v2, 500 vaka, gnubg 2-ply hakem, eslestirilmis GA):**
+
+| Yol | Ham ER | Simetrik ER | Fark | %95 GA | Iyilesme? |
+|---|---|---|---|---|---|
+| `policy` | 0,0396 | 0,0344 | **-0,00525** | [-0,0135; +0,0024] | **hayir** (GA sifiri iceriyor) |
+| `value` | 0,0460 | 0,0402 | **-0,00577** | [-0,0156; +0,0031] | **hayir** (GA sifiri iceriyor) |
+
+Argmax 500 vakanin **156'sinda** degisiyor (0,3120). Yani simetrizasyon secimi
+gercekten degistiriyor, ama ortalama ER kazanci bu orneklemde **kanitlanmiyor**.
+
+**Guc hesabi.** Eslestirilmis farkin standart sapmasi ~0,09; `delta = 0,005`
+icin gereken n: `(1,96 * 0,09 / 0,005)^2 ~= 1 245` vaka. 500 vaka **yetersiz**.
+Karar: "kusurun maliyeti ~0,005 ER" **nokta tahmini** olarak raporlanir, kapi
+olarak **kullanilmaz**.
+
+**F7-55'teki "naif duzeltme" neydi?** Logit'leri **ortaliyordu**
+(`(logit(+1) + logit(-1))/2`). Iki bakis ayni fiziksel pozisyonu **zit isaretle**
+puanladigi icin ortalama, iki farkli skorlama fonksiyonunu karistirir ve
+siralamayi bozar; ER 0,0500 -> 0,1674 **kotulesmisti**. Dogru islem **fark**tir.
+`test_194_symmetrise_value_is_difference_not_mean` bunu kilitler.
+
+**Karar.** Cikarim aninda antisimetriklestirme **kalici cozum degil**: kazanc
+kanitlanmadi ve iki ileri gecis maliyeti var. Once R-D'de `augment_perspectives`
+denenir; kapi hala duserse bu yedek yeniden olculur (daha buyuk n ile).
+
+**Artefaktlar.** `ml/artifacts/antisymmetry_symmetrised.json` / `.md`.
+
+**Testler.** `ml/tests/test_antisymmetry.py` - 5 test (Test 204-208).
+
+## F7-86 - `_single_step_uses_die` kusurunun **veriye** etkisi: %1,00 zar / %2,60 vaka
+
+Kullanici sordu: *"Korpus v2 ve curve_pool pozisyonlari bu hatali kodla mi
+uretilidi? ... Duzeltmeden once uretilen tum veriyi yeniden uret ya da en azindan
+etkilenen pozisyon sayisini raporla."*
+
+**Kusur kosulu.** `max_steps == 1` **ve** zarlar cift degil **ve** buyuk zar
+oynanabiliyor. O zaman eski `_single_step_uses_die` off sayacini iki kez
+artiriyor, hicbir sonuc eslesmiyor, `legal_after_states` **bos kume** donuyordu.
+
+**Olcum (`ml/artifacts/single_step_impact.json`, 1 000 gercek pozisyon x 21 zar):**
+
+| Kume | Kendi zariyla tetiklenen | Rakip 21 zarinda | En az bir zarinda |
+|---|---|---|---|
+| `search1_corpus` (1 000) | **0** (0,00%) | 210/21 000 (**1,00%**) | 26 vaka (**2,60%**) |
+| `reference_corpus_v2` (1 000) | **0** (0,00%) | 210/21 000 (**1,00%**) | 26 vaka (**2,60%**) |
+
+(Iki korpus ayni pozisyonlardan turetilir; sayilar bu yuzden ayni.)
+
+**Yorum - etki "etiket bozulmasi" degil, "pozisyon dusmesi".**
+
+* **Kendi zariyla 0/1 000.** `corpus2._play_game` ve `gnubg_distill.afterstate_case`
+  pozisyonun **kendi** zariyla cagirir. Kusur bu yolda **hic** tetiklenmedi.
+  Dolayisiyla **egitim verisi (6 596 pozisyon, 129 819 aday) etkilenmedi**;
+  yeniden uretmek gerekmiyor.
+* **Rakip zarinda %1,00.** `er_paths.search1_values` rakibin 21 zarini ayri ayri
+  cagirir; burada tetiklendi. Etki: o zar "rakip oynayamaz" dalina dustu ve
+  deger kafasindan tahmin edildi. Vakalarin **%2,60**'inda en az bir zar boyle.
+* **Baslik ER'si.** search1 0,020962 -> 0,020936 (**-0,000026**). Politika ve
+  deger yollari `legal_after_states` kullanmadigi icin **degismedi**
+  (0,0402 / 0,0442).
+
+**Karar.** Veri yeniden uretilmiyor: kendi-zar yolu temiz. search1 olcumu
+duzeltilmis kodla **yeniden uretildi** (`search1_parity.json`, `er_paths_v2.json`).
+
+## F7-87 - Ogrenme egrisi: havuzlanmis GA tohumlari **ek veri** gibi sayiyor
+
+Kullanici: *"Uc tohumdan biri 'olcek', ikisi 'belirsiz'. Havuzlanmis GA tohumlari
+ek veri gibi ele aliyorsa guveni oldugundan yuksek gosterir. Kendi kuralin 'tek
+tohum yeterli degil' diyorsa etiket belirsiz olmali."*
+
+**Hakli.** `run_curve_multi_seed` tohumlari havuzlar; ayni oyun kumesi farkli
+tohumlarda **tekrar** sayilir. Havuzlanmis GA bu yuzden yapay olarak **daralir**.
+
+**Duzeltme (`CurveReport.decision`).** Havuz karari artik **tek basina** yetmez:
+
+1. Havuzlanmis `gainCiLow >= eps` -> aday `olcek`; `gainCiHigh < eps` -> aday
+   `pipeline`; aksi halde `belirsiz`.
+2. **Tohum oybirligi:** `len(seed_decisions) > 1` ise **tum** tohumlarin ayni
+   karari vermesi gerekir. Aksi halde `belirsiz`.
+
+Eski artefakt (tohum 1 `belirsiz`, 2 `olcek`, 3 `belirsiz`) bu kurala gore
+**`belirsiz`** olmaliydi; `olcek` yaziyordu. Yeni kosumda kural uygulanir.
+
+`seedAgreement` alani JSON'a eklendi; `seedDecisions` / `seedGains` de yazilir.
+
+**Testler.** `ml/tests/test_learning_curve_cluster.py` - Test 193-197 (oybirligi
+kurali, doygunluk fiti, in-sample birimi) + Test 209-211 (birim turetme, JSON
+gidis-donusu, `--from-json`) + Test 182-187.
+
+## F7-88 - Ogrenme egrisi: 5 tohum, 16x-32x, taban parametreli fit, birim
+
+Kullanici dort sey istedi: (a) tohum 5-10, (b) egriyi 16x-64x'e uzat, (c)
+`ER = a*N^-b + c` taban parametreli fit, (d) "in-sample" sutununun **birimini**
+yaz.
+
+**(a) Tohum.** `--seeds 1 2 3 4 5` (5 tohum). Karar kurali F7-87.
+
+**(b) Carpanlar.** `CURVE_MULTIPLIERS = (1, 2, 4, 8, 16, 32)`. 64x icin havuz
+yetersiz (5 281 egitim pozisyonu); 32x = 5 280 **tam** sigar. 64x ancak daha
+buyuk havuzla olculur ve bu raporda **"olculemez"** olarak isaretlenir.
+
+**(c) Doygunluk fiti.** `fit_saturation` uc parametreli modeli kaba grid + kapali
+form en kucuk karelerle uydurur (`b` icin [0, 3], `c` icin [0, min(ER)]).
+`c` = "bu mimari ve bu ogretmenle ulasilabilir en iyi ER" sorusunun **olculen**
+cevabi. Iki parametreli log-egim modeli `c`'yi sifira zorlar ve bu yanlistir.
+
+**(d) In-sample birimi.** `IN_SAMPLE_UNITS` sozlugu her yol icin birim yazar:
+`policy` -> "capraz-entropi (nats/pozisyon)", `value` -> "MSE (equity^2)",
+`search1` -> "yok (egitim hedefi degil)". In-sample sutunu **ER degildir**;
+egitim kaybi oldugu icin ER ile karsilastirilmaz.
+
+**Deger yolu platolari.** 4x -> 8x: 0,0460 -> 0,0454 (fark 0,0006). Politika
+dusmeye devam ediyor (0,0242 -> 0,0189). Bu, deger kafasinin **doydugunu**,
+politikanin doymadigini gosterir; R-D'de deger kafasi icin kapasite/veri
+dengesi yeniden bakilmalidir.
+
+**Oncesi/sonrasi eslesmis kiyas.** Bu egri **antisimetri duzeltmesinden onceki**
+durumdur. R-D'de ayni egri `augment_perspectives` ile kosulunca ayni havuz,
+ayni tohumlar, ayni carpanlar kullanilacagi icin karsilastirma **eslestirilmis**
+olur (pozisyon basina fark). Bu bir avantajdir ve R-D raporunda kullanilacaktir.
+
+## F7-89 - gnubg 0/1/2-ply ER merdiveni: model merdivende **nerede**?
+
+Kullanici: *"gnubg 0/1/2-ply ER merdiveni ayni korpusta yok. Modeli merdivende
+konumlayan tek olcum bu."*
+
+`ml/gnubg_ladder.py` ayni korpusta (corpus v2, 500 vaka) gnubg'yi **kendine
+karsi** olcer; hakem 2-ply.
+
+| Oyuncu | ER | %95 GA | Tam eslesme |
+|---|---|---|---|
+| gnubg **0-ply** | **0,00444** | [0,00320; 0,00582] | 0,818 |
+| gnubg **1-ply** | **0,00256** | [0,00179; 0,00347] | 0,836 |
+| gnubg **2-ply** | **olculemez** | - | - |
+
+2-ply **olculemez**: hakem kendini olcemez; 2-ply'in ER'i icin 3-ply/rollout
+gerekir ve gnubg `eval` 2-ply'den derin sutun uretmez (F6-32). "Olculemez"
+isaretlenir, sifir **yazilmaz**.
+
+**Model satirlari (ayni korpus, ayni hakem):**
+
+| Yol | ER | 0-ply'a gore |
+|---|---|---|
+| `policy` | 0,0402 | **9,0x** kotu |
+| `search1` | 0,0209 | **4,7x** kotu |
+| `value` | 0,0442 | 10,0x kotu |
+
+**Yorum.** Model **hamle seciminde** gnubg 0-ply'in belirgin sekilde altinda.
+Bu, "urun botu gnubg 0-ply'i yener" iddiasiyla **celismez** (oyun gucu hamle
+ER'sinden farkli bir buyukluktur; F7-91'e bakin) ama "model 0-ply seviyesinde"
+iddiasini **desteklemez**. R-D'nin hedefi bu bosluk.
+
+**Artefaktlar.** `ml/artifacts/gnubg_ladder.json` / `.md`.
+
+**Testler.** `ml/tests/test_gnubg_ladder.py` - 5 test (Test 199-203).
+
+## F7-90 - Python-C# hamle kumesi esitligi: 1 000/1 000
+
+Kullanici: *"Python'un aday kumesini C# LegalMoveGenerator ile ... kume esitligi
+testiyle bagla (100 bin pozisyon)."*
+
+`ml/moveset_parity.py` + `Backgammon.MatchBench moveset` alt komutu ayni
+pozisyonlarda iki ureticinin **sirali** aday kumesini karsilastirir.
+
+**Olcum (corpus v2, 1 000 pozisyon):** `agree = 1 000`, `rate = 1,0000`,
+GA [1,0000; 1,0000], uyusmazlik **yok**.
+
+**100 bin pozisyon neden yok?** 1 000 pozisyon corpus v2'nin **tamami**;
+100 bin icin ayri bir rastgele pozisyon ureteci gerekir ve her pozisyon icin
+C# tarafinda bir kosum gerekir. Bu, R-D oncesi "ucuz" kapsamin disinda. Kapi
+1 000'de **gecti**; 100 bin kosumu R-D sirasinda arka planda calistirilacak.
+
+**Kalici cozum onerisi.** Python hamle uretimi **kaldirilip** C#'tan cagrilmali
+(`MatchBench` CLI zaten var). Dort kusurun dordu de Python tarafinda cikti; bu
+ikinci uretici surekli hata kaynagi. Bu, R-D sonrasi bir mimari karar olarak
+kaydedilir.
+
+**Artefaktlar.** `ml/artifacts/moveset_parity.json` / `.md`,
+`ml/artifacts/moveset_cs.json`.
+
+**Testler.** `ml/tests/test_moveset_parity.py` - 5 test (Test 188-192).
+
+## F7-91 - Calisma agaci izolasyonu: paralel UI calismasi ayri worktree'de
+
+Uc rapordur tekrar eden sorun: `Backgammon.UI/GameOrchestrator.cs` +43 satir
+degisikligi **bu ajanin degil**. Ayni calisma agacinda paralel bir calisma
+vardi ve "29 dakikalik testler hangi kod durumunda kostu" belirsizdi.
+
+**Karar.** Paralel calisma **ayri bir git worktree'ye** tasindi:
+
+* Worktree: `F:\Projects\VijualStudioski\TavlaAI_parallel`
+* Dal: `parallel/ui-optimistic-move`
+* Icerik: `GameOrchestrator.ApplyMoveOptimistic` (cevrimici modda iyimser hamle
+  yazimi) - degisiklik **korundu**, ana agac **temizlendi**.
+
+Ana agac artik yalnizca bu ajanin degisikliklerini tasir. Bundan sonra olcumler
+**tek** kod durumunda kosar.
+
+**Not.** `TavlaAI_agent` worktree'si (`agent/faz7r`) de mevcut; ajan calismasi
+orada da izlenebilir.
+
+## F7-92 - Ogrenme egrisi (5 tohum, 165x-5 280x): karar **`belirsiz`**, taban `c = 0,0033`
+
+F7-88 dort istegi tanimladi; bu bolum **olcumu** verir. Komut:
+
+```
+python ml/learning_curve.py --pool ml/artifacts/curve_pool.npz \
+    --base-positions 165 --multipliers 1 2 4 8 16 32 \
+    --seeds 1 2 3 4 5 --out ml/artifacts/learning_curve.json \
+    --markdown ml/artifacts/learning_curve.md
+```
+
+**Neden taban 165?** Havuzda 5 281 egitim pozisyonu var. 32x = 5 280 **tam**
+sigar; 64x = 10 560 ister ve havuzda yok. 64x bu yuzden **olculemez** olarak
+isaretlenir, uydurulmaz. Onceki kosum taban 500 kullaniyordu ve 8x'te
+(4 000) bitiyordu; taban degistigi icin iki egri **dogrudan** karsilastirilmaz.
+
+| Carpan | Pozisyon | ER `policy` | ER `value` | In-sample (birlesik kayip) |
+|---|---|---|---|---|
+| 1x | 165 | 0,0504 | 0,2114 | 1,1721 |
+| 2x | 330 | 0,0414 | 0,2245 | 0,8910 |
+| 4x | 660 | 0,0341 | 0,1099 | 0,5563 |
+| 8x | 1 320 | 0,0267 | 0,0523 | 0,3413 |
+| 16x | 2 640 | 0,0215 | 0,0473 | 0,2204 |
+| 32x | 5 280 | **0,0166** | 0,0398 | 0,2553 |
+
+**In-sample birimi.** `train_policy_head` **tek bir birlesik** kayip dondurur:
+`capraz-entropi (nat/pozisyon) + 0,5*MSE (equity^2)`. Bu bir ER **degildir** ve
+ER ile karsilastirilmaz (Kural 5). Birim artik `IN_SAMPLE_UNITS["combined"]`
+uzerinden **turetilir** (`CurvePoint.resolved_in_sample_unit`); eski
+artefaktlarda alan bos olsa bile rapor birimi yazar.
+
+**Egim (ER / log2 veri).**
+
+| Yol | Kazanc | %95 GA | Kume |
+|---|---|---|---|
+| `policy` | **0,0067** | [0,0061; 0,0073] | 200 oyun |
+| `value` | 0,0414 | [0,0396; 0,0449] | 200 oyun |
+
+**Tohum oybirligi YOK.** s1 `olcek`, s2 `belirsiz`, s3 `olcek`, s4 `belirsiz`,
+s5 `olcek`. F7-87 kurali geregi havuz karari **`belirsiz`** olur. Havuzlanmis
+GA esigi kesmiyor (alt sinir 0,0061 > 0,0050) ama **tohumlar ayrissa havuz
+karari tek basina yetmez**; bu tam olarak F7-87'nin onledigi hataydi.
+
+**Doygunluk fiti `ER = a*N^-b + c`.**
+
+| Yol | a | b | c (taban) | RMSE |
+|---|---|---|---|---|
+| `policy` | 0,2865 | 0,35 | **0,0033** | 0,0008 |
+| `value` | 5,0251 | 0,60 | 0,0087 | 0,0298 |
+
+**Kritik yorum.** Politika tabani `c = 0,0033`, gnubg **0-ply**'in ayni
+korpustaki ER'sinden (0,00444, F7-89) **dusuk**. Yani bu mimari + bu ogretmenle,
+veri yeterli oldugunda 0-ply seviyesine **ulasilabilir** gorunuyor. Bu bir
+**ekstrapolasyondur**: 6 nokta, RMSE 0,0008, `b` grid aramasinin sinirinda
+(0,35). Kanit degil, yon gostergesidir (Kural 3).
+
+**Deger yolu.** 2x'te **kotusuyor** (0,2114 -> 0,2245), sonra 4x'te keskin
+dusuyor (0,1099). 16x -> 32x: 0,0473 -> 0,0398. Onceki kosumda 4x -> 8x
+platosu (0,0460 -> 0,0454) vardi; bu kosumda plato **16x'te** ve daha zayif.
+Deger kafasi hala politika kadar temiz olceklenmiyor.
+
+**Oncesi/sonrasi eslesmis kiyas (R-D icin).** Bu egri **antisimetri
+duzeltmesinden onceki** durumdur. R-D'de ayni havuz, ayni tohumlar, ayni
+carpanlar ve **ayni taban 165** kullanilacak; karsilastirma pozisyon basina
+eslestirilmis olacak.
+
+**Artefaktlar.** `ml/artifacts/learning_curve.json` / `.md`.
+
+**Testler.** `ml/tests/test_learning_curve_cluster.py` - Test 209-211
+(birim turetme, JSON gidis-donusu, `--from-json`).
+
+**Yeni yetenek.** `learning_curve.py --from-json <rapor.json> --markdown <cikti>`
+olcum yapmadan raporu yeniden uretir; `CurveReport.from_dict` /
+`CurvePoint.from_dict` bunu saglar. Boylece bir sunum alani degistiginde
+50 dakikalik egri **tekrar kosulmaz**.
+---
+
+## F7-93 — R-D oncesi taban: model vs gnubg 0-ply (2000 oyun)
+
+**Soru.** Damitma oncesi mevcut model, urun yolundan (`search1`) oynatildiginda
+gnubg 0-ply'a karsi kac ppg kaybediyor? Bu sayi R-D'nin "once" degeridir.
+
+**Kurulum.** `ml/vs_gnubg.py`, kupsuz para oyunu, eslestirilmis zar + renk
+takasi (ayni zar dizisi bir kez biz beyaz, bir kez biz siyah), 6 paralel
+surec, 2000 oyun (1000 cift). Model `ml/runs/stage_d_l2/onnx/model_v30.onnx`,
+yol `search1`, gnubg 0-ply.
+
+**Sonuc.**
+
+| Olcum | Deger |
+|---|---|
+| Oyun | 2000 (1000 cift) |
+| Kazanma | 868/2000 = 0,4340 |
+| **ppg** | **-0,1635** |
+| ppg %95 GA | [-0,2230; -0,1050] |
+| ppg standart hata | 0,0303 |
+| Eslestirilmis fark (beyaz+siyah) | -0,3270 |
+| Eslestirilmis fark %95 GA | [-0,4420; -0,2120] |
+| Oyun basina ply | 55,9 |
+
+**Yorum.**
+
+1. **Model gnubg 0-ply'a kaybediyor** — hem ppg hem eslestirilmis fark GA'si
+   sifirin altinda. gnubg 0-ply bilinen en zayif gnubg seviyesidir; bu, "urun
+   botu" iddiasi icin agir bir tabandir.
+2. **20 oyunluk pilot yanilticiydi.** `vs_gnubg_pilot.json` +0,2 ppg vermisti;
+   2000 oyunda isaret tersine dondu. 20 oyunluk standart hata ~0,3 ppg
+   mertebesindedir, yani pilot hicbir sey olcmuyordu. Pilot artefakti
+   **silinmedi** (denetim izi), ama karar dayanagi degildir.
+3. **Eslestirilmis fark GA'si daha dar** (-0,3270 ± 0,115 vs ppg ± 0,118/oyun
+   basi) — zar gurultusu iptal oldugu icin. Bu, `vs_gnubg.py`'nin cift oyun
+   tasariminin dogru oldugunu gosterir.
+4. **Oyun basina 55,9 ply** — `search1` derinligi makul; yavaslik modelden
+   degil, gnubg alt surecinden geliyor (kalici oturum ~0,01 s/cagri).
+
+**R-D icin anlami.** R-D'nin basari olcutu bu tabana gore **eslestirilmis**
+olculmelidir: ayni 1000 zar dizisi, ayni renk takasi, ayni gnubg 0-ply.
+ppg'de >= 0,02 iyilesme (m = 0,02 ppg, R-F'de kesinlesecek) anlamli sayilir;
+0,1635'lik acigi kapatmak icin bu olcut tek basina yetmez, ama yon gosterir.
+
+**Maliyet.** 6 paralel surec, ~2,5 saat CPU (tek surecte ~7,5 saat).
+
+**Artefaktlar.** `ml/artifacts/vs_gnubg.json` / `.md`.
+
+**Testler.** `ml/tests/test_gnubg_er.py` - kalici oturum tek-atimlik kosuyla
+ayni tabloyu vermeli; `OnnxScorer(intra_op_threads=...)` kabul edilmeli.

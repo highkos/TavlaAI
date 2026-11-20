@@ -1,0 +1,403 @@
+"""Model vs gnubg 0-ply mac olcumu - Faz 7-R adim 0 (F7-89).
+
+R-D oncesi **taban**: modelin gnubg 0-ply'a karsi kazanma orani ve ppg'si.
+
+Tasarim (kullanicinin adim 0 kosulu):
+
+* **Kupsuz para oyunu** (cubeless money game); ppg = oyun basina puan.
+* **Eslestirilmis zar**: her zar dizisi iki kez oynanir.
+* **Renk takasi**: ayni zar dizisi bir kez biz beyaz, bir kez biz siyah.
+  Boylece zar sansi iki kolda **ayni** olur ve fark yalnizca hamle
+  seciminden gelir (Kural 7).
+* **gnubg 0-ply**: her adayin 0-ply equity'si, ``argmax``. Bu, merdiven
+  olcumundeki "gnubg 0-ply" tanimiyla **ayni**dir.
+* **Bizim taraf**: ``policy`` (0-ply ONNX argmax) veya ``search1``
+  (1-ply arama). ``search1`` Python'da kosar; C# ile paritesi
+  ``ml/artifacts/search1_parity.json`` ile kanitlanmistir (kararli
+  vakalarda 357/357, skor MAE 5,4e-8).
+
+Istatistik: ppg icin **eslesmis** fark (ayni zar dizisinin iki rengi
+arasindaki fark) kullanilir; GA oyun duzeyinde bootstrap ile hesaplanir.
+Eslesmis tasarim, zar gurultusunu buyuk olcude iptal eder.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any, Callable, Sequence
+
+import numpy as np
+
+HERE = Path(__file__).resolve().parent
+REPO_ROOT = HERE.parent
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+import er_paths  # noqa: E402
+import gnubg_er  # noqa: E402
+from tools import reference_gen as refgen  # noqa: E402
+
+MATCH_VERSION = 1
+MATCH_PATH = "ml/artifacts/vs_gnubg.json"
+MATCH_MD_PATH = "ml/artifacts/vs_gnubg.md"
+DEFAULT_MODEL = "ml/runs/stage_d_l2/onnx/model_v30.onnx"
+DEFAULT_GAMES = 2000
+DEFAULT_MAX_PLIES = 200
+BOOTSTRAP_RESAMPLES = 20000
+BOOTSTRAP_SEED = 20261125
+OUR_PATHS = ("policy", "search1")
+
+
+class MatchError(RuntimeError):
+    """Mac olcumu yapilamadi."""
+
+
+def _bootstrap_ci(values: np.ndarray, resamples: int, seed: int) -> tuple[float, float]:
+    if values.size == 0:
+        return float("nan"), float("nan")
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, values.size, size=(resamples, values.size))
+    means = values[idx].mean(axis=1)
+    return float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5))
+
+
+def _dice_sequence(rng: np.random.Generator, length: int) -> list[tuple[int, int]]:
+    """Bir oyun icin zar dizisi (21 eslesme, gercek olasilikla)."""
+    rolls = er_paths.DICE_ROLLS
+    weights = np.asarray(er_paths.DICE_WEIGHTS, dtype=np.float64)
+    weights = weights / weights.sum()
+    idx = rng.choice(len(rolls), size=length, p=weights)
+    return [rolls[int(i)] for i in idx]
+
+
+def _case(board, turn, dice, white_off, black_off) -> dict[str, Any]:
+    expanded = [dice[0]] * 4 if dice[0] == dice[1] else list(dice)
+    max_steps, states = refgen.legal_after_states(
+        board, turn, expanded, white_off, black_off
+    )
+    return {
+        "name": "live",
+        "board": list(board),
+        "turn": int(turn),
+        "dice": [int(dice[0]), int(dice[1])],
+        "whiteOff": int(white_off),
+        "blackOff": int(black_off),
+        "maxSteps": int(max_steps),
+        "afterStates": [
+            {"board": list(b), "whiteOff": int(w), "blackOff": int(k)}
+            for (b, w, k) in sorted(states)
+        ],
+    }
+
+
+def _gnubg_chooser(session: gnubg_er.GnubgSession, plies: int = 0):
+    """gnubg ``plies``-ply argmax'i."""
+
+    def choose(case: dict[str, Any]) -> int:
+        turn = int(case["turn"])
+        boards = [a["board"] for a in case["afterStates"]]
+        tables = session.eval_afterstates(boards, -turn)
+        equities = [-gnubg_er._equity_at(t, plies) for t in tables]
+        return int(np.argmax(equities))
+
+    return choose
+
+
+def _our_chooser(scorer: gnubg_er.OnnxScorer, path: str):
+    if path == "policy":
+        return lambda case: er_paths.choose_policy(scorer, case)
+    if path == "search1":
+        return lambda case: er_paths.choose_search1(scorer, case)[0]
+    raise MatchError("bilinmeyen yol: %s" % path)
+
+
+def _play_pair(
+    task: tuple[int, int],
+    our_choose: Callable[[dict[str, Any]], int],
+    gnubg_choose: Callable[[dict[str, Any]], int],
+    max_plies: int,
+) -> tuple[list[float], list[int]]:
+    """Bir cifti (ayni zar dizisi, iki renk) oynar.
+
+    Zar dizisi **cift basina** turetilir; boylece paralel calistirmada sira
+    bagimsizligi korunur ve sonuc tek surecli kosuyla ayni dagilimdan gelir.
+    """
+    pair, seed = task
+    rng = np.random.default_rng([int(seed), int(pair)])
+    dice_seq = _dice_sequence(rng, max_plies)
+    scores: list[float] = []
+    plies: list[int] = []
+    for our_side in (1, -1):
+        result = play_game(
+            dice_seq=dice_seq,
+            our_side=our_side,
+            our_choose=our_choose,
+            gnubg_choose=gnubg_choose,
+            max_plies=max_plies,
+        )
+        scores.append(float(result["score"]))
+        plies.append(int(result["plies"]))
+    return scores, plies
+
+
+_WORKER: dict[str, Any] = {}
+
+
+def _init_worker(
+    model_path: str,
+    path: str,
+    gnubg: str | None,
+    gnubg_plies: int,
+    max_plies: int,
+) -> None:
+    exe = Path(gnubg) if gnubg else gnubg_er.find_gnubg()
+    session = gnubg_er.GnubgSession(exe, plies=gnubg_plies, timeout=300, persistent=True)
+    scorer = gnubg_er.OnnxScorer(Path(model_path), intra_op_threads=1)
+    _WORKER.update(
+        session=session,
+        our_choose=_our_chooser(scorer, path),
+        gnubg_choose=_gnubg_chooser(session, gnubg_plies),
+        max_plies=int(max_plies),
+    )
+
+
+def _worker_play_pair(task: tuple[int, int]) -> tuple[list[float], list[int]]:
+    return _play_pair(
+        task, _WORKER["our_choose"], _WORKER["gnubg_choose"], _WORKER["max_plies"]
+    )
+
+
+def play_game(
+    *,
+    dice_seq: Sequence[tuple[int, int]],
+    our_side: int,
+    our_choose: Callable[[dict[str, Any]], int],
+    gnubg_choose: Callable[[dict[str, Any]], int],
+    max_plies: int = DEFAULT_MAX_PLIES,
+) -> dict[str, Any]:
+    """Tek bir kupsuz para oyunu oynar; **bizim** bakisimizdan puan doner."""
+    board = list(refgen.START_BOARD)
+    white_off = black_off = 0
+    turn = 1
+    plies = 0
+
+    for ply in range(max_plies):
+        if ply >= len(dice_seq):
+            raise MatchError("zar dizisi bitti (max_plies cok kucuk)")
+        dice = dice_seq[ply]
+        case = _case(board, turn, dice, white_off, black_off)
+        if not case["afterStates"]:
+            turn = -turn
+            plies += 1
+            continue
+
+        chooser = our_choose if turn == our_side else gnubg_choose
+        index = int(chooser(case))
+        chosen = case["afterStates"][index]
+        board = list(chosen["board"])
+        white_off = int(chosen["whiteOff"])
+        black_off = int(chosen["blackOff"])
+        plies += 1
+
+        score = er_paths.terminal_equity(board, white_off, black_off, our_side)
+        if score is not None:
+            return {
+                "score": float(score),
+                "plies": plies,
+                "ourSide": int(our_side),
+                "finished": True,
+            }
+        turn = -turn
+
+    raise MatchError("oyun %d ply'de bitmedi" % max_plies)
+
+
+def run_match(
+    *,
+    model_path: Path,
+    games: int,
+    path: str = "policy",
+    gnubg: Path | None = None,
+    gnubg_plies: int = 0,
+    seed: int = 0,
+    max_plies: int = DEFAULT_MAX_PLIES,
+    workers: int = 1,
+    progress: Callable[[str], None] | None = None,
+) -> dict[str, Any]:
+    """``games`` oyun (yarisi her renkten) oynar ve ppg olcer."""
+    if games < 2 or games % 2 != 0:
+        raise MatchError("games cift ve >= 2 olmali (renk takasi icin)")
+    if path not in OUR_PATHS:
+        raise MatchError("yol %s olmali: %r" % (OUR_PATHS, path))
+    if workers < 1:
+        raise MatchError("workers >= 1 olmali")
+
+    pairs = games // 2
+    tasks = [(pair, seed) for pair in range(pairs)]
+
+    if workers == 1:
+        exe = Path(gnubg) if gnubg else gnubg_er.find_gnubg()
+        session = gnubg_er.GnubgSession(exe, plies=gnubg_plies, timeout=300, persistent=True)
+        scorer = gnubg_er.OnnxScorer(Path(model_path))
+        our_choose = _our_chooser(scorer, path)
+        gnubg_choose = _gnubg_chooser(session, gnubg_plies)
+        try:
+            results = []
+            for index, task in enumerate(tasks, start=1):
+                results.append(
+                    _play_pair(task, our_choose, gnubg_choose, max_plies)
+                )
+                if progress and index % 25 == 0:
+                    done = [s for r in results for s in r[0]]
+                    progress("%d/%d cift, ppg %.4f" % (index, pairs, float(np.mean(done))))
+        finally:
+            session.close()
+    else:
+        import multiprocessing as mp  # noqa: PLC0415
+
+        ctx = mp.get_context("spawn")
+        with ctx.Pool(
+            processes=workers,
+            initializer=_init_worker,
+            initargs=(str(model_path), path, str(gnubg) if gnubg else None, gnubg_plies, max_plies),
+        ) as pool:
+            results = []
+            for index, result in enumerate(pool.imap(_worker_play_pair, tasks), start=1):
+                results.append(result)
+                if progress and index % 25 == 0:
+                    done = [s for r in results for s in r[0]]
+                    progress("%d/%d cift, ppg %.4f" % (index, pairs, float(np.mean(done))))
+
+    scores: list[float] = []
+    pair_diffs: list[float] = []
+    wins = 0
+    plies_total = 0
+    for pair_scores, pair_plies in results:
+        for score, plies in zip(pair_scores, pair_plies):
+            scores.append(score)
+            plies_total += plies
+            if score > 0:
+                wins += 1
+        pair_diffs.append(pair_scores[0] + pair_scores[1])
+
+    arr = np.asarray(scores, dtype=np.float64)
+    diffs = np.asarray(pair_diffs, dtype=np.float64)
+    low, high = _bootstrap_ci(arr, BOOTSTRAP_RESAMPLES, BOOTSTRAP_SEED)
+    dlow, dhigh = _bootstrap_ci(diffs, BOOTSTRAP_RESAMPLES, BOOTSTRAP_SEED)
+    return {
+        "matchVersion": MATCH_VERSION,
+        "model": str(model_path),
+        "path": path,
+        "gnubgPlies": int(gnubg_plies),
+        "games": len(scores),
+        "pairs": pairs,
+        "workers": int(workers),
+        "wins": wins,
+        "winRate": wins / len(scores),
+        "ppg": float(arr.mean()),
+        "ppgCiLow": low,
+        "ppgCiHigh": high,
+        "ppgStdError": float(arr.std(ddof=1) / np.sqrt(arr.size)) if arr.size > 1 else float("nan"),
+        "pairedDiffMean": float(diffs.mean()),
+        "pairedDiffCiLow": dlow,
+        "pairedDiffCiHigh": dhigh,
+        "meanPlies": plies_total / len(scores),
+        "seed": int(seed),
+    }
+
+
+def build_markdown(report: dict[str, Any]) -> str:
+    lines = [
+        "# Faz 7-R - Model vs gnubg 0-ply (kupsuz para oyunu)",
+        "",
+        "R-D oncesi **taban**. Eslestirilmis zar + renk takasi: ayni zar dizisi",
+        "bir kez biz beyaz, bir kez biz siyah oynanir; zar sansi iki kolda aynidir.",
+        "",
+        "Model: `%s`" % report["model"],
+        "Yol: `%s`" % report["path"],
+        "gnubg: **%d-ply**" % report["gnubgPlies"],
+        "",
+        "| Olcum | Deger |",
+        "|---|---|",
+        "| Oyun | %d (%d cift) |" % (report["games"], report["pairs"]),
+        "| Paralel surec | %d |" % report.get("workers", 1),
+        "| Kazanma | %d/%d (%.4f) |"
+        % (report["wins"], report["games"], report["winRate"]),
+        "| **ppg** | **%+.4f** |" % report["ppg"],
+        "| ppg %%95 GA | [%+.4f; %+.4f] |" % (report["ppgCiLow"], report["ppgCiHigh"]),
+        "| ppg standart hata | %.4f |" % report["ppgStdError"],
+        "| Eslestirilmis fark (beyaz+siyah) | %+.4f |" % report["pairedDiffMean"],
+        "| Eslestirilmis fark %%95 GA | [%+.4f; %+.4f] |"
+        % (report["pairedDiffCiLow"], report["pairedDiffCiHigh"]),
+        "| Oyun basina ply | %.1f |" % report["meanPlies"],
+        "",
+        "**Yorum.** ppg > 0 ise model gnubg 0-ply'i yeniyor demektir. "
+        "Eslestirilmis fark, ayni zar dizisinin iki renginin toplamidir; "
+        "zar gurultusunu iptal ettigi icin **daha dar** bir GA verir.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="vs_gnubg",
+        description="Model vs gnubg 0-ply mac olcumu - Faz 7-R adim 0",
+    )
+    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--games", type=int, default=DEFAULT_GAMES)
+    parser.add_argument("--path", default="policy", choices=list(OUR_PATHS))
+    parser.add_argument("--gnubg", default=None)
+    parser.add_argument("--gnubg-plies", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--max-plies", type=int, default=DEFAULT_MAX_PLIES)
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="paralel surec sayisi (her surec kendi gnubg + ONNX oturumunu acar)",
+    )
+    parser.add_argument("--out", default=MATCH_PATH)
+    parser.add_argument("--markdown", default=MATCH_MD_PATH)
+    parser.add_argument("--quiet", action="store_true")
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    progress = None if args.quiet else (lambda m: print(m, file=sys.stderr))
+    report = run_match(
+        model_path=Path(args.model),
+        games=args.games,
+        path=args.path,
+        gnubg=Path(args.gnubg) if args.gnubg else None,
+        gnubg_plies=args.gnubg_plies,
+        seed=args.seed,
+        max_plies=args.max_plies,
+        workers=args.workers,
+        progress=progress,
+    )
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    md = Path(args.markdown)
+    md.parent.mkdir(parents=True, exist_ok=True)
+    md.write_text(build_markdown(report) + "\n", encoding="utf-8")
+
+    print("oyun: %d, kazanma: %.4f" % (report["games"], report["winRate"]))
+    print(
+        "ppg: %+.4f GA [%+.4f; %+.4f]"
+        % (report["ppg"], report["ppgCiLow"], report["ppgCiHigh"])
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
