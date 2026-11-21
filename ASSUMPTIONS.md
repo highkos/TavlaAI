@@ -4551,6 +4551,12 @@ ayirt etsin." Bu, R-F'nin iddia esigini ve dolayisiyla oyun sayisini belirler.
 
 **Sonuc: `m = 0,1115 ppg`** (0-2 money farkinin yarisi; GA sifiri disliyor).
 
+**Onay (2026-11-21).** Kullanici `m = 0,1115 ppg` degerini **kesin** olarak
+kabul etti; `0,02` yer tutucusu tamamen gecersiz. Bu, R-F'nin iddia esigini
+ve gereken oyun sayisini (4337) baglar. Kalan kisit: 2000 oyunluk R-F
+kosulari bu esik icin **gucsuz**; "esdeger" iddiasi kurulmadi, yalnizca
+"anlamli fark" iddiasi kuruldu.
+
 **Dort bulgu.**
 
 1. **400 oyun yetersizdi.** Ayni hucre 400 oyunla `-0,1300` ve GA
@@ -5333,6 +5339,11 @@ platform` uyarisi veriyor), bu yuzden eklenmedi.
 **Test tarafi.** Test, cokme durumunda **yeniden dener** (tek sefer) ve ikinci
 denemede de cokerse gercek hata olarak raporlar. Boylece gecici CUDA cokmesi
 test sonucunu kirletmez, kalici bir bozulma ise gizlenmez.
+
+**Onay (2026-11-21).** Kullanici teshisi **kabul etti**: cokme ortam/paralel
+yuk sorunudur, kod hatasi degil. Ek savunma (is parcacigi sayisini sinirlama,
+ORT oturum seceneklerini gozden gecirme, CUDA isini serilestirme) **istenmedi**;
+mevcut cikis temizligi + tek yeniden deneme yeterli sayildi. Konu kapandi.
 ## F7-100 — R-D: politika kafasi perspektif artirimina **dahil edilmemeli**
 
 **Nasil bulundu.** R-D deneme kosusu (`--augment-perspectives`, 5 iterasyon,
@@ -5754,11 +5765,15 @@ icin (`er_paths.search1_values`) urun metrigini veri miktari
 **iyilestiremez**. Bu, "sonraki kaldirac gnubg damitma" kararinin
 (F7-104, karar 4) sayisal gerekcesidir.
 
-**Acik kalan.** (a) `DATA_TARGET_RATIO` ve `DATA_BUDGET_MULTIPLIER`
-benim sectigim degerler; kullanici onaylamadi. (b) Taban `c` GA'lari
-genis (value: [0,0148; 0,0252]) -- `c`'nin hedefin ustunde oldugu
-**nokta tahminine** dayaniyor, GA'nin tamamina degil. (c) `policy`
-yolunun ppg'si hala olculmedi (K5 kosusu suruyor).
+**Acik kalan.** (a) Taban `c` GA'lari genis (value: [0,0148; 0,0252]) --
+`c`'nin hedefin ustunde oldugu **nokta tahminine** dayaniyor, GA'nin
+tamamina degil. (b) `policy` yolunun ppg'si hala olculmedi (K5 kosusu
+suruyor).
+
+**Onay (2026-11-21).** Kullanici `DATA_TARGET_RATIO = 0,5` ve
+`DATA_BUDGET_MULTIPLIER = 100` degerlerini **kabul etti**. Bu iki sabit
+artik varsayim degil, onaylanmis parametredir; degistirmek yeni bir onay
+gerektirir (Kural 2).
 ## F7-106 -- K5: yol x model ppg matrisi ve 6-sinif KL deneyi
 
 K5 iki sey istiyordu: (a) **politika-argmax ve deger-0-ply** oyununun

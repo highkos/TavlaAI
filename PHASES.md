@@ -3445,6 +3445,12 @@ farkının yarısı olmalı ki "eşdeğer" bir seviye farkını ayırt etsin.
 
 **`m = 0,1115 ppg`** (0-2 money farkının yarısı; GA sıfırı dışlıyor).
 
+**Onay (2026-11-21).** Kullanıcı `m = 0,1115 ppg` değerini **kesin** olarak
+kabul etti; `0,02` yer tutucusu tamamen geçersiz. Bu, R-F'nin iddia eşiğini
+ve gereken oyun sayısını (4337) bağlar. Kalan kısıt: 2000 oyunluk R-F
+koşuları bu eşik için **güçsüz**; "eşdeğer" iddiası kurulmadı, yalnızca
+"anlamlı fark" iddiası kuruldu.
+
 ### 34.4 Dört bulgu
 
 1. **400 oyun yetersizdi.** Aynı hücre 400 oyunla `−0,1300`, GA
@@ -4086,6 +4092,12 @@ geçiyor. `metrics.jsonl` **tam** yazılmış oluyor: çökme eğitim sırasınd
 **Sınır.** CRT seviyesindeki `__fastfail` Python istisnası değildir,
 yakalanamaz. Bu bir savunmadır, garanti değil. Ortam: GTX 1650, CUDA var,
 12 CPU, `torch.get_num_threads() == 6`.
+
+**Onay (2026-11-21).** Kullanıcı teşhisi **kabul etti**: çökme ortam/paralel
+yük sorunudur, kod hatası değil. Ek savunma (iş parçacığı sayısını sınırlama,
+ORT oturum seçeneklerini gözden geçirme, CUDA işini serileştirme)
+**istenmedi**; mevcut çıkış temizliği + tek yeniden deneme yeterli sayıldı.
+Konu kapandı.
 ### 36.18 R-D koşusu ve politika kafası bulgusu (F7-100)
 
 **İlk deneme yanlıştı.** `--augment-perspectives` hem değer hem politika
@@ -4485,11 +4497,15 @@ uyuşması, GA, etiket biçimi) ve `test_learning_curve_k4.py` 276–283
 ölçüt anlaşması/çelişkisi, markdown §4.2). Toplam pytest sayısı
 1394 → **1407**.
 
-**Açık kalan.** (a) `DATA_TARGET_RATIO` ve `DATA_BUDGET_MULTIPLIER` benim
-seçtiğim değerler; kullanıcı onaylamadı. (b) Taban `c` GA'ları geniş
-(value: [0,0148; 0,0252]) — `c`'nin hedefin üstünde olduğu **nokta
-tahminine** dayanıyor, GA'nın tamamına değil. (c) `policy` yolunun ppg'si
-hâlâ ölçülmedi (K5 koşusu sürüyor).
+**Açık kalan.** (a) Taban `c` GA'ları geniş (value: [0,0148; 0,0252]) —
+`c`'nin hedefin üstünde olduğu **nokta tahminine** dayanıyor, GA'nın
+tamamına değil. (b) `policy` yolunun ppg'si hâlâ ölçülmedi (K5 koşusu
+sürüyor).
+
+**Onay (2026-11-21).** Kullanıcı `DATA_TARGET_RATIO = 0,5` ve
+`DATA_BUDGET_MULTIPLIER = 100` değerlerini **kabul etti**. Bu iki sabit
+artık varsayım değil, onaylanmış parametredir; değiştirmek yeni bir onay
+gerektirir (Kural 2).
 ## §36.24 — K5: yol × model ppg matrisi ve 6 sınıflı KL deneyi
 
 K5 iki şey istiyordu: (a) **politika-argmax ve değer-0-ply** oyununun
