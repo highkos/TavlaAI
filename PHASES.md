@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1433** | ~8 dk 30 s | ✅ 1433/1433 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1918** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1434** | ~8 dk 30 s | ✅ 1434/1434 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **1919** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -4663,6 +4663,16 @@ kayıp/gradyan ayrımı, oran tutarlılığı, `to_dict` şekli, markdown
 bölümleri, `dist` yokken `nan` teşhis terimleri, çoklu model
 karşılaştırması, eksik/bozuk denge dosyasının reddi).
 Toplam pytest sayısı 1425 → **1433**.
+
+**Yan düzeltme — `learning_curve.json` geçerli JSON değildi.** K4'ün
+`inf` (ulaşılamaz hedef) durumu `json.dump` ile `"positions": Infinity`
+olarak yazılıyordu. `Infinity` **RFC 8259'da geçerli değildir**; Python'un
+`json` modülü kabul eder ama JS `JSON.parse`, C# `System.Text.Json` ve
+`jq` dosyayı **tümden** reddeder. `DataRequirement.to_dict` artık sonlu
+olmayan `positions` için `null` yazar; anlamı `decision` alanı taşır
+(`pipeline`). Artefakt yeniden yazıldı ve `test_310` bunu kilitler
+(`allow_nan=False` ile serileştirme + `Infinity`/`NaN` yokluğu).
+Toplam pytest sayısı 1433 → **1434**.
 
 **Açık kalan.** (a) Ölçüm tek veri kümesinde (3000 pozisyon) yapıldı;
 10–30 bin pozisyonla tekrarlanmadı. (b) Gradyan payı bir *anlık görüntü*;

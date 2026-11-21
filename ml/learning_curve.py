@@ -238,12 +238,17 @@ class DataRequirement:
         return DECISION_UNDETERMINED
 
     def to_dict(self) -> dict[str, Any]:
+        # ``inf`` gecerli JSON degildir (RFC 8259); ``json.dump`` varsayilan
+        # olarak ``Infinity`` yazar ve kati ayristiricilar (JS, C#, jq) dosyayi
+        # tumden reddeder. Ulasilamaz hedef ``null`` olarak yazilir; anlami
+        # ``decision`` alani tasir.
+        positions = self.positions if np.isfinite(self.positions) else None
         return {
             "path": self.path,
             "bestEr": self.best_er,
             "target": self.target,
             "floor": self.floor,
-            "positions": self.positions,
+            "positions": positions,
             "budget": self.budget,
             "decision": self.decision,
         }

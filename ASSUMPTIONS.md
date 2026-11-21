@@ -5923,3 +5923,12 @@ fazla ayni-tur veri tabani hedefin altina indirmiyor.
 **Arac.** `python ml/head_balance.py` (tek model) ve
 `python ml/head_balance.py --compare a.json b.json ...` (coklu model).
 Testler 302-309.
+
+**Yan duzeltme -- `learning_curve.json` gecerli JSON degildi.** K4'un `inf`
+(ulasilamaz hedef) durumu `json.dump` ile `"positions": Infinity` olarak
+yaziliyordu. `Infinity` **RFC 8259'da gecerli degildir**; Python'un `json`
+modulu kabul eder ama JS `JSON.parse`, C# `System.Text.Json` ve `jq` dosyayi
+**tumden** reddeder. `DataRequirement.to_dict` artik sonlu olmayan
+`positions` icin `null` yazar; anlami `decision` alani tasir (`pipeline`).
+Artefakt yeniden yazildi; `test_310` bunu kilitler (`allow_nan=False` ile
+serilestirme + `Infinity`/`NaN` yoklugu). Toplam pytest 1433 -> **1434**.

@@ -26,7 +26,7 @@
       "decision": "pipeline",
       "floor": 0.022278406264501185,
       "path": "value",
-      "positions": Infinity,
+      "positions": null,
       "target": 0.016479902672040983
     }
   },

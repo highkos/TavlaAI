@@ -307,3 +307,31 @@ def test_283_to_dict_carries_data_requirement_fields():
     again = lc.CurveReport.from_dict(data)
     assert again.decision == report.decision
     assert again.data_decision == report.data_decision
+
+def test_310_to_dict_emits_strict_json_for_unreachable_target():
+    """``inf`` pozisyon ``null`` olarak yazilmali: ``Infinity`` gecerli JSON degil.
+
+    ``json.dump`` varsayilan olarak ``Infinity`` yazar; JS/C#/jq gibi kati
+    ayristiricilar dosyayi tumden reddeder. Anlam ``decision`` alaninda kalir.
+    """
+    import json
+
+    points = _synthetic_curve(floor=0.05, a=0.3, b=0.5)
+    report = lc.CurveReport(
+        points=points,
+        slopes={"policy": {"slope": 0.05, "gainCiLow": 0.04, "gainCiHigh": 0.06}},
+        saturation={"policy": {"a": 0.3, "b": 0.5, "c": 0.05}},
+    )
+    req = report.data_requirement("policy")
+    assert req is not None
+    assert not np.isfinite(req.positions)
+    assert req.decision == lc.DECISION_PIPELINE
+
+    payload = req.to_dict()
+    assert payload["positions"] is None
+    assert payload["decision"] == lc.DECISION_PIPELINE
+
+    text = json.dumps(report.to_dict(), allow_nan=False)
+    assert "Infinity" not in text
+    assert "NaN" not in text
+    assert json.loads(text)["dataRequirements"]["policy"]["positions"] is None
