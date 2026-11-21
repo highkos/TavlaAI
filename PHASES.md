@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1425** | ~8 dk 30 s | ✅ 1425/1425 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1910** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1433** | ~8 dk 30 s | ✅ 1433/1433 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **1918** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -4583,3 +4583,73 @@ pozisyonla tekrarlanmadı (etiketleme gnubg 2-ply'de ~1,4 s/pozisyon, yani
 30 bin ~12 saat). (b) `dist_weight` için yalnızca 0 ve 0,5 denendi; ara
 değerler denenmedi. (c) `policy`/`value` yollarının bitmeyen oyun oranı
 `search1` için ölçülmedi (hiç görülmedi, ama sistematik sayım yok).
+
+### 36.25 K5 kapanışı: kafa dengesi ve "kayıp ağırlığı" adayının elenmesi
+
+K5'in değer platosu için saydığı üç adaydan sonuncusu **kayıp ağırlığı
+(w*MSE)** idi. (b) 6 sınıflı KL §36.24'te, (c) antisimetri kusuru §36.23'te
+elenmişti; bu bölüm (a)'yı kapatır.
+
+**Neden akla yatkındı.** `train_v2.py` damıtma modunda değer kafasını
+**skaler MSE** ile, politika kafasını grup-softmax çapraz entropisi ile
+eğitiyor. Ağırlıklar eşit (`c_value = c_policy = 1,0`) ama büyüklükler
+değil. Paylaşılan gövde tek olduğu için hangi terimin gradyanı büyükse
+gövdeyi o yönlendirir.
+
+**Ölçüm.** Yeni `ml/head_balance.py` aynı kontrol noktasını ve aynı veriyi
+kullanarak her terimi **tek başına** geri yayar ve gövdeye taşıdığı gradyan
+normunu ayrı ayrı raporlar. Karar sayısı kayıp oranı değil **gradyan
+oranıdır**.
+
+`ckpt_v30.pt`, 3000 pozisyon:
+
+| Terim | Kayıp | ‖dL/d(gövde)‖ |
+|---|---|---|
+| Politika grup-softmax CE | 1,394324 | 1,351443 |
+| Değer skaler MSE | 0,170902 | 0,914423 |
+| Kalibrasyon MSE | 0,170902 | 0,914423 |
+| Değer 6 sınıflı CE (teşhis) | 1,480352 | — |
+| KL(gnubg ‖ model) (teşhis) | 0,190459 | 0,632914 |
+
+Kayıp oranı **8,16** ama gradyan oranı yalnızca **1,48**; değer teriminin
+gövde gradyanındaki payı **%40,4**. Değer kafası **aç değil**; aday elendi.
+
+**Yan bulgu — R-F'nin mekanizması.** Aynı ölçüm üç modelde tekrarlandı
+(`ml/artifacts/head_balance_compare.json` / `.md`):
+
+| Model | Politika CE | Değer MSE | Oran | Değer payı |
+|---|---|---|---|---|
+| `stage_d_l2/model_v30` | 1,3943 | 0,1709 | 1,48 | %40,4 |
+| `rd_ctl10k/model_v10` | 1,4699 | 0,1697 | 1,19 | %45,6 |
+| `rd_aug10k/model_v10` | 1,5659 | **0,1200** | **3,33** | **%23,1** |
+
+Perspektif artırımı değer kafasının **eğitim kaybını düşürüyor**
+(0,1709 → 0,1200) ama **gövde gradyanını yarıya indiriyor**
+(0,9144 → 0,4263). Değer payı en düşük model, R-F'de `value` ve `search1`
+ppg'si en kötü olan modeldir (`value` −0,1420, `search1` −0,1605, ikisi de
+anlamlı). Yorum: artırım değer hedefini **kafanın tek başına**
+fit edilebilir hâle getirdi, gövde değer-ilişkili özellikleri kodlamayı
+bıraktı. Bu, R-F'nin "artırım değer kafasını vurdu" hükmünün mekanik
+açıklamasıdır ve `search1`'in neden en çok zarar gördüğünü açıklar (arama
+yalnızca değer kafasını kullanır).
+
+**Sonuç.** Üç adayın üçü de elendi. Değer kafasının platosu bir **eğitim
+sinyali** sorunu değil; **hedef tanımı / mimari** sorunu. F7-105'in taban
+analizi (değer tabanı 0,0223 > hedef 0,0165) aynı yöne bakıyor.
+
+**Araç.** `python ml/head_balance.py` (tek model),
+`python ml/head_balance.py --compare a.json b.json ...` (çoklu model).
+Çıktılar `ml/artifacts/head_balance.json` / `.md`,
+`head_balance_{ctl,aug}.json` / `.md`, `head_balance_compare.json` / `.md`.
+
+**Testler.** `test_head_balance.py` 302–309 (veri kümesi doğrulaması,
+kayıp/gradyan ayrımı, oran tutarlılığı, `to_dict` şekli, markdown
+bölümleri, `dist` yokken `nan` teşhis terimleri, çoklu model
+karşılaştırması, eksik/bozuk denge dosyasının reddi).
+Toplam pytest sayısı 1425 → **1433**.
+
+**Açık kalan.** (a) Ölçüm tek veri kümesinde (3000 pozisyon) yapıldı;
+10–30 bin pozisyonla tekrarlanmadı. (b) Gradyan payı bir *anlık görüntü*;
+eğitim boyunca izlenmedi (her adımda ölçmek ~%30 yavaşlatır). (c) Değer
+payı ile ppg arasındaki ilişki üç noktaya dayanıyor; dördüncü bir modelle
+doğrulanmadı.

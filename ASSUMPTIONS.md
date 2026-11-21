@@ -5849,3 +5849,62 @@ yani 30 bin ~12 saat). (b) `dist_weight` icin yalnizca 0 ve 0,5
 denendi; ara degerler denenmedi. (c) `policy`/`value` yollarinin
 bitmeyen oyun orani `search1` icin olculmedi (hic gorulmedi, ama
 sistematik sayim yok).
+
+## F7-107 -- K5: kafa dengesi -- "kayip agirligi" adayi elendi
+
+K5, deger kafasinin platosu icin uc aday sayiyordu: (a) **kayip agirligi
+(w*MSE)**, (b) 6 sinifli KL'nin yoklugu, (c) antisimetri kusuru. (b) F7-106'da,
+(c) F7-105'te olculdu ve elendi. Bu kayit (a)'yi kapatir.
+
+**Neden (a) akla yatkindi.** `train_v2.py` damitma modunda
+(`equity_target` dolu) deger kafasini **skaler MSE** ile, politika kafasini
+grup-softmax capraz entropisi ile egitiyor. Iki terimin agirligi da
+`c_value = c_policy = 1,0` ama buyuklukleri ayni degil. Paylasilan govde tek
+oldugu icin hangi terimin gradyani buyukse govdeyi o yonlendirir.
+
+**Olcum.** `ml/head_balance.py` ayni kontrol noktasini ve ayni veriyi
+kullanarak her terimi **tek basina** geri yayar ve govdeye tasidigi gradyan
+normunu ayri ayri raporlar. Karar sayisi kayip orani degil **gradyan
+oranidir**: kayip kucuk ama gradyan buyuk olabilir.
+
+`ckpt_v30.pt`, 3000 pozisyon (`ml/runs/k5_dist/policy_dist_3k.npz`):
+
+| Terim | Kayip | ||dL/d(govde)|| |
+|---|---|---|
+| Politika grup-softmax CE | 1,394324 | 1,351443 |
+| Deger skaler MSE | 0,170902 | 0,914423 |
+| Kalibrasyon MSE | 0,170902 | 0,914423 |
+| Deger 6 sinifli CE (teshis) | 1,480352 | -- |
+| KL(gnubg || model) (teshis) | 0,190459 | 0,632914 |
+
+Kayip orani **8,16** ama gradyan orani yalnizca **1,48**; deger teriminin
+govde gradyanindaki payi **%40,4**. Yani deger kafasi **ac degil**. Aday
+elendi.
+
+**Yan bulgu -- R-F'nin mekanizmasi.** Ayni olcum uc modelde tekrarlandi
+(`ml/artifacts/head_balance_compare.json` / `.md`):
+
+| Model | Politika CE | Deger MSE | Oran | Deger payi |
+|---|---|---|---|---|
+| `stage_d_l2/model_v30` | 1,3943 | 0,1709 | 1,48 | %40,4 |
+| `rd_ctl10k/model_v10` | 1,4699 | 0,1697 | 1,19 | %45,6 |
+| `rd_aug10k/model_v10` | 1,5659 | **0,1200** | **3,33** | **%23,1** |
+
+Perspektif artirimi deger kafasinin **egitim kaybini dusuruyor**
+(0,1709 -> 0,1200) ama **govde gradyanini yariya indiriyor**
+(0,9144 -> 0,4263). Deger payi en dusuk olan model, R-F'de `value` ve
+`search1` ppg'si en kotu olan modeldir (`value` -0,1420, `search1`
+-0,1605, ikisi de anlamli). Yorum: artirim deger hedefini **kafanin tek
+basina** fittedilebilir hale getirdi, govde deger-iliskili ozellikleri
+kodlamayi birakti. Bu, R-F'nin "artirim deger kafasini vurdu" hukmunun
+mekanik aciklamasidir ve `search1`'in neden en cok zarar gordugunu
+aciklar (arama yalnizca deger kafasini kullanir).
+
+**Sonuc.** Uc adayin ucu de elendi. Deger kafasinin platisi bir **egitim
+sinyali** sorunu degil; **hedef tanimi / mimari** sorunu. F7-105'in taban
+analizi (deger tabani 0,0223 > hedef 0,0165) ile ayni yone bakiyor: daha
+fazla ayni-tur veri tabani hedefin altina indirmiyor.
+
+**Arac.** `python ml/head_balance.py` (tek model) ve
+`python ml/head_balance.py --compare a.json b.json ...` (coklu model).
+Testler 302-309.

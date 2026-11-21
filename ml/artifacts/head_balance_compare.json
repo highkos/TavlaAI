@@ -1,0 +1,31 @@
+{
+ "rows": [
+  {
+   "model": "ml/runs/stage_d_l2/checkpoints/ckpt_v30.pt",
+   "policyCe": 1.394324,
+   "valueMse": 0.170902,
+   "gradPolicy": 1.351443,
+   "gradValue": 0.914423,
+   "gradRatio": 1.4779,
+   "valueShare": 0.403564
+  },
+  {
+   "model": "ml/runs/rd_ctl10k/checkpoints/ckpt_v10.pt",
+   "policyCe": 1.469924,
+   "valueMse": 0.169684,
+   "gradPolicy": 1.077796,
+   "gradValue": 0.903265,
+   "gradRatio": 1.1932,
+   "valueShare": 0.45595
+  },
+  {
+   "model": "ml/runs/rd_aug10k/checkpoints/ckpt_v10.pt",
+   "policyCe": 1.565903,
+   "valueMse": 0.120001,
+   "gradPolicy": 1.418299,
+   "gradValue": 0.42625,
+   "gradRatio": 3.3274,
+   "valueShare": 0.231086
+  }
+ ]
+}

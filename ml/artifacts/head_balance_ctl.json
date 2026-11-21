@@ -1,0 +1,27 @@
+{
+ "ckpt": "ml/runs/rd_ctl10k/checkpoints/ckpt_v10.pt",
+ "dataset": "ml/runs/k5_dist/policy_dist_3k.npz",
+ "positions": 3000,
+ "width": 292,
+ "losses": {
+  "policyCe": 1.469924,
+  "valueMse": 0.169684,
+  "valueCe6": 1.460501,
+  "calMse": 0.169684,
+  "kl": 0.170645
+ },
+ "gradNorms": {
+  "policy": 1.077796,
+  "value": 0.903265,
+  "cal": 0.903265,
+  "kl": 0.505696
+ },
+ "lossRatio": 8.6627,
+ "gradRatio": 1.1932,
+ "valueShare": 0.45595,
+ "weights": {
+  "cValue": 1.0,
+  "cPolicy": 1.0,
+  "cCal": 0.1
+ }
+}
