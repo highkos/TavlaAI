@@ -1,0 +1,20 @@
+{
+  "matchVersion": 1,
+  "model": "ml\\runs\\rd_aug10k\\onnx\\model_v10.onnx",
+  "path": "policy",
+  "gnubgPlies": 0,
+  "games": 2000,
+  "pairs": 1000,
+  "workers": 2,
+  "wins": 644,
+  "winRate": 0.322,
+  "ppg": -0.516,
+  "ppgCiLow": -0.5755,
+  "ppgCiHigh": -0.4565,
+  "ppgStdError": 0.030378173360298574,
+  "pairedDiffMean": -1.032,
+  "pairedDiffCiLow": -1.145,
+  "pairedDiffCiHigh": -0.915,
+  "meanPlies": 57.139,
+  "seed": 2026
+}

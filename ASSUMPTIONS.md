@@ -5759,3 +5759,93 @@ benim sectigim degerler; kullanici onaylamadi. (b) Taban `c` GA'lari
 genis (value: [0,0148; 0,0252]) -- `c`'nin hedefin ustunde oldugu
 **nokta tahminine** dayaniyor, GA'nin tamamina degil. (c) `policy`
 yolunun ppg'si hala olculmedi (K5 kosusu suruyor).
+## F7-106 -- K5: yol x model ppg matrisi ve 6-sinif KL deneyi
+
+K5 iki sey istiyordu: (a) **politika-argmax ve deger-0-ply** oyununun
+ppg'sini olc, (b) **6-sinif KL** ile deger basligini yeniden egit ve
+`search1` ER/ppg'sini olc. Ikisi de yapildi; ikincisi **negatif** cikti.
+
+**Neden `value` yolu elma-elmaya.** gnubg 0-ply da after-state
+degerlendirmesiyle oynar; `value` yolu (deger kafasi argmax, 0-ply) ayni
+sozlesmeyi kullanir. `search1` bir ply arar, `policy` deger kafasina hic
+dokunmaz. Uc yolun ppg'si kafalarin urun katkisini ayristirir.
+
+`ml/vs_gnubg.py`'nin `OUR_PATHS` listesi `er_paths.PLAY_PATHS`'ten eksikti
+(`value` yoktu); eklendi ve Test 284 iki listeyi birbirine bagladi.
+`ml/ppg_paths.py` matrisi kurar (`ml/artifacts/ppg_paths.json` / `.md`).
+
+Kupsuz para oyunu, eslestirilmis zar + renk takasi, gnubg 0-ply, 2000 oyun
+(1000 cift), tohum 2026:
+
+| Model | politika-argmax | deger-0-ply | search1 |
+|---|---|---|---|
+| `stage_d_l2/model_v30` | -0,4430 [-0,5020; -0,3835] | -0,4150 [-0,4740; -0,3560] | **-0,1635** [-0,2230; -0,1050] |
+| `rd_ctl10k/model_v10` | -0,4605 [-0,5180; -0,4015] | -0,4445 [-0,5040; -0,3860] | **-0,1990** [-0,2600; -0,1380] |
+| `rd_aug10k/model_v10` | -0,5160 [-0,5755; -0,4565] | -0,5570 [-0,6175; -0,4960] | **-0,3240** [-0,3810; -0,2670] |
+
+**`search1` her modelde tek kafali yollardan ~0,25 ppg daha iyi** (yol
+farklari -0,19 ile -0,28 ppg arasi, hepsi anlamli, |z| 4,6-6,6). Yani
+1-ply arama gercek is yapiyor: ne politika kafasi ne de deger kafasi tek
+basina rekabetci. Bu, `search1`'in deger kafasinin **mutlak
+kalibrasyonundan** degil **siralama**sindan faydalandiginin ilk dogrudan
+kanitidir -- ve F7-105'in "deger tabani 0,0223" bulgusuyla celismez:
+siralama dogru oldugu surece mutlak hata aramada kismen telafi olur.
+
+Model farklari (ayni yol, `model_v30` referans): `policy` yolunda ne
+`ctl` (-0,0175, z -0,41) ne `aug` (-0,0730, z -1,71) anlamli; `value`
+yolunda `ctl` anlamsiz (-0,0295, z -0,69), `aug` anlamli (-0,1420,
+z -3,28); `search1`'te `ctl` anlamsiz (-0,0355, z -0,81), `aug` anlamli
+(-0,1605, z -3,82). **R-D artiriminin zarari yalnizca `search1`'te degil,
+`value` yolunda da olculuyor** -- yani zarar arama katmanindan degil,
+deger kafasinin kendisinden geliyor.
+
+**Bitmeyen oyunlar (yeni bulgu).** `policy` **ve** `value` kafalari tek
+basina bitmeyen oyun uretebiliyor: `pol_ctl` ve `val_ctl` kosulari
+`MatchError: oyun 200 ply'de bitmedi` ile coktu. `play_game`'e
+`allow_unfinished` eklendi; bu oyunlar **0 puan** sayilip **sayilir ve
+raporlanir** (sessizce atilmaz). Gercek oranlar cok kucuk: `ctl` policy
+1/2000, `ctl` value 2/2000. `search1` kosularinda hic gorulmedi.
+
+**6-sinif KL deneyi (negatif).** `train_policy_head`'in `dist_weight`
+terimi zaten **deger kafasinin** 6 sinifli cikti dagilimina uygulanan
+`KL(gnubg_dagilimi || model_dagilimi)`'dir (`probs = out[0]`,
+`best_probs = probs.gather(...)`), yani K5'in "deger basligi 6-sinif KL
+ile yeniden egitilsin" istegi bu terimle karsilanir. R-Q2 (gnubg hint 6
+olasilik veriyor mu) **dogrulandi**: `label-policy --dists` 6 sinifli
+dagilim uretiyor.
+
+Kurulum: 3000 pozisyon gnubg 2-ply dagilimiyla etiketlendi
+(`ml/runs/k5_dist/policy_dist_3k.npz`, 67 316 aday, ortalama dagilim
+[0,3228 0,2979 0,0418 0,2477 0,0852 0,0046], 4235 s). Iki kol de
+`ckpt_v30.pt`'den basladi, 4000 adim, lr 3e-4, batch 64, tohum 0,
+`--value-weight 0,5`. Tek fark `--dist-weight` (0 ve 0,5).
+
+| Yol | KL=0 | KL=0,5 | Fark | z |
+|---|---|---|---|---|
+| `policy` | 0,025966 | 0,026273 | +0,000307 | +0,10 |
+| `value` | 0,044881 | 0,044475 | -0,000406 | -0,09 |
+| `search1` | 0,022617 | 0,021507 | -0,001110 | -0,50 |
+
+**Hicbir yol anlamli degismedi** (|z| < 0,5). KL terimi kaybi domine
+ediyordu (son kayip 0,00210 -> 0,02097), yani agirlik zayif degildi.
+Sonuc: **deger kafasinin platisi bir etiket-temsili sorunu degil.**
+Kontrol kolu ayni 3000 pozisyonla politika ER'sini %35 dusurdu
+(0,0402 -> 0,0260) ama deger ER'sini **hic** oynatmadi (0,0442 ->
+0,0449). Ayni veri hacmi bir kafayi ciddi bicimde hareket ettirirken
+digerini oynatmiyor; 6 sinifli hedef pozisyon basina 6 kat sinyal
+vermesine ragmen fark yok. Bu, F7-105'in "deger kafasi **hatta**
+sinirli" tespitini bagimsiz olarak dogruluyor: kaldirac daha iyi kayip
+degil, **daha fazla etiketli veri** (ve o da taban 0,0223'u hedefin
+altina indirmeye yetmiyor).
+
+Karsilastirma artik kalici: `ml/er_paths.py compare --control ... --treatment
+...` iki raporu yol bazinda karsilastirir (`ml/artifacts/er_paths_k5_kl_compare.json`
+/ `.md`). Iki ornekli z kullanilir cunku `er_paths` JSON'u pozisyon basina
+kaybi saklamaz; eslesmis test icin JSON semasi degismeliydi.
+
+**Acik kalan.** (a) KL deneyi 3000 pozisyonla sinirli; 10-30 bin
+pozisyonla tekrarlanmadi (etiketleme gnubg 2-ply'de ~1,4 s/pozisyon,
+yani 30 bin ~12 saat). (b) `dist_weight` icin yalnizca 0 ve 0,5
+denendi; ara degerler denenmedi. (c) `policy`/`value` yollarinin
+bitmeyen oyun orani `search1` icin olculmedi (hic gorulmedi, ama
+sistematik sayim yok).

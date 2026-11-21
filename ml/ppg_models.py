@@ -69,6 +69,8 @@ class ModelPpg:
     seed: int
     er_policy: float | None = None
     er_value: float | None = None
+    #: ``max_plies`` doldugu icin bitmeyen oyun sayisi (K5). Eski JSON'larda yok.
+    unfinished: int = 0
 
     @property
     def ppg_sigma(self) -> float:
@@ -90,6 +92,7 @@ class ModelPpg:
             "ppgSigma": round(self.ppg_sigma, 6),
             "meanPlies": round(self.mean_plies, 4),
             "seed": self.seed,
+            "unfinished": int(self.unfinished),
             "erPolicy": None if self.er_policy is None else round(self.er_policy, 6),
             "erValue": None if self.er_value is None else round(self.er_value, 6),
         }
@@ -167,6 +170,7 @@ def load_match(path: str | Path, label: str) -> ModelPpg:
         ppg_std_error=float(data["ppgStdError"]),
         mean_plies=float(data.get("meanPlies", 0.0)),
         seed=int(data.get("seed", 0)),
+        unfinished=int(data.get("unfinished", 0)),
     )
 
 

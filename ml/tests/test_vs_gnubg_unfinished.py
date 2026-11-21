@@ -1,9 +1,9 @@
 """K5: bitmeyen oyun davranisi (Test 294-297).
 
-K5 kosusunda ``policy`` yolu ``oyun 200 ply'de bitmedi`` hatasiyla dustu:
-politika kafasi tek basina donguye girebiliyor. Mac kosusunun tamamen
-olmasi yerine bu oyunlar **sayilir ve raporlanir**; varsayilan davranis
-hala katidir (sessiz dusme yok, Kural 6).
+K5 kosusunda ``policy`` **ve** ``value`` yollari ``oyun 200 ply'de bitmedi``
+hatasiyla dustu: tek kafali yollar donguye girebiliyor. Mac kosusunun
+tamamen olmasi yerine bu oyunlar **sayilir ve raporlanir**; varsayilan
+davranis hala katidir (sessiz dusme yok, Kural 6).
 """
 
 from __future__ import annotations

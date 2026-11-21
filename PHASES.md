@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1421** | ~8 dk 30 s | ✅ 1421/1421 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1906** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1425** | ~8 dk 30 s | ✅ 1425/1425 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **1910** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -4490,3 +4490,96 @@ seçtiğim değerler; kullanıcı onaylamadı. (b) Taban `c` GA'ları geniş
 (value: [0,0148; 0,0252]) — `c`'nin hedefin üstünde olduğu **nokta
 tahminine** dayanıyor, GA'nın tamamına değil. (c) `policy` yolunun ppg'si
 hâlâ ölçülmedi (K5 koşusu sürüyor).
+## §36.24 — K5: yol × model ppg matrisi ve 6 sınıflı KL deneyi
+
+K5 iki şey istiyordu: (a) **politika-argmax ve değer-0-ply** oyununun
+ppg'sini ölç, (b) **6 sınıflı KL** ile değer başlığını yeniden eğit ve
+`search1` ER/ppg'sini ölç. İkisi de yapıldı; ikincisi **negatif** çıktı.
+
+**Neden `value` yolu elma-elmaya.** gnubg 0-ply da after-state
+değerlendirmesiyle oynar; `value` yolu (değer kafası argmax, 0-ply) aynı
+sözleşmeyi kullanır. `search1` bir ply arar, `policy` değer kafasına hiç
+dokunmaz. Üç yolun ppg'si kafaların ürün katkısını ayrıştırır.
+
+`ml/vs_gnubg.py`'nin `OUR_PATHS` listesi `er_paths.PLAY_PATHS`'ten eksikti
+(`value` yoktu); eklendi ve Test 284 iki listeyi birbirine bağladı.
+`ml/ppg_paths.py` matrisi kurar (`ml/artifacts/ppg_paths.json` / `.md`).
+
+Küpsüz para oyunu, eşleştirilmiş zar + renk takası, gnubg 0-ply, 2000 oyun
+(1000 çift), tohum 2026:
+
+| Model | politika-argmax | değer-0-ply | search1 |
+|---|---|---|---|
+| `stage_d_l2/model_v30` | −0,4430 [−0,5020; −0,3835] | −0,4150 [−0,4740; −0,3560] | **−0,1635** [−0,2230; −0,1050] |
+| `rd_ctl10k/model_v10` | −0,4605 [−0,5180; −0,4015] | −0,4445 [−0,5040; −0,3860] | **−0,1990** [−0,2600; −0,1380] |
+| `rd_aug10k/model_v10` | −0,5160 [−0,5755; −0,4565] | −0,5570 [−0,6175; −0,4960] | **−0,3240** [−0,3810; −0,2670] |
+
+**`search1` her modelde tek kafalı yollardan ~0,25 ppg daha iyi** (yol
+farkları −0,19 ile −0,28 ppg arası, hepsi anlamlı, |z| 4,6–6,6). Yani 1-ply
+arama gerçek iş yapıyor: ne politika kafası ne de değer kafası tek başına
+rekabetçi. Bu, `search1`'in değer kafasının **mutlak kalibrasyonundan**
+değil **sıralamasından** faydalandığının ilk doğrudan kanıtıdır — ve
+§36.23'ün "değer tabanı 0,0223" bulgusuyla çelişmez: sıralama doğru olduğu
+sürece mutlak hata aramada kısmen telafi olur.
+
+Model farkları (aynı yol, `model_v30` referans): `policy` yolunda ne `ctl`
+(−0,0175, z −0,41) ne `aug` (−0,0730, z −1,71) anlamlı; `value` yolunda
+`ctl` anlamsız (−0,0295, z −0,69), `aug` anlamlı (−0,1420, z −3,28);
+`search1`'te `ctl` anlamsız (−0,0355, z −0,81), `aug` anlamlı (−0,1605,
+z −3,82). **R-D artırımının zararı yalnızca `search1`'te değil, `value`
+yolunda da ölçülüyor** — yani zarar arama katmanından değil, değer kafasının
+kendisinden geliyor.
+
+**Bitmeyen oyunlar (yeni bulgu).** `policy` **ve** `value` kafaları tek
+başına bitmeyen oyun üretebiliyor: `pol_ctl` ve `val_ctl` koşuları
+`MatchError: oyun 200 ply'de bitmedi` ile çöktü. `play_game`'e
+`allow_unfinished` eklendi; bu oyunlar **0 puan** sayılıp **sayılır ve
+raporlanır** (sessizce atılmaz). Gerçek oranlar çok küçük: `ctl` policy
+1/2000, `ctl` value 2/2000. `search1` koşularında hiç görülmedi.
+
+**6 sınıflı KL deneyi (negatif).** `train_policy_head`'in `dist_weight`
+terimi zaten **değer kafasının** 6 sınıflı çıktı dağılımına uygulanan
+`KL(gnubg_dağılımı ‖ model_dağılımı)`'dır (`probs = out[0]`,
+`best_probs = probs.gather(...)`), yani K5'in "değer başlığı 6 sınıflı KL
+ile yeniden eğitilsin" isteği bu terimle karşılanır. R-Q2 (gnubg hint 6
+olasılık veriyor mu) **doğrulandı**: `label-policy --dists` 6 sınıflı
+dağılım üretiyor.
+
+Kurulum: 3000 pozisyon gnubg 2-ply dağılımıyla etiketlendi
+(`ml/runs/k5_dist/policy_dist_3k.npz`, 67 316 aday, ortalama dağılım
+[0,3228 0,2979 0,0418 0,2477 0,0852 0,0046], 4235 s). İki kol da
+`ckpt_v30.pt`'den başladı, 4000 adım, lr 3e-4, batch 64, tohum 0,
+`--value-weight 0,5`. Tek fark `--dist-weight` (0 ve 0,5).
+
+| Yol | KL=0 | KL=0,5 | Fark | z |
+|---|---|---|---|---|
+| `policy` | 0,025966 | 0,026273 | +0,000307 | +0,10 |
+| `value` | 0,044881 | 0,044475 | −0,000406 | −0,09 |
+| `search1` | 0,022617 | 0,021507 | −0,001110 | −0,50 |
+
+**Hiçbir yol anlamlı değişmedi** (|z| < 0,5). KL terimi kaybı domine
+ediyordu (son kayıp 0,00210 → 0,02097), yani ağırlık zayıf değildi.
+Sonuç: **değer kafasının platisi bir etiket-temsili sorunu değil.** Kontrol
+kolu aynı 3000 pozisyonla politika ER'sini %35 düşürdü (0,0402 → 0,0260)
+ama değer ER'sini **hiç** oynatmadı (0,0442 → 0,0449). Aynı veri hacmi bir
+kafayı ciddi biçimde hareket ettirirken diğerini oynatmıyor; 6 sınıflı hedef
+pozisyon başına 6 kat sinyal vermesine rağmen fark yok. Bu, §36.23'ün "değer
+kafası **hatta** sınırlı" tespitini bağımsız olarak doğruluyor: kaldıraç
+daha iyi kayıp değil, **daha fazla etiketli veri** (ve o da taban 0,0223'ü
+hedefin altına indirmeye yetmiyor).
+
+**Testler.** `test_vs_gnubg_paths.py` 284–286 (iki yol listesi aynı küme,
+`_our_chooser` her yolu kendi `er_paths` fonksiyonuna gönderir, bilinmeyen
+yol hata), `test_ppg_paths.py` 287–293 + 298 (etiket, matris, yinelenen
+hücre reddi, yol/model farkları, markdown, bitmeyen oyun sayımının **kendi**
+modeline yazılması), `test_vs_gnubg_unfinished.py` 294–297 (varsayılan
+hata, `allow_unfinished` davranışı, çift bayrakları, markdown koşullu
+paragraf), `test_er_paths_compare.py` 299–301 (iki raporun yol bazında
+karşılaştırılması, tasarım uyuşmazlığının reddi, "etki yok" metni).
+Toplam pytest sayısı 1407 → **1425**.
+
+**Açık kalan.** (a) KL deneyi 3000 pozisyonla sınırlı; 10–30 bin
+pozisyonla tekrarlanmadı (etiketleme gnubg 2-ply'de ~1,4 s/pozisyon, yani
+30 bin ~12 saat). (b) `dist_weight` için yalnızca 0 ve 0,5 denendi; ara
+değerler denenmedi. (c) `policy`/`value` yollarının bitmeyen oyun oranı
+`search1` için ölçülmedi (hiç görülmedi, ama sistematik sayım yok).

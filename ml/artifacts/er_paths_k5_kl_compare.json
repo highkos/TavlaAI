@@ -1,0 +1,54 @@
+{
+ "version": 1,
+ "labelControl": "KL=0 (kontrol)",
+ "labelTreatment": "KL=0,5 (tedavi)",
+ "controlModel": "ml\\runs\\k5_dist\\model_kl0.onnx",
+ "treatmentModel": "ml\\runs\\k5_dist\\model_kl05.onnx",
+ "caseCount": 1000,
+ "corpus": "v2",
+ "split": "all",
+ "plies": 2,
+ "zThreshold": 1.96,
+ "rows": [
+  {
+   "path": "policy",
+   "label": "politika kafasi argmax (0-ply)",
+   "control": 0.025966,
+   "controlSe": 0.002225,
+   "treatment": 0.026273,
+   "treatmentSe": 0.00221,
+   "diff": 0.0003070000000000017,
+   "se": 0.0031360365112670487,
+   "z": 0.09789426841716359,
+   "significant": false,
+   "relative": 0.011823153354386572
+  },
+  {
+   "path": "value",
+   "label": "deger kafasi argmax (0-ply)",
+   "control": 0.044881,
+   "controlSe": 0.003213,
+   "treatment": 0.044475,
+   "treatmentSe": 0.003338,
+   "diff": -0.00040599999999999664,
+   "se": 0.004633099718331131,
+   "z": -0.08763031764536253,
+   "significant": false,
+   "relative": -0.00904614424812274
+  },
+  {
+   "path": "search1",
+   "label": "1-ply expectiminimax (deger kafasi)",
+   "control": 0.022617,
+   "controlSe": 0.001669,
+   "treatment": 0.021507,
+   "treatmentSe": 0.001475,
+   "diff": -0.0011100000000000033,
+   "se": 0.002227371994077325,
+   "z": -0.49834513630930966,
+   "significant": false,
+   "relative": -0.04907812707255619
+  }
+ ],
+ "anySignificant": false
+}

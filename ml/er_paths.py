@@ -571,6 +571,134 @@ def build_markdown(report: dict[str, Any]) -> str:
     lines.append("")
     return "\n".join(lines)
 
+
+# ----------------------------------------------------------------------
+# Iki raporun karsilastirilmasi (K5: KL kollari)
+# ----------------------------------------------------------------------
+
+
+class CompareError(ValueError):
+    """Iki ``er_paths`` raporu karsilastirilamaz."""
+
+
+#: Iki ornekli z icin anlamlilik esigi.
+COMPARE_Z = 1.96
+
+
+def compare_reports(
+    control: dict[str, Any],
+    treatment: dict[str, Any],
+    *,
+    label_control: str = "kontrol",
+    label_treatment: str = "tedavi",
+) -> dict[str, Any]:
+    """Iki ``er_paths`` raporunu **yol bazinda** karsilastirir.
+
+    Iki ornekli z kullanilir: ``er_paths`` JSON'u pozisyon basina kaybi
+    saklamadigi icin eslesmis (paired) test yapilamaz. Ayni korpus ve ayni
+    vaka sayisi zorunlu -- aksi halde fark korpus farkidir, model farki degil
+    (Kural 7: tek parametre degisir).
+    """
+    for key in ("caseCount", "corpus", "split"):
+        if control.get(key) != treatment.get(key):
+            raise CompareError(
+                "%s farkli: %r vs %r" % (key, control.get(key), treatment.get(key))
+            )
+    plies_c = (control.get("referee") or {}).get("plies")
+    plies_t = (treatment.get("referee") or {}).get("plies")
+    if plies_c != plies_t:
+        raise CompareError("hakem plies farkli: %r vs %r" % (plies_c, plies_t))
+
+    rows: list[dict[str, Any]] = []
+    for path in PLAY_PATHS:
+        a = (control.get("paths") or {}).get(path)
+        b = (treatment.get("paths") or {}).get(path)
+        if a is None or b is None:
+            continue
+        diff = float(b["mean"]) - float(a["mean"])
+        se = (float(a["standardError"]) ** 2 + float(b["standardError"]) ** 2) ** 0.5
+        z = diff / se if se > 0 else float("nan")
+        rows.append(
+            {
+                "path": path,
+                "label": PATH_LABELS[path],
+                "control": float(a["mean"]),
+                "controlSe": float(a["standardError"]),
+                "treatment": float(b["mean"]),
+                "treatmentSe": float(b["standardError"]),
+                "diff": diff,
+                "se": se,
+                "z": z,
+                "significant": bool(abs(z) >= COMPARE_Z) if se > 0 else False,
+                "relative": (diff / float(a["mean"])) if float(a["mean"]) else float("nan"),
+            }
+        )
+    if not rows:
+        raise CompareError("iki raporda ortak yol yok")
+
+    return {
+        "version": 1,
+        "labelControl": label_control,
+        "labelTreatment": label_treatment,
+        "controlModel": control.get("model"),
+        "treatmentModel": treatment.get("model"),
+        "caseCount": control.get("caseCount"),
+        "corpus": control.get("corpus"),
+        "split": control.get("split"),
+        "plies": plies_c,
+        "zThreshold": COMPARE_Z,
+        "rows": rows,
+        "anySignificant": any(r["significant"] for r in rows),
+    }
+
+
+def build_compare_markdown(result: dict[str, Any]) -> str:
+    """Karsilastirma tablosu (K5 KL kollari icin)."""
+    lines: list[str] = []
+    lines.append("# ER karsilastirmasi -- %s vs %s" % (
+        result["labelControl"], result["labelTreatment"]))
+    lines.append("")
+    lines.append("| | Model |")
+    lines.append("|---|---|")
+    lines.append("| %s | `%s` |" % (result["labelControl"], result["controlModel"]))
+    lines.append("| %s | `%s` |" % (result["labelTreatment"], result["treatmentModel"]))
+    lines.append("")
+    lines.append(
+        "Korpus `%s`, bolum `%s`, hakem %d-ply, vaka **%d**."
+        % (result["corpus"], result["split"], result["plies"], result["caseCount"])
+    )
+    lines.append("")
+    lines.append("| Yol | %s | %s | Fark | z | Anlamli |" % (
+        result["labelControl"], result["labelTreatment"]))
+    lines.append("|---|---|---|---|---|---|")
+    for row in result["rows"]:
+        lines.append(
+            "| `%s` | %.6f | %.6f | %+.6f | %+.2f | %s |"
+            % (
+                row["path"],
+                row["control"],
+                row["treatment"],
+                row["diff"],
+                row["z"],
+                "evet" if row["significant"] else "hayir",
+            )
+        )
+    lines.append("")
+    lines.append(
+        "Iki ornekli z (eslesmis degil): `er_paths` JSON'u pozisyon basina "
+        "kaybi saklamaz. Esik |z| >= %.2f." % result["zThreshold"]
+    )
+    lines.append("")
+    if not result["anySignificant"]:
+        lines.append(
+            "**Hicbir yol anlamli degismedi.** Bu, degisikligin olculebilir "
+            "bir etkisi olmadigi anlamina gelir; sifir etki kaniti degil, "
+            "guc siniridir."
+        )
+        lines.append("")
+    return "\n".join(lines)
+
+
 # ----------------------------------------------------------------------
 # CLI
 # ----------------------------------------------------------------------
@@ -596,7 +724,43 @@ def build_parser():
     measure.add_argument("--out", type=Path, default=None)
     measure.add_argument("--quiet", action="store_true")
 
+    compare = sub.add_parser("compare", help="iki raporu yol bazinda karsilastir")
+    compare.add_argument("--control", type=Path, required=True)
+    compare.add_argument("--treatment", type=Path, required=True)
+    compare.add_argument("--label-control", default="kontrol")
+    compare.add_argument("--label-treatment", default="tedavi")
+    compare.add_argument("--out", type=Path, default=None)
+    compare.add_argument("--markdown", type=Path, default=None)
+
     return parser
+
+
+def _cmd_compare(args) -> int:
+    import json  # noqa: PLC0415
+
+    control = json.loads(Path(args.control).read_text(encoding="utf-8"))
+    treatment = json.loads(Path(args.treatment).read_text(encoding="utf-8"))
+    result = compare_reports(
+        control,
+        treatment,
+        label_control=args.label_control,
+        label_treatment=args.label_treatment,
+    )
+    text = build_compare_markdown(result)
+    print(text)
+    if args.out is not None:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        with open(args.out, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump(result, handle, indent=1, ensure_ascii=False)
+            handle.write("\n")
+        print("\nJSON: %s" % args.out)
+    if args.markdown is not None:
+        args.markdown.parent.mkdir(parents=True, exist_ok=True)
+        with open(args.markdown, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+            handle.write("\n")
+        print("Markdown: %s" % args.markdown)
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -606,6 +770,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     import er_harness  # noqa: PLC0415
 
     args = build_parser().parse_args(argv)
+
+    if args.command == "compare":
+        return _cmd_compare(args)
 
     if args.command != "measure":
         return 2

@@ -1,4 +1,4 @@
-"""K5: oyun yolu x model ppg matrisi testleri (Test 287-293)."""
+"""K5: oyun yolu x model ppg matrisi testleri (Test 287-293, 298)."""
 
 from __future__ import annotations
 
@@ -25,6 +25,7 @@ def _write_match(
     ppg: float,
     se: float = 0.05,
     games: int = 2000,
+    unfinished: int = 0,
 ) -> Path:
     payload = {
         "model": model,
@@ -37,6 +38,7 @@ def _write_match(
         "ppgCiHigh": ppg + 1.96 * se,
         "ppgStdError": se,
         "meanPlies": 40.0,
+        "unfinished": unfinished,
         "seed": 2026,
     }
     p = tmp_path / name
@@ -140,3 +142,35 @@ def test_293_ppg_paths_markdown_and_errors(tmp_path):
         pp.build_report([])
     with pytest.raises(pp.PpgPathsError):
         pp.build_report([a, b], baseline="yok/m")
+
+
+def test_298_ppg_paths_unfinished_per_model(tmp_path):
+    """Bitmeyen oyun sayisi **kendi** modelinin satirinda cikar.
+
+    Regresyon: dongu degiskeni sizintisi yuzunden tum satirlar son modelin
+    sayisini gosteriyordu.
+    """
+    a = pp.load_match(
+        _write_match(
+            tmp_path,
+            "1.json",
+            model="runs/a/onnx/m.onnx",
+            path="value",
+            ppg=-0.1,
+            unfinished=3,
+        )
+    )
+    b = pp.load_match(
+        _write_match(
+            tmp_path,
+            "2.json",
+            model="runs/b/onnx/m.onnx",
+            path="value",
+            ppg=-0.2,
+            unfinished=0,
+        )
+    )
+    md = pp.build_markdown(pp.build_report([a, b]))
+    assert "## Bitmeyen oyunlar" in md
+    assert "| `a/m` | deger-0-ply | 3 | 0.0015 |" in md
+    assert "`b/m` | deger-0-ply | 0" not in md

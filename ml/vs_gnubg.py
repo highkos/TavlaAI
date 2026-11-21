@@ -371,9 +371,9 @@ def build_markdown(report: dict[str, Any]) -> str:
     if report.get("unfinished", 0):
         lines.append(
             "**Bitmeyen oyunlar.** `max_plies` doldugunda oyun **0 puan** "
-            "sayilir (biz kazanamadik) ve yukarida ayrica raporlanir. Bu, "
-            "politika kafasinin tek basina donguye girebildigini gosterir; "
-            "`search1` ve `value` yollarinda ayni sorun gorulmedi."
+            "sayilir (biz kazanamadik) ve yukarida ayrica raporlanir. Bu, tek "
+            "kafali yollarin (`policy`, `value`) donguye girebildigini "
+            "gosterir; `search1` kosularinda gorulmedi."
         )
         lines.append("")
     return "\n".join(lines)

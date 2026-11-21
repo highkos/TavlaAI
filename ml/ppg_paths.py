@@ -172,6 +172,30 @@ def build_markdown(report: dict[str, Any]) -> str:
     )
     lines.append("")
 
+    unfinished = [
+        (label, p, cells[label][p]["unfinished"])
+        for label in models
+        for p in order
+        if p in cells[label] and cells[label][p].get("unfinished", 0)
+    ]
+    if unfinished:
+        lines.append("## Bitmeyen oyunlar")
+        lines.append("")
+        lines.append(
+            "`max_plies` doldugunda oyun **0 puan** sayilir. Bu oyunlar ppg'yi "
+            "asagi ceker; oran yuksekse ppg yorumu temkinli yapilmalidir."
+        )
+        lines.append("")
+        lines.append("| Model | Yol | Bitmeyen | Oran |")
+        lines.append("|---|---|---|---|")
+        for label, p, count in unfinished:
+            games = cells[label][p]["games"]
+            lines.append(
+                "| `%s` | %s | %d | %.4f |"
+                % (label, labels[p], count, count / games if games else 0.0)
+            )
+        lines.append("")
+
     if report["pathDiffs"]:
         lines.append("## Yol farklari (ayni model, `%s` referans)" % report["productPath"])
         lines.append("")

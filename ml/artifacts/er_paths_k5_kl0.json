@@ -1,0 +1,131 @@
+{
+ "model": "ml\\runs\\k5_dist\\model_kl0.onnx",
+ "referee": {
+  "command": "eval",
+  "column": "2",
+  "plies": 2,
+  "prob": "equity"
+ },
+ "caseCount": 1000,
+ "skipped": [],
+ "phaseWeights": {
+  "bar": 0.370558,
+  "contact": 0.556423,
+  "race": 0.073018
+ },
+ "paths": {
+  "policy": {
+   "path": "policy",
+   "label": "politika kafasi argmax (0-ply)",
+   "count": 1000,
+   "mean": 0.025966,
+   "median": 0.0,
+   "maximum": 1.0,
+   "exactMatchRate": 0.561,
+   "sigma": 0.070375,
+   "sigmaCiLow": 0.050522,
+   "sigmaCiHigh": 0.090296,
+   "ciLow": 0.02185,
+   "ciHigh": 0.030639,
+   "standardError": 0.002225,
+   "phaseMeans": {
+    "bar": 0.023392,
+    "contact": 0.026295,
+    "race": 0.02894
+   },
+   "phaseCounts": {
+    "bar": 250,
+    "contact": 600,
+    "race": 150
+   },
+   "weightedMean": 0.025412,
+   "terminalCandidates": 0,
+   "sourceMeans": {
+    "gnubg2": 0.025274,
+    "random": 0.01136,
+    "self": 0.030126
+   },
+   "sourceCounts": {
+    "gnubg2": 664,
+    "random": 50,
+    "self": 286
+   }
+  },
+  "value": {
+   "path": "value",
+   "label": "deger kafasi argmax (0-ply)",
+   "count": 1000,
+   "mean": 0.044881,
+   "median": 0.0,
+   "maximum": 1.0,
+   "exactMatchRate": 0.476,
+   "sigma": 0.101614,
+   "sigmaCiLow": 0.084428,
+   "sigmaCiHigh": 0.118424,
+   "ciLow": 0.038774,
+   "ciHigh": 0.051439,
+   "standardError": 0.003213,
+   "phaseMeans": {
+    "bar": 0.03834,
+    "contact": 0.052287,
+    "race": 0.02616
+   },
+   "phaseCounts": {
+    "bar": 250,
+    "contact": 600,
+    "race": 150
+   },
+   "weightedMean": 0.045211,
+   "terminalCandidates": 0,
+   "sourceMeans": {
+    "gnubg2": 0.048026,
+    "random": 0.03928,
+    "self": 0.038559
+   },
+   "sourceCounts": {
+    "gnubg2": 664,
+    "random": 50,
+    "self": 286
+   }
+  },
+  "search1": {
+   "path": "search1",
+   "label": "1-ply expectiminimax (deger kafasi)",
+   "count": 1000,
+   "mean": 0.022617,
+   "median": 0.0,
+   "maximum": 0.432,
+   "exactMatchRate": 0.593,
+   "sigma": 0.052766,
+   "sigmaCiLow": 0.045297,
+   "sigmaCiHigh": 0.059956,
+   "ciLow": 0.019456,
+   "ciHigh": 0.026045,
+   "standardError": 0.001669,
+   "phaseMeans": {
+    "bar": 0.024844,
+    "contact": 0.02242,
+    "race": 0.019693
+   },
+   "phaseCounts": {
+    "bar": 250,
+    "contact": 600,
+    "race": 150
+   },
+   "weightedMean": 0.023119,
+   "terminalCandidates": 0,
+   "sourceMeans": {
+    "gnubg2": 0.022566,
+    "random": 0.01144,
+    "self": 0.024689
+   },
+   "sourceCounts": {
+    "gnubg2": 664,
+    "random": 50,
+    "self": 286
+   }
+  }
+ },
+ "corpus": "v2",
+ "split": "all"
+}

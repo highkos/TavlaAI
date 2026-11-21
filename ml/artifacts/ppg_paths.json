@@ -1,0 +1,315 @@
+{
+  "version": 1,
+  "baseline": "stage_d_l2/model_v30",
+  "caveat": "Kosular ayni zar tohumunu (2026) kullanir ama modeller farkli hamle oynadigi icin oyunlar ayrilir; iki ornekli GA bu yuzden yaklasiktir. Her kosunun kendi eslesmis GA'si zar gurultusunu zaten iptal ettigi icin GA oldugundan dar gorunmez.",
+  "pathOrder": [
+    "policy",
+    "value",
+    "search1"
+  ],
+  "pathLabels": {
+    "policy": "politika-argmax",
+    "value": "deger-0-ply",
+    "search1": "search1 (deger 1-ply)"
+  },
+  "productPath": "search1",
+  "models": [
+    "stage_d_l2/model_v30",
+    "rd_ctl10k/model_v10",
+    "rd_aug10k/model_v10"
+  ],
+  "cells": {
+    "stage_d_l2/model_v30": {
+      "search1": {
+        "label": "stage_d_l2/model_v30 [search1]",
+        "model": "ml\\runs\\stage_d_l2\\onnx\\model_v30.onnx",
+        "path": "search1",
+        "games": 2000,
+        "wins": 868,
+        "winRate": 0.434,
+        "ppg": -0.1635,
+        "ppgCiLow": -0.223,
+        "ppgCiHigh": -0.105,
+        "ppgStdError": 0.030337,
+        "ppgSigma": 1.35672,
+        "meanPlies": 55.889,
+        "seed": 2026,
+        "unfinished": 0,
+        "erPolicy": null,
+        "erValue": null
+      },
+      "policy": {
+        "label": "stage_d_l2/model_v30 [policy]",
+        "model": "ml\\runs\\stage_d_l2\\onnx\\model_v30.onnx",
+        "path": "policy",
+        "games": 2000,
+        "wins": 682,
+        "winRate": 0.341,
+        "ppg": -0.443,
+        "ppgCiLow": -0.502,
+        "ppgCiHigh": -0.3835,
+        "ppgStdError": 0.030022,
+        "ppgSigma": 1.342629,
+        "meanPlies": 56.198,
+        "seed": 2026,
+        "unfinished": 0,
+        "erPolicy": null,
+        "erValue": null
+      },
+      "value": {
+        "label": "stage_d_l2/model_v30 [value]",
+        "model": "ml\\runs\\stage_d_l2\\onnx\\model_v30.onnx",
+        "path": "value",
+        "games": 2000,
+        "wins": 701,
+        "winRate": 0.3505,
+        "ppg": -0.415,
+        "ppgCiLow": -0.474,
+        "ppgCiHigh": -0.356,
+        "ppgStdError": 0.030164,
+        "ppgSigma": 1.348957,
+        "meanPlies": 56.3685,
+        "seed": 2026,
+        "unfinished": 0,
+        "erPolicy": null,
+        "erValue": null
+      }
+    },
+    "rd_ctl10k/model_v10": {
+      "search1": {
+        "label": "rd_ctl10k/model_v10 [search1]",
+        "model": "ml\\runs\\rd_ctl10k\\onnx\\model_v10.onnx",
+        "path": "search1",
+        "games": 2000,
+        "wins": 864,
+        "winRate": 0.432,
+        "ppg": -0.199,
+        "ppgCiLow": -0.26,
+        "ppgCiHigh": -0.138,
+        "ppgStdError": 0.031547,
+        "ppgSigma": 1.410813,
+        "meanPlies": 57.133,
+        "seed": 2026,
+        "unfinished": 0,
+        "erPolicy": null,
+        "erValue": null
+      },
+      "policy": {
+        "label": "rd_ctl10k/model_v10 [policy]",
+        "model": "ml\\runs\\rd_ctl10k\\onnx\\model_v10.onnx",
+        "path": "policy",
+        "games": 2000,
+        "wins": 664,
+        "winRate": 0.332,
+        "ppg": -0.4605,
+        "ppgCiLow": -0.518,
+        "ppgCiHigh": -0.401488,
+        "ppgStdError": 0.029827,
+        "ppgSigma": 1.333915,
+        "meanPlies": 56.0245,
+        "seed": 2026,
+        "unfinished": 1,
+        "erPolicy": null,
+        "erValue": null
+      },
+      "value": {
+        "label": "rd_ctl10k/model_v10 [value]",
+        "model": "ml\\runs\\rd_ctl10k\\onnx\\model_v10.onnx",
+        "path": "value",
+        "games": 2000,
+        "wins": 696,
+        "winRate": 0.348,
+        "ppg": -0.4445,
+        "ppgCiLow": -0.504,
+        "ppgCiHigh": -0.386,
+        "ppgStdError": 0.02994,
+        "ppgSigma": 1.338961,
+        "meanPlies": 56.37,
+        "seed": 2026,
+        "unfinished": 2,
+        "erPolicy": null,
+        "erValue": null
+      }
+    },
+    "rd_aug10k/model_v10": {
+      "search1": {
+        "label": "rd_aug10k/model_v10 [search1]",
+        "model": "ml\\runs\\rd_aug10k\\onnx\\model_v10.onnx",
+        "path": "search1",
+        "games": 2000,
+        "wins": 753,
+        "winRate": 0.3765,
+        "ppg": -0.324,
+        "ppgCiLow": -0.381,
+        "ppgCiHigh": -0.267,
+        "ppgStdError": 0.029094,
+        "ppgSigma": 1.301104,
+        "meanPlies": 54.4765,
+        "seed": 2026,
+        "unfinished": 0,
+        "erPolicy": null,
+        "erValue": null
+      },
+      "policy": {
+        "label": "rd_aug10k/model_v10 [policy]",
+        "model": "ml\\runs\\rd_aug10k\\onnx\\model_v10.onnx",
+        "path": "policy",
+        "games": 2000,
+        "wins": 644,
+        "winRate": 0.322,
+        "ppg": -0.516,
+        "ppgCiLow": -0.5755,
+        "ppgCiHigh": -0.4565,
+        "ppgStdError": 0.030378,
+        "ppgSigma": 1.358553,
+        "meanPlies": 57.139,
+        "seed": 2026,
+        "unfinished": 0,
+        "erPolicy": null,
+        "erValue": null
+      },
+      "value": {
+        "label": "rd_aug10k/model_v10 [value]",
+        "model": "ml\\runs\\rd_aug10k\\onnx\\model_v10.onnx",
+        "path": "value",
+        "games": 2000,
+        "wins": 630,
+        "winRate": 0.315,
+        "ppg": -0.557,
+        "ppgCiLow": -0.6175,
+        "ppgCiHigh": -0.496,
+        "ppgStdError": 0.031038,
+        "ppgSigma": 1.388061,
+        "meanPlies": 58.019,
+        "seed": 2026,
+        "unfinished": 0,
+        "erPolicy": null,
+        "erValue": null
+      }
+    }
+  },
+  "pathDiffs": [
+    {
+      "a": "stage_d_l2/model_v30 [policy]",
+      "b": "stage_d_l2/model_v30 [search1]",
+      "diff": -0.2795,
+      "ciLow": -0.363153,
+      "ciHigh": -0.195847,
+      "standardError": 0.042681,
+      "z": -6.5486,
+      "significant": true
+    },
+    {
+      "a": "stage_d_l2/model_v30 [value]",
+      "b": "stage_d_l2/model_v30 [search1]",
+      "diff": -0.2515,
+      "ciLow": -0.335349,
+      "ciHigh": -0.167651,
+      "standardError": 0.042781,
+      "z": -5.8788,
+      "significant": true
+    },
+    {
+      "a": "rd_ctl10k/model_v10 [policy]",
+      "b": "rd_ctl10k/model_v10 [search1]",
+      "diff": -0.2615,
+      "ciLow": -0.346592,
+      "ciHigh": -0.176408,
+      "standardError": 0.043415,
+      "z": -6.0233,
+      "significant": true
+    },
+    {
+      "a": "rd_ctl10k/model_v10 [value]",
+      "b": "rd_ctl10k/model_v10 [search1]",
+      "diff": -0.2455,
+      "ciLow": -0.330744,
+      "ciHigh": -0.160256,
+      "standardError": 0.043493,
+      "z": -5.6446,
+      "significant": true
+    },
+    {
+      "a": "rd_aug10k/model_v10 [policy]",
+      "b": "rd_aug10k/model_v10 [search1]",
+      "diff": -0.192,
+      "ciLow": -0.274441,
+      "ciHigh": -0.109559,
+      "standardError": 0.042063,
+      "z": -4.5646,
+      "significant": true
+    },
+    {
+      "a": "rd_aug10k/model_v10 [value]",
+      "b": "rd_aug10k/model_v10 [search1]",
+      "diff": -0.233,
+      "ciLow": -0.31638,
+      "ciHigh": -0.14962,
+      "standardError": 0.042542,
+      "z": -5.477,
+      "significant": true
+    }
+  ],
+  "modelDiffs": [
+    {
+      "a": "rd_ctl10k/model_v10 [policy]",
+      "b": "stage_d_l2/model_v30 [policy]",
+      "diff": -0.0175,
+      "ciLow": -0.100446,
+      "ciHigh": 0.065446,
+      "standardError": 0.04232,
+      "z": -0.4135,
+      "significant": false
+    },
+    {
+      "a": "rd_aug10k/model_v10 [policy]",
+      "b": "stage_d_l2/model_v30 [policy]",
+      "diff": -0.073,
+      "ciLow": -0.15671,
+      "ciHigh": 0.01071,
+      "standardError": 0.04271,
+      "z": -1.7092,
+      "significant": false
+    },
+    {
+      "a": "rd_ctl10k/model_v10 [value]",
+      "b": "stage_d_l2/model_v30 [value]",
+      "diff": -0.0295,
+      "ciLow": -0.112798,
+      "ciHigh": 0.053798,
+      "standardError": 0.0425,
+      "z": -0.6941,
+      "significant": false
+    },
+    {
+      "a": "rd_aug10k/model_v10 [value]",
+      "b": "stage_d_l2/model_v30 [value]",
+      "diff": -0.142,
+      "ciLow": -0.226828,
+      "ciHigh": -0.057172,
+      "standardError": 0.04328,
+      "z": -3.2809,
+      "significant": true
+    },
+    {
+      "a": "rd_ctl10k/model_v10 [search1]",
+      "b": "stage_d_l2/model_v30 [search1]",
+      "diff": -0.0355,
+      "ciLow": -0.121282,
+      "ciHigh": 0.050282,
+      "standardError": 0.043767,
+      "z": -0.8111,
+      "significant": false
+    },
+    {
+      "a": "rd_aug10k/model_v10 [search1]",
+      "b": "stage_d_l2/model_v30 [search1]",
+      "diff": -0.1605,
+      "ciLow": -0.242883,
+      "ciHigh": -0.078117,
+      "standardError": 0.042033,
+      "z": -3.8184,
+      "significant": true
+    }
+  ]
+}
