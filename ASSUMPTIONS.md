@@ -5696,3 +5696,66 @@ iddiasi icin >=4337 oyun gerekir. (b) ER->ppg egimi 3 noktadan; ara
 ER seviyelerinde (ornegin 0,032) dogrulanmadi. (c) `policy` yolu
 (search1 degil) icin ppg olculmedi; politika kafasinin urun katkisi
 ayri bir kosu ister.
+## F7-105 -- K1/K4: havuz tabanli antisimetri kapisi ve "N icin gereken veri" olcutu
+
+**K1 -- kapi n >= 1245'te olculemedi, havuzda olculdu.** `antisymmetry.py
+measure` korpus v2'yi kullanir; `corpus2.TARGET_POSITIONS_V2 = 1000`, yani
+K1'in istedigi n >= 1245 oradan **karsilanamaz** (korpusu yeniden uretmeden).
+400 oyunluk havuzun (`curve_pool_400.npz`) held-out kumesi **2667 pozisyon /
+50 727 afterstate** veriyor -- gereksinimin 2,7 kati -- ve istatistikler
+anlamsal olarak ayni (`gnubg_distill.equity_of_probs` ==
+`equity.equity_from_exclusive`; ikisi de `probs @ EQUITY_WEIGHTS`).
+`curve_pool.py`'ye `measure_gate()` ve `gate` alt komutu eklendi; cikti
+`ml/artifacts/antisymmetry_pool.json` / `.md`.
+
+| Model | corr | meanAbsSum | argmax | ER(+1) | ER(-1) | Fark | 95% GA |
+|---|---|---|---|---|---|---|---|
+| `stage_d_l2/model_v30` | -0,9100 | 0,4340 | 0,362 | 0,0287 | 0,0815 | -0,0527 | [-0,0582; -0,0474] |
+| `rd_ctl10k/model_v10` | -0,8967 | 0,4247 | 0,327 | 0,0302 | 0,0929 | -0,0627 | [-0,0687; -0,0569] |
+| `rd_aug10k/model_v10` | **-0,9641** | **0,1479** | **0,438** | 0,0387 | 0,0499 | **-0,0112** | [-0,0151; -0,0078] |
+
+Artirim **her eksende** iyilestiriyor (corr -0,9100 -> -0,9641, meanAbsSum
+0,4340 -> 0,1479, argmax 0,362 -> 0,438, ER farki -0,0527 -> -0,0112) ama
+`|corr| >= 0,99` esigini **hala gecmiyor**. Bu, kapinin bir teshis
+oldugunu ve karar olcutu olmadigini (F7-104) nicel olarak dogruluyor:
+artirim kusuru 4,7 kat azaltiyor, yine de urun metriginde 0,16 ppg
+kaybettiriyor. Yani kusurun buyuklugu ile urun zarari arasinda iliski
+**yok**.
+
+**K4 -- etiket artik "N icin gereken veri" ile de veriliyor.** Eskiden
+etiket yalnizca egim isaretine ve tohum oylamasina bakiyordu; K4 bunun
+"bu N icin gereken veri" tahminiyle celismemesi gerektigini soyledi.
+`learning_curve.py`'ye eklendi:
+
+* `DATA_TARGET_RATIO = 0,5` -- hedef, olculen en iyi ER'nin yarisi.
+* `DATA_BUDGET_MULTIPLIER = 100` -- butce, olculen en buyuk pozisyon
+  sayisinin 100 kati (1 056 000).
+* `data_requirement(fit, target)` -- `ER = a*N^-b + c`'yi ters cevirip
+  `N = (a / (target - c)) ** (1/b)` verir; `target <= c` ise `inf`
+  (taban hedefin ustunde -> ne kadar veri olsa da ulasilmaz).
+* `DataRequirement.decision`: `inf` -> `pipeline`, sonlu ve <= butce ->
+  `olcek`, sonlu ama butce ustu -> `belirsiz`.
+* `CurveReport.decision` artik **uc olcutun anlasmasini** istiyor: egim,
+  tohum oylamasi ve `data_decision`. Celiski -> `belirsiz`.
+
+Gercek 7 noktali egri uzerinde sonuc (`ml/artifacts/learning_curve.md`
+bolum 4.2):
+
+| Yol | En iyi ER | Hedef | Taban (c) | Gereken N | Butce | Karar |
+|---|---|---|---|---|---|---|
+| `policy` | 0,0158 | 0,0079 | 0,0003 | **103 433** | 1 056 000 | `olcek` |
+| `value` | 0,0330 | 0,0165 | **0,0223** | **inf** | 1 056 000 | `pipeline` |
+
+**Bu, F7-104'un nicel bicimidir.** Politika kafasi olcekle sinirli
+(103 433 pozisyon -- ulasilabilir), deger kafasi ise **hatta** sinirli:
+tabani 0,0223, hedefi 0,0165'in **ustunde**, yani ne kadar veri eklenirse
+eklensin yariya inmez. `search1` **yalnizca deger kafasini** kullandigi
+icin (`er_paths.search1_values`) urun metrigini veri miktari
+**iyilestiremez**. Bu, "sonraki kaldirac gnubg damitma" kararinin
+(F7-104, karar 4) sayisal gerekcesidir.
+
+**Acik kalan.** (a) `DATA_TARGET_RATIO` ve `DATA_BUDGET_MULTIPLIER`
+benim sectigim degerler; kullanici onaylamadi. (b) Taban `c` GA'lari
+genis (value: [0,0148; 0,0252]) -- `c`'nin hedefin ustunde oldugu
+**nokta tahminine** dayaniyor, GA'nin tamamina degil. (c) `policy`
+yolunun ppg'si hala olculmedi (K5 kosusu suruyor).

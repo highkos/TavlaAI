@@ -458,7 +458,7 @@ def test_262_build_er_markdown_adds_weighted_section():
     """Agirlikli satirlar markdown'a K3 bolumu ekler; agirliksizda eklemez."""
     rows = [
         {
-            "model": "runs/a/onnx/model_v1.onnx",
+            "model": "runs/a/model_v1.onnx",
             "positions": 100,
             "policy": 0.02,
             "policyOpp": 0.08,
@@ -483,3 +483,163 @@ def test_262_build_er_markdown_adds_weighted_section():
 
     plain = cp.build_er_markdown([dict(rows[0], weighted=False)], "p.npz")
     assert "Oyun sikligina agirlikli ER (K3)" not in plain
+
+
+def _gate_pool() -> cp.CurvePool:
+    """Kapi testleri icin iki adayli, bakis altinda farklilasan havuz.
+
+    Aday 0 nokta blogu 1'de, aday 1 nokta blogu 24'te tas tasir. ``flip_perspective``
+    blogu ``j -> 25 - j`` ile ters cevirdigi icin bu iki aday bakis altinda yer
+    degistirir; boylece ``h(x) = sum(x)`` tek sayi (odd) bir sinyal uretir.
+    """
+    rows: list[np.ndarray] = []
+    offsets = [0]
+    best: list[int] = []
+    y: list[float] = []
+    cand_equity: list[float] = []
+    game_ids: list[str] = []
+    split: list[str] = []
+    for k in range(4):
+        block = np.zeros((2, gnubg_er.VECTOR_SIZE), dtype=np.float32)
+        block[0, gnubg_er.ACTIVE_OFFSET] = float(k + 1)
+        block[1, gnubg_er.OPP_OFFSET + 92] = float(k + 1)
+        block[:, gnubg_er.IS_CONTACT] = 1.0
+        rows.append(block)
+        offsets.append(offsets[-1] + 2)
+        best.append(0)
+        y.append(0.0)
+        cand_equity.extend([0.0, -1.0])
+        game_ids.append("g%d" % k)
+        split.append(cp.SPLIT_HELD_OUT)
+    return cp.CurvePool(
+        x=np.concatenate(rows, axis=0),
+        offsets=np.asarray(offsets, dtype=np.int64),
+        best=np.asarray(best, dtype=np.int32),
+        y=np.asarray(y, dtype=np.float32),
+        cand_equity=np.asarray(cand_equity, dtype=np.float32),
+        game_ids=game_ids,
+        split=split,
+        meta={"poolVersion": cp.POOL_VERSION},
+    )
+
+
+def _signed_sum(arr: np.ndarray) -> np.ndarray:
+    """``sum(ACTIVE) - sum(OPP)``; bakis takasi altinda **isaret doner**."""
+    a = gnubg_er.ACTIVE_OFFSET
+    o = gnubg_er.OPP_OFFSET
+    width = 96
+    return arr[:, a : a + width].sum(axis=1) - arr[:, o : o + width].sum(axis=1)
+
+
+def _odd_model():
+    """Bakis altinda tam antisimetrik model: ``d = h(x) - h(flip(x))``."""
+    import torch
+    from antisymmetry import flip_perspective
+
+    class _Model:
+        def eval(self) -> None:
+            return None
+
+        def __call__(self, x):
+            arr = x.detach().cpu().numpy()
+            n = arr.shape[0]
+            flipped = np.stack(
+                [
+                    np.asarray(flip_perspective(arr[i]), dtype=np.float32)
+                    for i in range(n)
+                ]
+            )
+            d = _signed_sum(arr) - _signed_sum(flipped)
+            e = np.tanh(d)
+            probs = np.zeros((n, 6), dtype=np.float32)
+            probs[:, 0] = (e + 1.0) / 2.0
+            probs[:, 3] = 1.0 - probs[:, 0]
+            return [torch.from_numpy(probs), torch.from_numpy(d.astype(np.float32))]
+
+    return _Model()
+
+
+def _even_model():
+    """Bozuk model: cikti tek sayi degil, ``e = tanh(sum(x))`` (taka invaryanti)."""
+    import torch
+
+    class _Model:
+        def eval(self) -> None:
+            return None
+
+        def __call__(self, x):
+            arr = x.detach().cpu().numpy()
+            n = arr.shape[0]
+            h = arr.sum(axis=1)
+            e = np.tanh(h)
+            probs = np.zeros((n, 6), dtype=np.float32)
+            probs[:, 0] = (e + 1.0) / 2.0
+            probs[:, 3] = 1.0 - probs[:, 0]
+            return [torch.from_numpy(probs), torch.from_numpy(h.astype(np.float32))]
+
+    return _Model()
+
+
+def test_271_measure_gate_antisymmetric_model_passes_every_axis():
+    """Tam antisimetrik model: corr = -1, meanAbsSum = 0, argmax = 1, fark = 0 (K1)."""
+    pool = _gate_pool()
+    stats = cp.measure_gate(_odd_model(), pool, pool.held_out_indices(), resamples=200)
+    assert stats["positions"] == 4.0
+    assert stats["afterStates"] == 8.0
+    assert stats["correlation"] == pytest.approx(-1.0, abs=1e-6)
+    assert stats["meanAbsSum"] == pytest.approx(0.0, abs=1e-6)
+    assert stats["argmaxAgreement"] == pytest.approx(1.0)
+    assert stats["erDiff"] == pytest.approx(0.0, abs=1e-9)
+    assert stats["erPlus"] == pytest.approx(0.0, abs=1e-9)
+    assert stats["erMinus"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_272_measure_gate_detects_broken_model():
+    """Tek sayi olmayan cikti kapiyi duserir: meanAbsSum > 0, corr > -0.99 (K1)."""
+    pool = _gate_pool()
+    stats = cp.measure_gate(_even_model(), pool, pool.held_out_indices(), resamples=200)
+    assert stats["meanAbsSum"] > 0.1
+    assert stats["correlation"] > -0.99
+
+
+def test_273_measure_gate_rejects_empty_indices():
+    """Bos pozisyon kumesi sessizce 0 dondurmez, hata verir."""
+    pool = _gate_pool()
+    with pytest.raises(cp.CurvePoolError):
+        cp.measure_gate(_odd_model(), pool, [])
+
+
+def test_274_build_gate_markdown_renders_table():
+    """Kapi markdown'i tablo satirini ve teshis notunu yazar."""
+    rows = [
+        {
+            "model": "runs/a/model_v1.onnx",
+            "positions": 2667.0,
+            "afterStates": 50727.0,
+            "correlation": -0.9100,
+            "meanAbsSum": 0.4340,
+            "argmaxAgreement": 0.3618,
+            "erPlus": 0.0287,
+            "erMinus": 0.0815,
+            "erDiff": -0.0527,
+            "erDiffCiLow": -0.0582,
+            "erDiffCiHigh": -0.0474,
+        }
+    ]
+    md = cp.build_gate_markdown(rows, "p.npz")
+    assert "Antisimetri kapisi" in md
+    assert "`runs/a/model_v1.onnx`" in md
+    assert "| 2667 | 50727 | -0.9100 | 0.4340 | 0.362 |" in md
+    assert "-0.0527" in md
+    assert "teshis" in md
+
+
+def test_275_gate_cli_parses_models_and_defaults():
+    """``gate`` alt komutu modelleri ve varsayilanlari kabul eder."""
+    parser = cp.build_parser()
+    args = parser.parse_args(["gate", "--model", "a.onnx", "b.onnx"])
+    assert args.command == "gate"
+    assert args.model == ["a.onnx", "b.onnx"]
+    assert args.pool == cp.POOL_PATH
+    assert args.limit == 0
+    assert args.resamples == 2000

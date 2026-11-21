@@ -1,0 +1,47 @@
+{
+  "models": [
+    {
+      "afterStates": 50727.0,
+      "argmaxAgreement": 0.3618297712785902,
+      "correlation": -0.9100249637309462,
+      "erDiff": -0.052746906789176144,
+      "erDiffCiHigh": -0.04736776414025941,
+      "erDiffCiLow": -0.0582149610473651,
+      "erMinus": 0.08147094083376707,
+      "erPlus": 0.028724034044590934,
+      "meanAbsSum": 0.43402662246019336,
+      "model": "stage_d_l2/model_v30.onnx",
+      "positions": 2667.0
+    },
+    {
+      "afterStates": 50727.0,
+      "argmaxAgreement": 0.3265841769778778,
+      "correlation": -0.896716410050448,
+      "erDiff": -0.06271541060920509,
+      "erDiffCiHigh": -0.05690465906110927,
+      "erDiffCiLow": -0.06866757622815324,
+      "erMinus": 0.092891638322161,
+      "erPlus": 0.030176227712955913,
+      "meanAbsSum": 0.42467905354382435,
+      "model": "rd_ctl10k/model_v10.onnx",
+      "positions": 2667.0
+    },
+    {
+      "afterStates": 50727.0,
+      "argmaxAgreement": 0.43794525684289465,
+      "correlation": -0.9641060333767943,
+      "erDiff": -0.011230971489458183,
+      "erDiffCiHigh": -0.007762139072053506,
+      "erDiffCiLow": -0.015146354369185232,
+      "erMinus": 0.049905886639200814,
+      "erPlus": 0.03867491514974263,
+      "meanAbsSum": 0.14791433066676063,
+      "model": "rd_aug10k/model_v10.onnx",
+      "positions": 2667.0
+    }
+  ],
+  "pool": "ml/artifacts/curve_pool_400.npz",
+  "positions": 2667.0,
+  "resamples": 2000,
+  "seed": 20261122
+}

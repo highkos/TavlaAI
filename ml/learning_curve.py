@@ -71,6 +71,14 @@ DECISION_PIPELINE = "pipeline"
 DECISION_UNDETERMINED = "belirsiz"
 DECISION_NO_DATA = "veri-yok"
 
+#: K4: "N icin gereken veri" kriteri. Hedef ER, olculen **en iyi** ER'nin bu
+#: oranidir (yani "ER'yi yariya indirmek icin ne kadar veri gerekir?").
+DATA_TARGET_RATIO = 0.5
+
+#: K4: hedefe ulasmak icin gereken pozisyon sayisi, en buyuk olcumun bu
+#: katindan fazlaysa "olcek" denmez (butce disi -> ``belirsiz``).
+DATA_BUDGET_MULTIPLIER = 100.0
+
 #: In-sample kaybin **birimi**. Kural 5: in-sample metrik basari sayilmaz;
 #: birimi yazilmadan bir ER gibi okunabilir. Bu yuzden her raporda acikca
 #: etiketlenir.
@@ -182,6 +190,65 @@ class CurvePoint:
         )
 
 
+def data_requirement(fit: dict[str, Any], target: float) -> float:
+    """``ER(N) = a*N^-b + c`` modelinde ``ER(N) = target`` icin gereken ``N``.
+
+    K4: etiket tohum tutarliligiyla degil, **"N icin gereken veri"** tahminiyle
+    de verilir. Ters cozum: ``N = (a / (target - c)) ** (1 / b)``.
+
+    * ``target <= c``  -> taban hedefin **uzerinde**: hicbir ``N`` yetmez, ``inf``.
+    * fit gecersizse   -> ``nan`` (sessiz fallback yok, Kural 6).
+    """
+    a = float(fit.get("a", float("nan")))
+    b = float(fit.get("b", float("nan")))
+    c = float(fit.get("c", float("nan")))
+    if not (np.isfinite(a) and np.isfinite(b) and np.isfinite(c)):
+        return float("nan")
+    if a <= 0.0 or b <= 0.0:
+        return float("nan")
+    gap = float(target) - c
+    if gap <= 0.0:
+        return float("inf")
+    return float((a / gap) ** (1.0 / b))
+
+
+@dataclass(frozen=True)
+class DataRequirement:
+    """K4: bir yol icin "hedef ER'ye ulasmak kac pozisyon ister?" cevabi."""
+
+    path: str
+    best_er: float
+    target: float
+    floor: float
+    positions: float
+    budget: float
+
+    @property
+    def decision(self) -> str:
+        """``olcek`` / ``pipeline`` / ``belirsiz``.
+
+        ``inf`` -> taban hedefin uzerinde, veri **hicbir zaman** yetmez
+        (``pipeline``). Sonlu ve butce icinde -> ``olcek``. Sonlu ama butce
+        disi -> ``belirsiz`` (veri yardim eder, ama bu olcekte degil).
+        """
+        if not np.isfinite(self.positions):
+            return DECISION_PIPELINE if np.isinf(self.positions) else DECISION_UNDETERMINED
+        if self.positions <= self.budget:
+            return DECISION_SCALES
+        return DECISION_UNDETERMINED
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "path": self.path,
+            "bestEr": self.best_er,
+            "target": self.target,
+            "floor": self.floor,
+            "positions": self.positions,
+            "budget": self.budget,
+            "decision": self.decision,
+        }
+
+
 @dataclass
 class CurveReport:
     """Ogrenme egrisinin tamami."""
@@ -207,6 +274,45 @@ class CurveReport:
         entry = self.slopes.get(path)
         return None if entry is None else entry.get("slope")
 
+    def best_er(self, path: str) -> float | None:
+        """Yolun olculen **en iyi** (en kucuk) ER'si."""
+        values = [
+            float(np.mean(p.losses[path]))
+            for p in self.points
+            if p.losses.get(path)
+        ]
+        return min(values) if values else None
+
+    def max_positions(self) -> int:
+        """Egrinin en buyuk noktasindaki pozisyon sayisi."""
+        return max((int(p.positions) for p in self.points), default=0)
+
+    def data_requirement(self, path: str = "policy") -> DataRequirement | None:
+        """K4: hedef ER'ye ulasmak icin gereken pozisyon sayisi.
+
+        Hedef ``DATA_TARGET_RATIO * best_er``: "ER'yi yariya indirmek kac
+        pozisyon ister?". Fit yoksa ``None``.
+        """
+        fit = self.saturation.get(path) or {}
+        best = self.best_er(path)
+        if best is None or not fit:
+            return None
+        target = DATA_TARGET_RATIO * best
+        return DataRequirement(
+            path=path,
+            best_er=best,
+            target=target,
+            floor=float(fit.get("c", float("nan"))),
+            positions=data_requirement(fit, target),
+            budget=DATA_BUDGET_MULTIPLIER * float(self.max_positions()),
+        )
+
+    @property
+    def data_decision(self) -> str:
+        """K4: "N icin gereken veri" kriterinin verdigi etiket (politika yolu)."""
+        req = self.data_requirement("policy")
+        return req.decision if req is not None else DECISION_NO_DATA
+
     @property
     def decision(self) -> str:
         """``olcek`` / ``pipeline`` / ``belirsiz`` / ``veri-yok``.
@@ -221,6 +327,10 @@ class CurveReport:
         yetmez. Kural: ``olcek``/``pipeline`` demek icin **tum tohumlarin**
         ayni karari vermesi gerekir; aksi halde ``belirsiz``. Tek tohum
         yeterli degildir (kullanicinin adim 0 kosulu).
+
+        **"N icin gereken veri" (K4).** Etiket yalnizca tohum tutarliligina
+        birakilmaz: ``data_decision`` (fit edilmis tabandan ters cozum) da
+        ayni etiketi vermelidir. Celisirse ``belirsiz``.
         """
         if not self.points or not self.slopes:
             return DECISION_NO_DATA
@@ -240,6 +350,10 @@ class CurveReport:
             votes = set(self.seed_decisions.values())
             if votes != {pooled}:
                 return DECISION_UNDETERMINED
+
+        data = self.data_decision
+        if data not in (DECISION_NO_DATA, pooled):
+            return DECISION_UNDETERMINED
         return pooled
 
     @property
@@ -266,6 +380,14 @@ class CurveReport:
             "corpus": self.corpus,
             "paired": self.paired,
             "scalingSlopeEpsilon": SCALING_SLOPE_EPSILON,
+            "dataTargetRatio": DATA_TARGET_RATIO,
+            "dataBudgetMultiplier": DATA_BUDGET_MULTIPLIER,
+            "dataDecision": self.data_decision,
+            "dataRequirements": {
+                p: req.to_dict()
+                for p in CURVE_PATHS
+                if (req := self.data_requirement(p)) is not None
+            },
             "notes": self.notes,
         }
 
@@ -1133,6 +1255,50 @@ def build_markdown(report: CurveReport, *, title: str = "Faz 7-R - Ogrenme egris
         )
         lines.append("")
         lines.append("Negatif fark = sonra daha iyi (ER dustu).")
+        lines.append("")
+    reqs = [
+        req
+        for p in CURVE_PATHS
+        if (req := report.data_requirement(p)) is not None
+    ]
+    if reqs:
+        lines.append("## 4.2 \"N icin gereken veri\" (K4)")
+        lines.append("")
+        lines.append(
+            "Etiket yalnizca tohum tutarliligina birakilmaz. Fit edilmis "
+            "`ER = a*N^-b + c` modeli ters cozulur: hedef ER'ye ulasmak kac "
+            "pozisyon ister? Hedef, olculen en iyi ER'nin **%s** kati (yani "
+            "\"ER'yi yariya indirmek\")."
+            % _fmt(DATA_TARGET_RATIO)
+        )
+        lines.append("")
+        lines.append("| Yol | En iyi ER | Hedef | Taban c | Gereken N | Butce | Etiket |")
+        lines.append("|---|---|---|---|---|---|---|")
+        for req in reqs:
+            need = (
+                "**ulasilamaz**"
+                if np.isinf(req.positions)
+                else ("belirsiz" if not np.isfinite(req.positions) else "%d" % int(req.positions))
+            )
+            lines.append(
+                "| %s | %s | %s | %s | %s | %d | `%s` |"
+                % (
+                    req.path,
+                    _fmt(req.best_er),
+                    _fmt(req.target),
+                    _fmt(req.floor),
+                    need,
+                    int(req.budget),
+                    req.decision,
+                )
+            )
+        lines.append("")
+        lines.append(
+            "`ulasilamaz` = hedef, fit edilmis tabanin **altinda**: hicbir veri "
+            "miktari o seviyeye indirmez. Bu, o yol icin **pipeline** sorunudur, "
+            "olcek sorunu degil. Butce = en buyuk olcumun %s kati."
+            % _fmt(DATA_BUDGET_MULTIPLIER)
+        )
         lines.append("")
     lines.append("## 5. Karar")
     lines.append("")

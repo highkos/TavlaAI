@@ -67,6 +67,16 @@ Esik: **0.0050** (ER kazanci / log2 veri).
 
 `c` **taban parametresidir**: veri sonsuza giderken ER'nin indigi deger. Log-egim modeli taban tasimaz (ER sifira iner), ki bu gercek degildir. `c` icin GA **oyun kumeleri** uzerinden bootstrap ile hesaplanir; nokta tahmini tek basina kanit sayilmaz (Kural 3).
 
+## 4.2 "N icin gereken veri" (K4)
+
+Etiket yalnizca tohum tutarliligina birakilmaz. Fit edilmis `ER = a*N^-b + c` modeli ters cozulur: hedef ER'ye ulasmak kac pozisyon ister? Hedef, olculen en iyi ER'nin **0.5000** kati (yani "ER'yi yariya indirmek").
+
+| Yol | En iyi ER | Hedef | Taban c | Gereken N | Butce | Etiket |
+|---|---|---|---|---|---|---|
+| policy | 0.0158 | 0.0079 | 0.0003 | 103433 | 1056000 | `olcek` |
+| value | 0.0330 | 0.0165 | 0.0223 | **ulasilamaz** | 1056000 | `pipeline` |
+
+`ulasilamaz` = hedef, fit edilmis tabanin **altinda**: hicbir veri miktari o seviyeye indirmez. Bu, o yol icin **pipeline** sorunudur, olcek sorunu degil. Butce = en buyuk olcumun 100.0000 kati.
 ## 5. Karar
 
 **`olcek`**

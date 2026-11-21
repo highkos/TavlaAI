@@ -674,6 +674,109 @@ def perspective_asymmetry(report: dict[str, list[float]], path: str = "value") -
     return hi / lo
 
 
+def measure_gate(
+    model,
+    pool: CurvePool,
+    indices: Sequence[int],
+    *,
+    device: str = "cpu",
+    resamples: int = 2000,
+    seed: int = 20261122,
+) -> dict[str, float]:
+    """Antisimetri kapisi istatistikleri, **havuz uzerinde** (K1: n >= 1245).
+
+    ``antisymmetry.measure_antisymmetry`` korpus v2'yi kullanir ve o korpus
+    tam olarak 1000 vakadir; K1'in istedigi n >= 1245 oradan karsilanamaz.
+    Bu fonksiyon ayni istatistikleri 400 oyunluk havuzun held-out kumesinde
+    (n = 2667) hesaplar. Semantik birebir aynidir:
+
+    * ``correlation``  : ``pearson(e_plus, e_minus)`` afterstate duzeyinde
+    * ``meanAbsSum``   : ``mean(|e_plus + e_minus|)`` afterstate duzeyinde
+    * ``argmaxAgreement``: ``argmax(logit(+1)) == argmin(logit(-1))``, pozisyon
+      duzeyinde (F7-81: politika kafasi oynayacak tarafi siralar, dolayisiyla
+      bakis cevrilince dogru ifade argmin olur)
+    * ``erPlus``/``erMinus``/``erDiff``: deger yolu ER'si ve eslesmis fark
+
+    Havuzdaki afterstate'ler her zaman *oynayan* tarafin bakisindadir; karsi
+    bakis ``_flip_rows`` ile uretilir ve ``flip_perspective`` dogrulugu Test
+    160'ta kanitlanmistir. Referans equity'ler ayni fiziksel afterstate'e
+    aittir, dolayisiyla karsi bakista isaret cevrilir.
+    """
+    import torch  # noqa: PLC0415
+
+    from antisymmetry import _bootstrap_ci, _pearson  # noqa: PLC0415
+
+    if not indices:
+        raise CurvePoolError("kapi icin pozisyon yok")
+    x, mask, width = _pad(pool, indices)
+    if width <= 0:
+        raise CurvePoolError("kapi icin aday yok")
+    x_opp = _flip_rows(x)
+
+    model.eval()
+    plus_values: list[float] = []
+    minus_values: list[float] = []
+    losses_plus: list[float] = []
+    losses_minus: list[float] = []
+    agree = 0
+    total = 0
+
+    with torch.no_grad():
+        for start in range(0, len(indices), 64):
+            stop = min(start + 64, len(indices))
+            mt = torch.from_numpy(mask[start:stop]).to(device)
+            out_plus = model(
+                torch.from_numpy(x[start:stop]).to(device).reshape(-1, gnubg_er.VECTOR_SIZE)
+            )
+            out_minus = model(
+                torch.from_numpy(x_opp[start:stop]).to(device).reshape(-1, gnubg_er.VECTOR_SIZE)
+            )
+            probs_plus = out_plus[0].reshape(stop - start, width, -1)
+            probs_minus = out_minus[0].reshape(stop - start, width, -1)
+            logits_plus = out_plus[1].reshape(stop - start, width).masked_fill(~mt, -1e9)
+            logits_minus = out_minus[1].reshape(stop - start, width).masked_fill(~mt, -1e9)
+            val_plus = gnubg_distill.equity_of_probs(probs_plus)
+            val_minus = gnubg_distill.equity_of_probs(probs_minus)
+
+            for row in range(stop - start):
+                i = int(indices[start + row])
+                equities = pool.candidate_equities(i)
+                k = int(equities.shape[0])
+                best_equity = float(np.max(equities))
+
+                vp = val_plus[row, :k].to("cpu").numpy()
+                vm = val_minus[row, :k].to("cpu").numpy()
+                plus_values.extend(float(v) for v in vp)
+                minus_values.extend(float(v) for v in vm)
+
+                pick_plus = int(np.argmax(vp))
+                pick_minus = int(np.argmin(vm))
+                total += 1
+                if pick_plus == pick_minus:
+                    agree += 1
+                losses_plus.append(best_equity - float(equities[pick_plus]))
+                losses_minus.append(best_equity - float(equities[pick_minus]))
+
+    a = np.asarray(plus_values, dtype=np.float64)
+    b = np.asarray(minus_values, dtype=np.float64)
+    diffs = np.asarray(losses_plus, dtype=np.float64) - np.asarray(
+        losses_minus, dtype=np.float64
+    )
+    ci_low, ci_high = _bootstrap_ci(diffs, resamples=resamples, seed=seed)
+    return {
+        "positions": float(total),
+        "afterStates": float(a.shape[0]),
+        "correlation": _pearson(a, b),
+        "meanAbsSum": float(np.mean(np.abs(a + b))),
+        "argmaxAgreement": (agree / total) if total else 0.0,
+        "erPlus": float(np.mean(losses_plus)),
+        "erMinus": float(np.mean(losses_minus)),
+        "erDiff": float(np.mean(diffs)),
+        "erDiffCiLow": float(ci_low),
+        "erDiffCiHigh": float(ci_high),
+    }
+
+
 def make_train_fn(
     pool: CurvePool,
     *,
@@ -823,6 +926,17 @@ def build_parser():
     er.add_argument(
         "--shard-limit", type=int, default=1, help="pay olcumu icin ilk N shard (0 = hepsi)"
     )
+
+    gate = sub.add_parser(
+        "gate",
+        help="K1: antisimetri kapisi istatistikleri (havuz uzerinde, n >= 1245)",
+    )
+    gate.add_argument("--model", required=True, nargs="+", help="ONNX model yolu")
+    gate.add_argument("--pool", default=POOL_PATH)
+    gate.add_argument("--limit", type=int, default=0, help="ilk N held-out pozisyon")
+    gate.add_argument("--resamples", type=int, default=2000)
+    gate.add_argument("--seed", type=int, default=20261122)
+    gate.add_argument("--out", default=None, help="JSON cikti yolu (opsiyonel)")
     return p
 
 
@@ -991,6 +1105,47 @@ def build_er_markdown(
     return "\n".join(lines)
 
 
+def build_gate_markdown(rows: Sequence[dict[str, Any]], pool_path: str) -> str:
+    """K1 kapi tablosu (``curve_pool gate`` ciktisi)."""
+    lines = [
+        "# Antisimetri kapisi -- havuz uzerinde (K1)",
+        "",
+        "Havuz: `%s`" % pool_path,
+        "",
+        "`antisymmetry.py measure` korpus v2'yi kullanir; o korpus tam olarak",
+        "1000 vakadir, dolayisiyla K1'in istedigi n >= 1245 oradan",
+        "karsilanamaz. Bu tablo ayni istatistikleri 400 oyunluk havuzun",
+        "held-out kumesinde hesaplar.",
+        "",
+        "| Model | Pozisyon | Afterstate | corr | meanAbsSum | argmax | ER(+1) | ER(-1) | Fark | 95% GA |",
+        "|---|---|---|---|---|---|---|---|---|---|",
+    ]
+    for r in rows:
+        lines.append(
+            "| `%s` | %d | %d | %.4f | %.4f | %.3f | %.4f | %.4f | %+.4f | [%+.4f; %+.4f] |"
+            % (
+                r["model"],
+                int(r["positions"]),
+                int(r["afterStates"]),
+                r["correlation"],
+                r["meanAbsSum"],
+                r["argmaxAgreement"],
+                r["erPlus"],
+                r["erMinus"],
+                r["erDiff"],
+                r["erDiffCiLow"],
+                r["erDiffCiHigh"],
+            )
+        )
+    lines.append("")
+    lines.append(
+        "Kapi esigi `|corr| >= 0.99` bu mimariyle ulasilabilir degil; kapi bir "
+        "**teshis**tir (F7-104). Karar tek bakisli ER ve ppg ile verilir."
+    )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "show":
@@ -1043,6 +1198,38 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             out.with_suffix(".md").write_text(
                 build_er_markdown(rows, str(args.pool), target), encoding="utf-8"
+            )
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "gate":
+        pool = load_pool(Path(args.pool))
+        indices = pool.held_out_indices()
+        if args.limit > 0:
+            indices = indices[: args.limit]
+        rows = []
+        for m in args.model:
+            model = _load_onnx_model(Path(m))
+            stats = measure_gate(
+                model, pool, indices, resamples=args.resamples, seed=args.seed
+            )
+            stats["model"] = _model_label(Path(m))
+            rows.append(stats)
+        payload: Any = {
+            "pool": str(args.pool),
+            "positions": rows[0]["positions"] if rows else 0,
+            "resamples": args.resamples,
+            "seed": args.seed,
+            "models": rows,
+        }
+        if args.out:
+            out = Path(args.out)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(
+                json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            out.with_suffix(".md").write_text(
+                build_gate_markdown(rows, str(args.pool)), encoding="utf-8"
             )
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0

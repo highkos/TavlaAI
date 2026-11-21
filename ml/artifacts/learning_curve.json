@@ -8,6 +8,29 @@
     "oyun": "400",
     "plies": "2"
   },
+  "dataBudgetMultiplier": 100.0,
+  "dataDecision": "olcek",
+  "dataRequirements": {
+    "policy": {
+      "bestEr": 0.015845893754049042,
+      "budget": 1056000.0,
+      "decision": "olcek",
+      "floor": 0.0002787725277609607,
+      "path": "policy",
+      "positions": 103433.80350521354,
+      "target": 0.007922946877024521
+    },
+    "value": {
+      "bestEr": 0.032959805344081966,
+      "budget": 1056000.0,
+      "decision": "pipeline",
+      "floor": 0.022278406264501185,
+      "path": "value",
+      "positions": Infinity,
+      "target": 0.016479902672040983
+    }
+  },
+  "dataTargetRatio": 0.5,
   "decision": "olcek",
   "notes": [
     "tohum 1: kazanc 0.0062 GA [0.0055; 0.0069] -> olcek",

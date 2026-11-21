@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1394** | ~8 dk 30 s | ✅ 1394/1394 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1879** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1407** | ~8 dk 30 s | ✅ 1407/1407 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **1892** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -4423,3 +4423,70 @@ gösteriyor; **artırımın reddi güvenli**, "bir seviye fark" iddiası değil.
 için ≥4337 oyun gerekir. (b) ER→ppg eğimi 3 noktadan; ara ER seviyelerinde
 (örneğin 0,032) doğrulanmadı. (c) `policy` yolu (search1 değil) için ppg
 ölçülmedi; politika kafasının ürün katkısı ayrı bir koşu ister.
+### 36.23 K1 havuz kapısı ve K4 "N için gereken veri" ölçütü (F7-105)
+
+**K1 — kapı n ≥ 1245'te ölçülemedi, havuzda ölçüldü.** `antisymmetry.py
+measure` korpus v2'yi kullanır; `corpus2.TARGET_POSITIONS_V2 = 1000`, yani
+K1'in istediği n ≥ 1245 oradan karşılanamaz (korpusu yeniden üretmeden).
+400 oyunluk havuzun (`curve_pool_400.npz`) held-out kümesi **2667 pozisyon /
+50 727 afterstate** veriyor — gereksinimin 2,7 katı — ve istatistikler
+anlamsal olarak aynı (`gnubg_distill.equity_of_probs` ≡
+`equity.equity_from_exclusive`; ikisi de `probs @ EQUITY_WEIGHTS`).
+`curve_pool.py`'ye `measure_gate()` ve `gate` alt komutu eklendi; çıktı
+`ml/artifacts/antisymmetry_pool.json` / `.md`.
+
+| Model | corr | meanAbsSum | argmax | ER(+1) | ER(−1) | Fark | 95% GA |
+|---|---|---|---|---|---|---|---|
+| `stage_d_l2/model_v30` | −0,9100 | 0,4340 | 0,362 | 0,0287 | 0,0815 | −0,0527 | [−0,0582; −0,0474] |
+| `rd_ctl10k/model_v10` | −0,8967 | 0,4247 | 0,327 | 0,0302 | 0,0929 | −0,0627 | [−0,0687; −0,0569] |
+| `rd_aug10k/model_v10` | **−0,9641** | **0,1479** | **0,438** | 0,0387 | 0,0499 | **−0,0112** | [−0,0151; −0,0078] |
+
+Artırım **her eksende** iyileştiriyor (corr −0,9100 → −0,9641, meanAbsSum
+0,4340 → 0,1479, argmax 0,362 → 0,438, ER farkı −0,0527 → −0,0112) ama
+`|corr| ≥ 0,99` eşiğini **hâlâ geçmiyor**. Bu, kapının bir teşhis olduğunu
+ve karar ölçütü olmadığını (§36.22) nicel olarak doğruluyor: artırım kusuru
+4,7 kat azaltıyor, yine de ürün metriğinde 0,16 ppg kaybettiriyor. Yani
+kusurun büyüklüğü ile ürün zararı arasında ilişki **yok**.
+
+**K4 — etiket artık "N için gereken veri" ile de veriliyor.** Eskiden etiket
+yalnızca eğim işaretine ve tohum oylamasına bakıyordu; K4 bunun "bu N için
+gereken veri" tahminiyle çelişmemesi gerektiğini söyledi.
+`learning_curve.py`'ye eklendi:
+
+* `DATA_TARGET_RATIO = 0,5` — hedef, ölçülen en iyi ER'nin yarısı.
+* `DATA_BUDGET_MULTIPLIER = 100` — bütçe, ölçülen en büyük pozisyon sayısının
+  100 katı (1 056 000).
+* `data_requirement(fit, target)` — `ER = a·N^−b + c`'yi ters çevirip
+  `N = (a / (target − c)) ** (1/b)` verir; `target ≤ c` ise `inf` (taban
+  hedefin üstünde → ne kadar veri olsa da ulaşılmaz).
+* `DataRequirement.decision`: `inf` → `pipeline`, sonlu ve ≤ bütçe →
+  `olcek`, sonlu ama bütçe üstü → `belirsiz`.
+* `CurveReport.decision` artık **üç ölçütün anlaşmasını** istiyor: eğim,
+  tohum oylaması ve `data_decision`. Çelişki → `belirsiz`.
+
+Gerçek 7 noktalı eğri üzerinde sonuç (`ml/artifacts/learning_curve.md` §4.2):
+
+| Yol | En iyi ER | Hedef | Taban (c) | Gereken N | Bütçe | Karar |
+|---|---|---|---|---|---|---|
+| `policy` | 0,0158 | 0,0079 | 0,0003 | **103 433** | 1 056 000 | `olcek` |
+| `value` | 0,0330 | 0,0165 | **0,0223** | **inf** | 1 056 000 | `pipeline` |
+
+**Bu, §36.22'nin nicel biçimidir.** Politika kafası ölçekle sınırlı
+(103 433 pozisyon — ulaşılabilir), değer kafası ise **hatta** sınırlı:
+tabanı 0,0223, hedefi 0,0165'in **üstünde**, yani ne kadar veri eklenirse
+eklensin yarıya inmez. `search1` **yalnızca değer kafasını** kullandığı için
+(`er_paths.search1_values`) ürün metriğini veri miktarı **iyileştiremez**.
+Bu, "sonraki kaldıraç gnubg damıtma" kararının (§36.22, karar 4) sayısal
+gerekçesidir.
+
+**Testler.** `test_curve_pool.py` 271–275 (kapı: işaret/simetri, argmax
+uyuşması, GA, etiket biçimi) ve `test_learning_curve_k4.py` 276–283
+(`data_requirement` ters çevirme, `inf` taban durumu, bütçe sınırı, üç
+ölçüt anlaşması/çelişkisi, markdown §4.2). Toplam pytest sayısı
+1394 → **1407**.
+
+**Açık kalan.** (a) `DATA_TARGET_RATIO` ve `DATA_BUDGET_MULTIPLIER` benim
+seçtiğim değerler; kullanıcı onaylamadı. (b) Taban `c` GA'ları geniş
+(value: [0,0148; 0,0252]) — `c`'nin hedefin üstünde olduğu **nokta
+tahminine** dayanıyor, GA'nın tamamına değil. (c) `policy` yolunun ppg'si
+hâlâ ölçülmedi (K5 koşusu sürüyor).
