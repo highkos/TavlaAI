@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "baseline": "v30",
+  "caveat": "Kosular ayni zar tohumunu (2026) kullanir ama modeller farkli hamle oynadigi icin oyunlar ayrilir; iki ornekli GA bu yuzden yaklasiktir. Her kosunun kendi eslesmis GA'si zar gurultusunu zaten iptal ettigi icin GA oldugundan dar gorunmez.",
+  "models": [
+    {
+      "label": "v30",
+      "model": "ml\\runs\\stage_d_l2\\onnx\\model_v30.onnx",
+      "path": "search1",
+      "games": 2000,
+      "wins": 868,
+      "winRate": 0.434,
+      "ppg": -0.1635,
+      "ppgCiLow": -0.223,
+      "ppgCiHigh": -0.105,
+      "ppgStdError": 0.030337,
+      "ppgSigma": 1.35672,
+      "meanPlies": 55.889,
+      "seed": 2026,
+      "erPolicy": 0.027025,
+      "erValue": 0.028724
+    },
+    {
+      "label": "rd_ctl10k",
+      "model": "ml\\runs\\rd_ctl10k\\onnx\\model_v10.onnx",
+      "path": "search1",
+      "games": 2000,
+      "wins": 864,
+      "winRate": 0.432,
+      "ppg": -0.199,
+      "ppgCiLow": -0.26,
+      "ppgCiHigh": -0.138,
+      "ppgStdError": 0.031547,
+      "ppgSigma": 1.410813,
+      "meanPlies": 57.133,
+      "seed": 2026,
+      "erPolicy": 0.029796,
+      "erValue": 0.030176
+    },
+    {
+      "label": "rd_aug10k",
+      "model": "ml\\runs\\rd_aug10k\\onnx\\model_v10.onnx",
+      "path": "search1",
+      "games": 2000,
+      "wins": 753,
+      "winRate": 0.3765,
+      "ppg": -0.324,
+      "ppgCiLow": -0.381,
+      "ppgCiHigh": -0.267,
+      "ppgStdError": 0.029094,
+      "ppgSigma": 1.301104,
+      "meanPlies": 54.4765,
+      "seed": 2026,
+      "erPolicy": 0.038333,
+      "erValue": 0.038675
+    }
+  ],
+  "pairs": [
+    {
+      "a": "rd_ctl10k",
+      "b": "v30",
+      "diff": -0.0355,
+      "ciLow": -0.121282,
+      "ciHigh": 0.050282,
+      "standardError": 0.043767,
+      "z": -0.8111,
+      "significant": false
+    },
+    {
+      "a": "rd_aug10k",
+      "b": "v30",
+      "diff": -0.1605,
+      "ciLow": -0.242883,
+      "ciHigh": -0.078117,
+      "standardError": 0.042033,
+      "z": -3.8184,
+      "significant": true
+    }
+  ],
+  "fits": [
+    {
+      "head": "policy",
+      "slope": -14.299449,
+      "intercept": 0.224717,
+      "rSquared": 0.999367,
+      "points": 3,
+      "residuals": [
+        -0.001774,
+        0.00235,
+        -0.000576
+      ]
+    },
+    {
+      "head": "value",
+      "slope": -15.63797,
+      "intercept": 0.279792,
+      "rSquared": 0.994136,
+      "points": 3,
+      "residuals": [
+        0.005893,
+        -0.0069,
+        0.001007
+      ]
+    }
+  ]
+}

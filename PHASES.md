@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1386** | ~8 dk 30 s | ✅ 1386/1386 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1871** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1394** | ~8 dk 30 s | ✅ 1394/1394 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **1879** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -4152,6 +4152,12 @@ antisimetrikleştirmesi koşulsuz kalıcı çözüm değildir.
 
 ### 36.19 R-D ölçütü: iki bakışlı ER (F7-101)
 
+> **DÜZELTME (§36.22 / F7-104).** Bu bölümün önerdiği ölçüt **yanlıştı**.
+> Üretimde model her zaman sıra kimdeyse onun bakışını görür; (−1) bakışı
+> hiç oluşmaz. İki bakışlı ER, ürünün kullanmadığı bir dağılımı ölçüyordu.
+> ppg ölçümü artırımın tabandan 0,16 ppg **kötü** olduğunu gösterdi.
+> Doğru ölçüt tek bakışlı ER'dir (ppg ile R² = 0,9994).
+
 **Önceki yorum yanlıştı.** Eşleşmiş self-play deneyi (`rd_sp_ctl` vs
 `rd_sp_aug`, 10 iterasyon, 2 000 oyun, depth 0, seed 11, `v30`'dan başlatılmış)
 artırımın **her** tek-bakış metriğinde kötü olduğunu gösterdi ve R-D
@@ -4203,6 +4209,10 @@ Tek bakışlı ER'deki kayıp (+0,012/+0,014) karşı bakıştaki kazancın
 R-F'de ölçülecek.
 
 ### 36.20 R-D 10 000 oyunluk doğrulama koşusu (F7-102)
+
+> **DÜZELTME (§36.22 / F7-104).** "Kazanç" iki bakışlı ER'de görülüyordu.
+> ppg ürün ölçümünde artırımlı model tabandan **0,16 ppg kötü** (z = −3,82).
+> Bu bölümün sonucu geçersizdir.
 
 Eşleşmiş deney 2 000 oyunla yapılmıştı. Aynı karşılaştırma **10 000 oyun**
 (300 adım, depth 0, seed 11, 10 000 oyunluk buffer, `ckpt_v30.pt`'den
@@ -4325,7 +4335,91 @@ metrik artık ağırlıklı ER'dir; R-F bu metriği kullanır.**
 Artefaktlar: `ml/artifacts/er_weighted.json` / `.md` (ağırlıklı),
 `ml/artifacts/er_two_perspective.json` / `.md` (ağırlıksız, aynı şema).
 
+**Sağlamlık — hedef seçimine duyarlı değil.** İki bağımsız gerçek-dağılım
+tahminiyle aynı sonuç: shard ölçümü (bar 0,3488 / temas 0,5219 / yarış 0,1292)
+ve korpus v2'nin `realGamePhaseWeights` alanı (bar 0,3706 / temas 0,5564 /
+yarış 0,0730). İkincisiyle: kontrole karşı **−31,5% pol / −29,0% değer**,
+`v30`'a karşı **−24,5% / −21,6%** — birincisiyle −31,0% / −28,4% ve −23,8% /
+−21,0%. Fark 1 puandan az; **artırım kararı ağırlık seçimine bağlı değil.**
+(`er_paths` zaten korpus ağırlığını kullanıyor; `curve_pool` afterstate
+dağılımını kullanıyor — ER afterstate üzerinde ölçüldüğü için ikincisi daha
+doğru, ama fark kararı değiştirmiyor.)
+
 **Açık kalan.** (a) Gerçek paylar tek shard'dan (10 000 oyun) ölçüldü; 30
 shard'ın tamamı daha dar bir GA verir ama paylar oyun sayısıyla hızlı sabitlenir.
 (b) ER hâlâ **afterstate** düzeyinde; ppg eşleşmesi R-F'de ölçülecek.
 (c) `m = 0,02 ppg` eşiği kullanıcı kararı, R-F'de netleşecek.
+### 36.22 R-F — ppg ürün ölçümü R-D artırımını çürüttü (F7-104)
+
+**Ölçüm.** Üç model, aynı koşu koşulları (küpsüz para oyunu, eşleştirilmiş
+zar + renk takası, gnubg 0-ply, `search1`, tohum 2026, 2000 oyun = 1000
+çift). Artefakt: `ml/artifacts/ppg_models.json` / `.md`.
+
+| Model | Kazanma | ppg | ppg %95 GA | ER(pol, +1) | ER(val, +1) |
+|---|---|---|---|---|---|
+| `stage_d_l2/model_v30` | 0,4340 | **−0,1635** | [−0,2230; −0,1050] | 0,0270 | 0,0287 |
+| `rd_ctl10k/model_v10` | 0,4320 | **−0,1990** | [−0,2600; −0,1380] | 0,0298 | 0,0302 |
+| `rd_aug10k/model_v10` | 0,3765 | **−0,3240** | [−0,3810; −0,2670] | 0,0383 | 0,0387 |
+
+**İkili farklar** (iki örnekli GA):
+
+| a | b | a − b | %95 GA | z | Anlamlı |
+|---|---|---|---|---|---|
+| `rd_ctl10k` | `v30` | −0,0355 | [−0,1213; +0,0503] | −0,81 | hayır |
+| `rd_aug10k` | `v30` | **−0,1605** | [−0,2429; −0,0781] | **−3,82** | **evet** |
+
+**Sonuç: R-D perspektif artırımı ürün metriğinde ÇÜRÜDÜ.** Artırımlı model
+tabandan 0,16 ppg **daha kötü** (p = 1,3e-4). Kontrol koşusu tabandan
+istatistiksel olarak ayırt edilemiyor — yani 10k ölçekli self-play turu
+**ne yardım ediyor ne de zarar veriyor**; zararı veren şey artırım.
+
+**Kök neden — §36.19 yanlış ölçütü seçti.** `search1` **yalnızca değer
+kafasını** kullanır (`er_paths.search1_values` içindeki tek skorer çağrısı
+`scorer.values`; `scorer.logits` yalnızca `policy` yolunda). Artırım
+değer kafasını **iki** bakıştan eğitiyor ve **hareket eden tarafın** bakışı
+pahasına: ER(+1) 0,0287 → 0,0387. ppg tam olarak bu eksende bozuluyor.
+Üretimde `BackgammonSearch` her iki kafaya da `s.turn` verir, yani model
+**her zaman sıra kimdeyse onun bakışını** görür; (−1) bakışı hiç oluşmaz.
+Dolayısıyla **iki bakışlı ER, ürünün hiç kullanmadığı bir dağılımı
+ölçüyordu.** Kullanıcının R-D öncesi uyarısı ("(−1) bakış hiç görülmeyebilir
+ve kapı bir genelleme teşhisi olur") **doğruydu**.
+
+**ER → ppg eşlemesi (K3'ün kalan teslimatı).** Üç nokta üzerinde doğrusal fit:
+
+| Kafa | Eğim (ppg / ER) | Kesişim | R² |
+|---|---|---|---|
+| policy | **−14,30** | +0,2247 | **0,9994** |
+| value | −15,64 | +0,2798 | 0,9941 |
+
+ER'deki bir birim ~**14,3 ppg**'ye karşılık geliyor ve ilişki neredeyse tam
+doğrusal. Bu, **tek bakışlı (hareket eden tarafın) ER'yi geçerli bir ppg
+vekili** yapar — ve o ölçüt zaten artırımın kötü olduğunu söylüyordu
+(0,0383 vs 0,0298 vs 0,0270). Üç nokta az; eğim bir büyüklük mertebesi
+olarak okunmalı, kesin katsayı olarak değil.
+
+**Güç.** `ppg_levels.md`'den ampirik eşik **m = 0,1115 ppg** (gnubg
+0-ply vs 2-ply @ money farkı −0,2229'un yarısı; GA sıfırı dışlıyor).
+m = 0,1115 için gereken oyun sayısı 0-2@money'de **4337**; 2000 oyun
+**yetersiz**. Bu yüzden "fark var" iddiası sağlam (z = −3,82) ama
+"fark m'den büyük" iddiası resmî olarak kurulamaz: aug-vs-v30 GA'sı
+[−0,2429; −0,0781], −m = −0,1115'i **dışlamıyor**. Nokta tahmini
+(−0,1605) m'yi aşıyor ve çok daha kesin olan ER ölçümü aynı yönü
+gösteriyor; **artırımın reddi güvenli**, "bir seviye fark" iddiası değil.
+
+**Kararlar.**
+
+1. **İki bakışlı ER (§36.19) karar ölçütü olmaktan çıkarıldı.** Tek bakışlı
+   (hareket eden tarafın) ER kullanılır; ppg ile R² = 0,9994.
+2. **`--augment-perspectives` varsayılan olarak KAPALI kalır** ve
+   üretim/eğitim koşularında kullanılmaz. Bayrak yalnızca teşhis için duruyor.
+3. **Antisimetri kapısı (`|corr| >= 0,99`) zaten teşhis**; şimdi gerekçesi
+   de kayıtlı: ölçtüğü eksen üründe oluşmuyor.
+4. **Sonraki kaldıraç gnubg damıtma**, self-play değil. Kontrol koşusu
+   tabandan farksız; aynı veriden daha fazla self-play turu beklemek için
+   kanıt yok. K5'in 6 sınıflı KL damıtması (`--dist-weight`) uygulandı ve
+   kullanılmadı; sıradaki deney odur.
+
+**Açık kalan.** (a) 2000 oyun m = 0,1115 için yetersiz; "eşdeğer" iddiası
+için ≥4337 oyun gerekir. (b) ER→ppg eğimi 3 noktadan; ara ER seviyelerinde
+(örneğin 0,032) doğrulanmadı. (c) `policy` yolu (search1 değil) için ppg
+ölçülmedi; politika kafasının ürün katkısı ayrı bir koşu ister.

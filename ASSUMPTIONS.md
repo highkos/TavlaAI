@@ -5393,6 +5393,12 @@ kazandirir. Karar, `measure_er_both` ile iki bakisli ER olculerek verilir.
 
 ## F7-101 — R-D olcutu: **iki bakisli** ER (tek bakis yaniltici)
 
+> **DUZELTME (F7-104).** Bu kaydin onerdigi olcut **yanlisti**. Uretimde
+> model her zaman sira kimdeyse onun bakisini gorur; (-1) bakisi hic
+> olusmaz. Iki bakisli ER, urunun kullanmadigi bir dagilimi olcuyordu.
+> ppg olcumu artirimin tabandan 0,16 ppg **kotu** oldugunu gosterdi.
+> Dogru olcut tek bakisli ER'dir (ppg ile R^2 = 0,9994).
+
 **Nasil bulundu.** F7-100'un ardindan artirim "kotu" gorunuyordu: eslesmis
 self-play deneyinde (`rd_sp_ctl` vs `rd_sp_aug`, 10 iterasyon, 2 000 oyun,
 depth 0, seed 11, `v30`'dan baslatilmis) artirimli kosu **her** tek-bakis
@@ -5461,6 +5467,10 @@ uretim yolu (arama) farkli bir dagilim gorur. Nihai karar ppg'dir (K3) ve
 R-F'de olculecek.
 
 ## F7-102 — R-D 10 000 oyunluk dogrulama: artirim kazanci buyuyor
+
+> **DUZELTME (F7-104).** "Kazanc" iki bakisli ER'de goruluyordu. ppg
+> urun olcumunde artirimli model tabandan **0,16 ppg kotu** (z = -3,82).
+> Bu kaydin sonucu gecersizdir.
 
 Eslesmis deney 2 000 oyunla yapilmisti. Ayni karsilastirma **10 000 oyun**
 (300 adim, depth 0, seed 11, 10 000 oyunluk buffer, `ckpt_v30.pt`'den
@@ -5583,7 +5593,106 @@ metrik artik agirlikli ER'dir; R-F bu metrigi kullanir.**
 Artefaktlar: `ml/artifacts/er_weighted.json` / `.md` (agirlikli),
 `ml/artifacts/er_two_perspective.json` / `.md` (agirliksiz, ayni sema).
 
+**Saglamlik — hedef secimine duyarli degil.** Iki bagimsiz gercek-dagilim
+tahminiyle ayni sonuc: shard olcumu (bar 0,3488 / temas 0,5219 / yaris 0,1292)
+ve korpus v2'nin `realGamePhaseWeights` alani (bar 0,3706 / temas 0,5564 /
+yaris 0,0730). Ikincisiyle: kontrole karsi **-31,5% pol / -29,0% deger**,
+`v30`'a karsi **-24,5% / -21,6%** — birincisiyle -31,0% / -28,4% ve -23,8% /
+-21,0%. Fark 1 puandan az; **artirim karari agirlik secimine bagli degil.**
+(`er_paths` zaten korpus agirligini kullaniyor; `curve_pool` afterstate
+dagilimini kullaniyor — ER afterstate uzerinde olculdugu icin ikincisi daha
+dogru, ama fark karari degistirmiyor.)
+
 **Acik kalan.** (a) Gercek paylar tek shard'dan (10 000 oyun) olculdu; 30
 shard'in tamami daha dar bir GA verir ama paylar oyun sayisiyla hizli
 sabitlenir. (b) ER hala **afterstate** duzeyinde; ppg eslesmesi R-F'de
 olculecek. (c) `m = 0,02 ppg` esigi kullanici karari, R-F'de netlesecek.
+## F7-104 -- R-F: ppg urun olcumu R-D artirimini **curuttu**
+
+> **Bu kayit F7-101 ve F7-102'yi gecersiz kilar.** Iki bakisli ER yanlis
+> olcuttu; dogru olcut tek bakisli (hareket eden tarafin) ER ve ppg'dir.
+> Asagidaki tablolar tarihsel kayit olarak duruyor.
+
+**Olcum.** Uc model, ayni kosu kosullari (kupsuz para oyunu, eslestirilmis
+zar + renk takasi, gnubg 0-ply, `search1`, tohum 2026, 2000 oyun = 1000
+cift). `ml/artifacts/ppg_models.json` / `.md`.
+
+| Model | Kazanma | ppg | ppg %95 GA | ER(pol, +1) | ER(val, +1) |
+|---|---|---|---|---|---|
+| `stage_d_l2/model_v30` | 0,4340 | **-0,1635** | [-0,2230; -0,1050] | 0,0270 | 0,0287 |
+| `rd_ctl10k/model_v10` | 0,4320 | **-0,1990** | [-0,2600; -0,1380] | 0,0298 | 0,0302 |
+| `rd_aug10k/model_v10` | 0,3765 | **-0,3240** | [-0,3810; -0,2670] | 0,0383 | 0,0387 |
+
+**Ikili farklar** (iki ornekli GA; her kosunun kendi eslesmis GA'si zar
+gurultusunu zaten iptal ettigi icin GA oldugundan dar gorunmez):
+
+| a | b | a - b | %95 GA | z | Anlamli |
+|---|---|---|---|---|---|
+| `rd_ctl10k` | `v30` | -0,0355 | [-0,1213; +0,0503] | -0,81 | hayir |
+| `rd_aug10k` | `v30` | **-0,1605** | [-0,2429; -0,0781] | **-3,82** | **evet** |
+
+**Sonuc: R-D perspektif artirimi urun metriginde CURUDU.** Artirimli model
+tabandan 0,16 ppg **daha kotu** (p = 1,3e-4). Kontrol kosusu tabandan
+istatistiksel olarak ayirt edilemiyor -- yani 10k olcekli self-play turu
+**ne yardim ediyor ne de zarar veriyor**; zarari veren sey artirim.
+
+**Kok neden -- F7-101 yanlis olcutu secti.** `search1` **yalnizca deger
+kafasini** kullanir (`er_paths.search1_values` icindeki tek skorer cagrisi
+`scorer.values`; `scorer.logits` yalnizca `policy` yolunda). Artirim
+deger kafasini **iki** bakistan egitiyor ve **hareket eden tarafin**
+bakisi pahasina: ER(+1) 0,0287 -> 0,0387. ppg tam olarak bu eksende
+bozuluyor. Uretimde `BackgammonSearch` her iki kafaya da `s.turn`
+verir, yani model **her zaman sira kimdeyse onun bakisini** gorur; (-1)
+bakisi hic olusmaz. Dolayisiyla **iki bakisli ER, urunun hic kullanmadigi
+bir dagilimi olcuyordu.** Kullanicinin R-D oncesi uyarisi ("(-1) bakis hic
+gorulmeyebilir ve kapi bir genelleme teshisi olur") **dogruydu**.
+
+**Bu bir hiperparametre sorunu degil.** F7-101'deki kontrollu deney (ayni
+ag, ayni adim sayisi, ayni tohum, yalniz egitim verisi farkli) zaten ayni
+seyi soyluyordu: orijinal held-out uzerinde **orijinal 0,0678**,
+**ikisi 0,0942** -- yani iki bakistan egitmek hareket eden tarafin ER'sini
+**%39 kotulestiriyor**. Kapasite paylasimi; ogrenme orani veya adim sayisi
+ile duzeltilecek bir sey degil. O tabloda "ikisi" satirinin `ER(-1)`
+sutununun iyi gorunmesi (0,0817) tam da urunde karsiligi olmayan eksendir.
+
+**ER -> ppg eslemesi (K3'un kalan teslimati).** Uc nokta uzerinde dogrusal
+fit:
+
+| Kafa | Egim (ppg / ER) | Kesisim | R^2 |
+|---|---|---|---|
+| policy | **-14,30** | +0,2247 | **0,9994** |
+| value | -15,64 | +0,2798 | 0,9941 |
+
+ER'deki bir birim ~**14,3 ppg**'ye karsilik geliyor ve iliski neredeyse
+tam dogrusal. Bu, **tek bakisli (hareket eden tarafin) ER'yi gecerli bir
+ppg vekili** yapar -- ve o olcut zaten artirimin kotu oldugunu soyluyordu
+(0,0383 vs 0,0298 vs 0,0270). Uc nokta az; egim bir buyukluk mertebesi
+olarak okunmali, kesin katsayi olarak degil.
+
+**Guc.** `ppg_levels.md`'den ampirik esik **m = 0,1115 ppg** (gnubg
+0-ply vs 2-ply @ money farki -0,2229'un yarisi; GA sifiri disliyor).
+m = 0,1115 icin gereken oyun sayisi 0-2@money'de **4337**; 2000 oyun
+**yetersiz**. Bu yuzden "fark var" iddiasi saglam (z = -3,82) ama
+"fark m'den buyuk" iddiasi resmi olarak kurulamaz: aug-vs-v30 GA'si
+[-0,2429; -0,0781], -m = -0,1115'i **dislamiyor**. Nokta tahmini
+(-0,1605) m'yi asiyor ve cok daha kesin olan ER olcumu ayni yonu
+gosteriyor; **artirimin reddi guvenli**, "bir seviye fark" iddiasi degil.
+
+**Kararlar.**
+1. **Iki bakisli ER (F7-101) karar olcutu olmaktan cikarildi.** Tek
+   bakisli (hareket eden tarafin) ER kullanilir; ppg ile R^2 = 0,9994.
+2. **`--augment-perspectives` varsayilan olarak KAPALI kalir** ve
+   uretim/egitim kosularinda kullanilmaz. Bayrak yalnizca teshis icin
+   duruyor.
+3. **Antisimetri kapisi (`|corr| >= 0,99`) zaten teshis**; simdi
+   gerekcesi de kayitli: olctugu eksen urunde olusmuyor.
+4. **Sonraki kaldirac gnubg damitma**, self-play degil. Kontrol kosusu
+   tabandan farksiz; ayni veriden daha fazla self-play turu beklemek
+   icin kanit yok. K5'in 6-sinifli KL damitmasi (`--dist-weight`)
+   uygulandi ve kullanilmadi; siradaki deney odur.
+
+**Acik kalan.** (a) 2000 oyun m = 0,1115 icin yetersiz; "esdeger"
+iddiasi icin >=4337 oyun gerekir. (b) ER->ppg egimi 3 noktadan; ara
+ER seviyelerinde (ornegin 0,032) dogrulanmadi. (c) `policy` yolu
+(search1 degil) icin ppg olculmedi; politika kafasinin urun katkisi
+ayri bir kosu ister.
