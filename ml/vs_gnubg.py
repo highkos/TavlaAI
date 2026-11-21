@@ -50,7 +50,7 @@ DEFAULT_GAMES = 2000
 DEFAULT_MAX_PLIES = 200
 BOOTSTRAP_RESAMPLES = 20000
 BOOTSTRAP_SEED = 20261125
-OUR_PATHS = ("policy", "search1")
+OUR_PATHS = ("policy", "value", "search1")
 
 
 class MatchError(RuntimeError):
@@ -111,6 +111,8 @@ def _gnubg_chooser(session: gnubg_er.GnubgSession, plies: int = 0):
 def _our_chooser(scorer: gnubg_er.OnnxScorer, path: str):
     if path == "policy":
         return lambda case: er_paths.choose_policy(scorer, case)
+    if path == "value":
+        return lambda case: er_paths.choose_value(scorer, case)
     if path == "search1":
         return lambda case: er_paths.choose_search1(scorer, case)[0]
     raise MatchError("bilinmeyen yol: %s" % path)
@@ -121,7 +123,7 @@ def _play_pair(
     our_choose: Callable[[dict[str, Any]], int],
     gnubg_choose: Callable[[dict[str, Any]], int],
     max_plies: int,
-) -> tuple[list[float], list[int]]:
+) -> tuple[list[float], list[int], list[bool]]:
     """Bir cifti (ayni zar dizisi, iki renk) oynar.
 
     Zar dizisi **cift basina** turetilir; boylece paralel calistirmada sira
@@ -132,6 +134,7 @@ def _play_pair(
     dice_seq = _dice_sequence(rng, max_plies)
     scores: list[float] = []
     plies: list[int] = []
+    finished: list[bool] = []
     for our_side in (1, -1):
         result = play_game(
             dice_seq=dice_seq,
@@ -139,10 +142,12 @@ def _play_pair(
             our_choose=our_choose,
             gnubg_choose=gnubg_choose,
             max_plies=max_plies,
+            allow_unfinished=True,
         )
         scores.append(float(result["score"]))
         plies.append(int(result["plies"]))
-    return scores, plies
+        finished.append(bool(result["finished"]))
+    return scores, plies, finished
 
 
 _WORKER: dict[str, Any] = {}
@@ -166,7 +171,7 @@ def _init_worker(
     )
 
 
-def _worker_play_pair(task: tuple[int, int]) -> tuple[list[float], list[int]]:
+def _worker_play_pair(task: tuple[int, int]) -> tuple[list[float], list[int], list[bool]]:
     return _play_pair(
         task, _WORKER["our_choose"], _WORKER["gnubg_choose"], _WORKER["max_plies"]
     )
@@ -179,8 +184,16 @@ def play_game(
     our_choose: Callable[[dict[str, Any]], int],
     gnubg_choose: Callable[[dict[str, Any]], int],
     max_plies: int = DEFAULT_MAX_PLIES,
+    allow_unfinished: bool = False,
 ) -> dict[str, Any]:
-    """Tek bir kupsuz para oyunu oynar; **bizim** bakisimizdan puan doner."""
+    """Tek bir kupsuz para oyunu oynar; **bizim** bakisimizdan puan doner.
+
+    ``allow_unfinished``: ``max_plies`` doldugunda hata yerine
+    ``finished=False`` ve ``score=0.0`` doner. K5'te ``policy`` yolunun
+    bitmeyen oyun uretebildigi goruldu (politika kafasi tek basina donguye
+    girebiliyor); mac kosusunun tamamen dusmesi yerine bu oyunlar **sayilir
+    ve raporlanir**. Varsayilan ``False``: sessiz dusme yok.
+    """
     board = list(refgen.START_BOARD)
     white_off = black_off = 0
     turn = 1
@@ -214,6 +227,13 @@ def play_game(
             }
         turn = -turn
 
+    if allow_unfinished:
+        return {
+            "score": 0.0,
+            "plies": plies,
+            "ourSide": int(our_side),
+            "finished": False,
+        }
     raise MatchError("oyun %d ply'de bitmedi" % max_plies)
 
 
@@ -277,10 +297,13 @@ def run_match(
     pair_diffs: list[float] = []
     wins = 0
     plies_total = 0
-    for pair_scores, pair_plies in results:
-        for score, plies in zip(pair_scores, pair_plies):
+    unfinished = 0
+    for pair_scores, pair_plies, pair_finished in results:
+        for score, plies, done in zip(pair_scores, pair_plies, pair_finished):
             scores.append(score)
             plies_total += plies
+            if not done:
+                unfinished += 1
             if score > 0:
                 wins += 1
         pair_diffs.append(pair_scores[0] + pair_scores[1])
@@ -307,6 +330,8 @@ def run_match(
         "pairedDiffCiLow": dlow,
         "pairedDiffCiHigh": dhigh,
         "meanPlies": plies_total / len(scores),
+        "unfinished": unfinished,
+        "unfinishedRate": unfinished / len(scores),
         "seed": int(seed),
     }
 
@@ -335,12 +360,22 @@ def build_markdown(report: dict[str, Any]) -> str:
         "| Eslestirilmis fark %%95 GA | [%+.4f; %+.4f] |"
         % (report["pairedDiffCiLow"], report["pairedDiffCiHigh"]),
         "| Oyun basina ply | %.1f |" % report["meanPlies"],
+        "| Bitmeyen oyun | %d (%.4f) |"
+        % (report.get("unfinished", 0), report.get("unfinishedRate", 0.0)),
         "",
         "**Yorum.** ppg > 0 ise model gnubg 0-ply'i yeniyor demektir. "
         "Eslestirilmis fark, ayni zar dizisinin iki renginin toplamidir; "
         "zar gurultusunu iptal ettigi icin **daha dar** bir GA verir.",
         "",
     ]
+    if report.get("unfinished", 0):
+        lines.append(
+            "**Bitmeyen oyunlar.** `max_plies` doldugunda oyun **0 puan** "
+            "sayilir (biz kazanamadik) ve yukarida ayrica raporlanir. Bu, "
+            "politika kafasinin tek basina donguye girebildigini gosterir; "
+            "`search1` ve `value` yollarinda ayni sorun gorulmedi."
+        )
+        lines.append("")
     return "\n".join(lines)
 
 

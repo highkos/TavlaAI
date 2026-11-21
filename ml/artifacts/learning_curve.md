@@ -77,6 +77,7 @@ Etiket yalnizca tohum tutarliligina birakilmaz. Fit edilmis `ER = a*N^-b + c` mo
 | value | 0.0330 | 0.0165 | 0.0223 | **ulasilamaz** | 1056000 | `pipeline` |
 
 `ulasilamaz` = hedef, fit edilmis tabanin **altinda**: hicbir veri miktari o seviyeye indirmez. Bu, o yol icin **pipeline** sorunudur, olcek sorunu degil. Butce = en buyuk olcumun 100.0000 kati.
+
 ## 5. Karar
 
 **`olcek`**
