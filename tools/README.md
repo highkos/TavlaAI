@@ -159,3 +159,7 @@ python ml\train_v2.py --steps 20000 ...
   textures scripts PythonLib man Shaders` klasörleri ve `unins000.*`
   dışarıda bırakıldı. Bu yüzden gnubg "sound file ... doesn't exist"
   uyarıları basar; değerlendirmeyi etkilemez.
+- `-CommandLine` içinde **iç içe tırnak kullanma**. `python.exe -c "..."` gibi
+  bir komut satırı `CpuCap.ps1` üzerinden geçerken bozulur ve iş sessizce
+  `exit=1` ile biter. Çok satırlı Python için betiği `-Upload` ile gönder ve
+  `python.exe betik.py` olarak çağır.
