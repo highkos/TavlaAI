@@ -5932,3 +5932,70 @@ modulu kabul eder ama JS `JSON.parse`, C# `System.Text.Json` ve `jq` dosyayi
 `positions` icin `null` yazar; anlami `decision` alani tasir (`pipeline`).
 Artefakt yeniden yazildi; `test_310` bunu kilitler (`allow_nan=False` ile
 serilestirme + `Infinity`/`NaN` yoklugu). Toplam pytest 1433 -> **1434**.
+
+## F7-108 -- Uzak isci: cekirdek tavanli CPU paylasimi ve yerel/uzak ER paritesi
+
+Faz 7 oncesi kurulum. Amac: yerel makine egitimi **tam kapasiteyle** surdururken
+ikinci bir makineyi utandirici derecede paralel CPU isleri icin kullanmak
+(gnubg etiketleme, ER olcumu, ONNX cikarimi). Kiralik sunucu paylasimli bir
+barindirma kutusu oldugu icin CPU'su **adil kullanim sinirinin altinda**
+tutulmak zorunda.
+
+**Tavan mekanizmasi.** Windows Job Object
+`JOB_OBJECT_CPU_RATE_CONTROL_HARD_CAP`; cekirdek tarafindan uygulanir, anket
+degil. Cocuk surec `CREATE_SUSPENDED` ile dogar, is nesnesine atanir, sonra
+devam ettirilir -- aksi halde hizli bir cocuk torun sureclerini tavanin
+disinda baslatabilir. `JOBOBJECT_CPU_RATE_CONTROL_INFORMATION` **8 bayttir**
+(`DWORD ControlFlags` + `{DWORD CpuRate}` / `{DWORD Weight}` /
+`{WORD MinRate; WORD MaxRate}` birlesimi). Birlesim uyeleri ardisik
+tanimlanirsa yapi 16 bayt olur ve `SetInformationJobObject` **hata 24
+(ERROR_BAD_LENGTH)** verir; `LayoutKind.Explicit, Size = 8` zorunlu.
+
+**Kalibrasyon.** Windows istenen orani dusuk degerlerde yaklasik **%14 asiyor**.
+3 vCPU'da olculdu (is nesnesi muhasebesi, 10 sn, 12 is parcacigi):
+
+| Istenen | Olculen cekirdek | Gerceklesen |
+|---:|---:|---:|
+| 10 | 0,35 | %11,7 |
+| 20 | 0,69 | %23,1 |
+| 22 | 0,75 | %25,1 |
+| 25 | 0,85 | %28,4 |
+| 50 | 1,67 | %55,9 |
+| 100 | 2,99 | %100 |
+
+Bu yuzden varsayilan **20**, 25 degil. Yerel makinede ayni betik 12 mantiksal
+CPU'da 11,61 -> 3,08 cekirdek verdi (tavansiz -> %25 istek); yerel taraf
+tavanlanmaz.
+
+**Olcum paritesi.** `model_v30.onnx`, `reference_positions.json`,
+`--plies 0 --criterion value`, 20 pozisyon:
+
+| | Yerel | Uzak |
+|---|---:|---:|
+| Ortalama ER | 0,00645 | 0,00650 |
+| Maksimum ER | 0,0720 | 0,0720 |
+| Tam eslesme | %75 | %75 |
+| `modelValue` farki | -- | 20/20 bit-bit ayni |
+
+Tek fark `double-4-steps-white` icin gnubg'nin **kendi** 0-ply degeri
+(0,240 vs 0,241). Olasilik satiri iki tarafta da ayni
+(`0.578 0.190 0.014 - 0.422 0.116 0.004`); fark 4. ondalikta. Ayni ikili
+dosyalar ve ayni veri dosyalari (MD5 esit) kullanildi ve `gnubgautorc`
+kopyalamak sonucu degistirmedi; geriye kalan tek aciklama gnubg'nin SIMD kod
+yolu secimidir (sanal CPU farkli CPUID bildiriyor). 0,00005'lik ortalama fark
+olcum gurultusunun altinda -- **uzak ER olcumleri yerel ile degistirilebilir**.
+
+**Iki tuzak.** (1) Embeddable Python bir `python310._pth` dosyasiyla gelir;
+boyle bir dosya varken CPython `sys.path[0]` eklemez ve `PYTHONPATH` /
+`PYTHONHOME` degiskenlerini **yok sayar**. Yanindaki `equity.py`'yi ice
+aktaran `gnubg_er.py` bu yuzden `ModuleNotFoundError` verdi; cozum uzak
+kuruluma ozgu `python\sitecustomize.py` (`site` hala ice aktarildigi icin
+otomatik yuklenir). (2) `gnubg_er.py` pip satirini `MONSTER`/`gnubg`
+adlariyla eslestirir; gnubg bu adlari `~/.gnubg/gnubgautorc`'den okur, dosya
+yoksa insan oyuncu isletim sistemi kullanici adini alir (uzakta `SYSTEM`) ve
+olcum **tumden** basarisiz olur. `_settings()` artik adlari acikca yazar;
+adlar konumdan bagimsiz eslestirildigi icin dogru kurulumlarda etkisizdir.
+
+**Arac.** `tools/CpuCap.ps1`, `tools/RemoteAgent.ps1` (uzakta `TavlaAgent`
+servisi), `tools/RemoteJob.ps1`; belgeler `tools/README.md`. Test sayisi
+degismedi (1434).

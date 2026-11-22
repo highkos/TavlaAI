@@ -671,12 +671,21 @@ class GnubgSession:
 
         ``set evaluation chequerplay evaluation plies`` **en sonda** gelmelidir:
         ardindan gelen ``cubeful`` komutu ``1 ply`` sutununu sifirliyor.
+
+        Oyuncu adlari acikca yazilir: ``_pipcount_from_match`` pip satirini
+        ``MONSTER``/``gnubg`` adlariyla eslestirir. gnubg bu adlari
+        ``~/.gnubg/gnubgautorc`` dosyasindan okur; dosya yoksa insan oyuncu
+        isletim sistemi kullanici adini alir (uzak sunucuda ``SYSTEM``) ve pip
+        satiri ayristirilamaz. Adlar konumdan bagimsiz eslestirildigi icin
+        zaten dogru olan bir kurulumda bu komutlar etkisizdir.
         """
         return [
             "set cube use off",
             "set evaluation chequerplay evaluation cubeful off",
             "set evaluation chequerplay evaluation plies %d" % self.plies,
             "set cache 0",
+            "set player 0 name gnubg",
+            "set player 1 name MONSTER",
         ]
 
     def _preamble(self) -> list[str]:
