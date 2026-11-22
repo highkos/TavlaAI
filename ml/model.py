@@ -105,17 +105,27 @@ class BackgammonNetV2(nn.Module):
     ``probs`` softmax ile uretilir; boylece toplam 1 ve tum bilesenler >= 0 olur.
     Monotonluk **zorlanmaz** (Faz 6 Bolum 5.1): dislayici sinifler arasinda
     ``W >= GW >= BW`` gibi bir zorunlu siralama yoktur.
+
+    ``rank_head=True`` iken ek bir **siralama kafasi** (tek dogrusal cikti) eklenir
+    ve ``forward`` uc deger dondurur. Bu kafa **yalnizca egitimde** kullanilir
+    (ikili siralama kaybi); ONNX sozlesmesi degismez cunku ihracatta
+    ``rank_head=False`` ile model yeniden kurulur (bkz. ``ml/capacity_train.py``).
     """
 
     output_version = 2
 
-    def __init__(self, in_dim: int = VECTOR_SIZE, *hidden: int) -> None:
+    def __init__(
+        self, in_dim: int = VECTOR_SIZE, *hidden: int, rank_head: bool = False
+    ) -> None:
         super().__init__()
         if not hidden:
             hidden = CAPACITY_PROFILES[DEFAULT_PROFILE]
         self.backbone = Backbone(in_dim, *hidden)
         self.probs_head = nn.Linear(self.backbone.out_dim, PROB_COUNT)
         self.policy_head = nn.Linear(self.backbone.out_dim, 1)
+        self.rank_head: nn.Linear | None = (
+            nn.Linear(self.backbone.out_dim, 1) if rank_head else None
+        )
         # Baslangicta tek-kazanma agirlikli, kucuk mars/backgammon olasiligi: egitim
         # basinda equity ~ 0 ve dagilim gecerli (Faz 6 Bolum 5.1).
         nn.init.zeros_(self.probs_head.bias)
@@ -132,6 +142,8 @@ class BackgammonNetV2(nn.Module):
         h = self.backbone(x)
         probs = torch.softmax(self.probs_head(h), dim=-1)
         policy_logit = self.policy_head(h)
+        if self.rank_head is not None:
+            return probs, policy_logit, self.rank_head(h)
         return probs, policy_logit
 
 
@@ -142,17 +154,23 @@ def build_model(
     seed: int | None = None,
     output_version: int = 1,
     profile: str | None = None,
+    rank_head: bool = False,
 ) -> nn.Module:
     """Model kurar.
 
     ``output_version = 1`` icin ``h1``/``h2`` kullanilir (Faz 4/5 uyumlulugu).
     ``output_version = 2`` icin ``profile`` (bkz. :data:`CAPACITY_PROFILES`) kullanilir;
     ``profile`` verilmezse :data:`DEFAULT_PROFILE`.
+
+    ``rank_head`` yalnizca ``output_version = 2`` icin anlamlidir ve egitim
+    sirasinda ikili siralama kaybini besleyen **egitim-disi** bir kafadir.
     """
     if seed is not None:
         torch.manual_seed(seed)
 
     if output_version == 1:
+        if rank_head:
+            raise ValueError("rank_head yalnizca output_version = 2 icin desteklenir")
         model: nn.Module = BackgammonNet(in_dim, h1, h2)
     elif output_version == 2:
         name = profile or DEFAULT_PROFILE
@@ -160,7 +178,7 @@ def build_model(
             raise ValueError(
                 f"bilinmeyen kapasite profili: {name!r} (gecerli: {sorted(CAPACITY_PROFILES)})"
             )
-        model = BackgammonNetV2(in_dim, *CAPACITY_PROFILES[name])
+        model = BackgammonNetV2(in_dim, *CAPACITY_PROFILES[name], rank_head=rank_head)
     else:
         raise ValueError(f"desteklenmeyen output_version: {output_version}")
 

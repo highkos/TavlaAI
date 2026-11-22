@@ -433,6 +433,29 @@ class PolicyDataset:
     def has_dist(self) -> bool:
         return self.dist is not None and int(np.asarray(self.dist).shape[0]) == len(self)
 
+    def subset(self, indices: Sequence[int]) -> "PolicyDataset":
+        """Verilen pozisyon indekslerinden yeni bir kume kurar (egitim/dogrulama)."""
+        idx = np.asarray(list(indices), dtype=np.int64)
+        if idx.size and (int(idx.min()) < 0 or int(idx.max()) >= len(self)):
+            raise IndexError("alt kume indeksi aralik disi")
+        counts = np.diff(np.asarray(self.offsets, dtype=np.int64))
+        starts = np.asarray(self.offsets[:-1], dtype=np.int64)[idx]
+        take = np.concatenate([np.arange(s, s + int(counts[i])) for s, i in zip(starts, idx)])
+        offsets = np.zeros(idx.size + 1, dtype=np.int64)
+        np.cumsum(counts[idx], out=offsets[1:])
+        return PolicyDataset(
+            x=np.asarray(self.x[take], dtype=np.float32),
+            offsets=offsets,
+            best=np.asarray(self.best[idx], dtype=np.int32),
+            y=np.asarray(self.y[idx], dtype=np.float32),
+            meta=dict(self.meta),
+            dist=(
+                np.asarray(self.dist[idx], dtype=np.float32)
+                if self.has_dist()
+                else None
+            ),
+        )
+
     def stats(self) -> dict[str, Any]:
         if len(self) == 0:
             return {"count": 0}
@@ -648,6 +671,41 @@ def load_policy_dataset(path: Path) -> PolicyDataset:
         )
 
 
+def concat_policy_datasets(
+    parts: Sequence[PolicyDataset], *, meta: dict[str, Any] | None = None
+) -> PolicyDataset:
+    """Paralel etiketlenmis dilimleri tek kumede birlestirir.
+
+    Dilimler ayni ``dists`` ayarini kullanmalidir; karisik gelirse dagilim
+    sutunu **dusurulur** (sessizce yanlis KL hedefi uretmemek icin).
+    """
+    parts = [p for p in parts if len(p) > 0]
+    if not parts:
+        raise ValueError("birlestirilecek bos olmayan dilim yok")
+    has_dist = all(p.has_dist() for p in parts)
+    offsets = np.zeros(1, dtype=np.int64)
+    xs: list[np.ndarray] = []
+    for p in parts:
+        xs.append(np.asarray(p.x, dtype=np.float32))
+        counts = np.diff(np.asarray(p.offsets, dtype=np.int64))
+        offsets = np.concatenate([offsets, offsets[-1] + np.cumsum(counts)])
+    merged_meta = dict(meta or {})
+    merged_meta.setdefault("shards", len(parts))
+    merged_meta.setdefault("shardLabeled", [int(len(p)) for p in parts])
+    return PolicyDataset(
+        x=np.concatenate(xs, axis=0),
+        offsets=offsets,
+        best=np.concatenate([np.asarray(p.best, dtype=np.int32) for p in parts]),
+        y=np.concatenate([np.asarray(p.y, dtype=np.float32) for p in parts]),
+        meta=merged_meta,
+        dist=(
+            np.concatenate([np.asarray(p.dist, dtype=np.float32) for p in parts])
+            if has_dist
+            else None
+        ),
+    )
+
+
 def _pad_policy(dataset: PolicyDataset) -> tuple[np.ndarray, np.ndarray, int]:
     """Ragged kumeyi ``[N, L, 221]`` + maske olarak doldurur."""
     n = len(dataset)
@@ -674,17 +732,39 @@ def train_policy_head(
     seed: int = 0,
     value_weight: float = DEFAULT_VALUE_WEIGHT,
     dist_weight: float = 0.0,
+    rank_weight: float = 0.0,
+    val_fraction: float = 0.0,
+    patience: int = 0,
+    eval_every: int = 500,
+    weight_decay: float = 0.0,
+    lr_schedule: str = "none",
+    lr_final_ratio: float = 0.1,
     progress: Callable[[int, int, float], None] | None = None,
 ) -> dict[str, Any]:
     """Politika kafasini gnubg'nin en iyi hamlesine capraz-entropi ile egitir.
 
     Kayip: ``CE(logits, best) + value_weight * MSE(equity(best), best_equity)
-    + dist_weight * KL(gnubg_dagilimi || model_dagilimi)``.
+    + dist_weight * KL(gnubg_dagilimi || model_dagilimi)
+    + rank_weight * ikili_siralama``.
     Politika terimi ER'i dogrudan hedefler; deger terimi yalnizca destek olur.
 
     ``dist_weight > 0`` icin veri kumesinde 6 sinifli dagilim bulunmalidir (K5).
     Skaler equity tek basina deger yolunu 4x'ten sonra platoya sokuyordu; tam
     dagilim hedefi ayni ileri gecislerden cok daha fazla sinyal cikarir.
+
+    ``rank_weight > 0`` ikili (pairwise) siralama terimini ekler: en iyi adayin
+    siralama skoru her diger adaydan buyuk olmali (lojistik kayip). Bu terim
+    ``model.rank_head`` gerektirir ve **yalnizca egitimde** kullanilir.
+
+    ``val_fraction > 0`` ise pozisyonlarin o orani deterministik olarak ayrilir;
+    ``patience > 0`` iken dogrulama kaybi ``patience`` degerlendirme boyunca
+    iyilesmezse egitim durur ve **en iyi** agirliklar geri yuklenir.
+
+    ``weight_decay > 0`` Adam'a L2 cezasi ekler. ``lr_schedule = "cosine"``
+    ogrenme oranini ``lr``'den ``lr * lr_final_ratio``'ya kosinus ile dusurur.
+    Buyuk kapasitelerde (>=512 gizli birim) sabit ``lr=1e-3`` ile dogrulama
+    kaybi 1500 adimdan sonra **iraksiyordu** (asiri ogrenme); bu iki dugme
+    olmadan 30 bin pozisyonluk karsilastirma yanilti olur.
     """
     import torch  # noqa: PLC0415
     import torch.nn.functional as F  # noqa: PLC0415
@@ -697,6 +777,14 @@ def train_policy_head(
         raise ValueError(
             "dist_weight > 0 icin veri kumesinde 6 sinifli dagilim (dist) gerekli"
         )
+    if rank_weight > 0 and getattr(model, "rank_head", None) is None:
+        raise ValueError("rank_weight > 0 icin modelde rank_head gerekli")
+    if not 0.0 <= val_fraction < 1.0:
+        raise ValueError("val_fraction [0, 1) araliginda olmali")
+    if lr_schedule not in ("none", "cosine"):
+        raise ValueError("lr_schedule 'none' veya 'cosine' olmali")
+    if not 0.0 < lr_final_ratio <= 1.0:
+        raise ValueError("lr_final_ratio (0, 1] araliginda olmali")
 
     torch.manual_seed(seed)
     n = len(dataset)
@@ -704,71 +792,185 @@ def train_policy_head(
     if width <= 0:
         raise ValueError("aday kumesi bos")
 
-    xt = torch.from_numpy(x).to(device)
-    mt = torch.from_numpy(mask).to(device)
-    bt = torch.from_numpy(np.asarray(dataset.best, dtype=np.int64)).to(device)
-    yt = torch.from_numpy(np.asarray(dataset.y, dtype=np.float32)).to(device)
+    # Deterministik ayirma: ayni seed her zaman ayni dogrulama kumesini verir.
+    n_val = int(round(n * val_fraction)) if val_fraction > 0 else 0
+    if n_val >= n:
+        raise ValueError("val_fraction tum veri kumesini ayiriyor")
+    perm = np.random.default_rng(seed).permutation(n)
+    val_idx = np.sort(perm[:n_val]) if n_val else np.zeros(0, dtype=np.int64)
+    train_idx = np.sort(perm[n_val:]) if n_val else np.arange(n)
+    n_train = int(train_idx.size)
+
+    xt = torch.from_numpy(x)
+    mt = torch.from_numpy(mask)
+    bt = torch.from_numpy(np.asarray(dataset.best, dtype=np.int64))
+    yt = torch.from_numpy(np.asarray(dataset.y, dtype=np.float32))
     dt = (
-        torch.from_numpy(np.asarray(dataset.dist, dtype=np.float32)).to(device)
+        torch.from_numpy(np.asarray(dataset.dist, dtype=np.float32))
         if dist_weight > 0
         else None
     )
+    tr_idx_t = torch.from_numpy(np.asarray(train_idx, dtype=np.int64))
+    va_idx_t = (
+        torch.from_numpy(np.asarray(val_idx, dtype=np.int64)) if n_val else None
+    )
+
+    def _batch_tensors(indices: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, int]:
+        """Partiyi **kendi** aday genisligine kirpar.
+
+        Veri kumesi duzensizdir (ortalama ~22 aday, en genis pozisyon 400'u
+        asabilir). Global genislige yastiklamak her adimi 10 kata kadar
+        sisiriyordu; maske zaten dolgu satirlarini -1e9 ile etkisizlestirdigi
+        icin partiyi kendi genisligine kirpmak sonucu degistirmez.
+        """
+        m = mt[indices]
+        w = int(m.sum(dim=1).max().item()) if m.numel() else 0
+        w = max(1, min(w, width))
+        return xt[indices][:, :w].reshape(-1, 221), m[:, :w], w
+
+    def _evaluate(indices: torch.Tensor) -> dict[str, float]:
+        """Verilen indekslerde kayip bilesenleri ve top-1 dogruluk."""
+        model.eval()
+        total = int(indices.numel())
+        ce_sum = 0.0
+        v_sum = 0.0
+        correct = 0
+        with torch.no_grad():
+            for start in range(0, total, 64):
+                sel = indices[start : start + 64]
+                k = int(sel.numel())
+                xb, mb, wb = _batch_tensors(sel)
+                out = model(xb.to(device))
+                probs = out[0].reshape(k, wb, -1)
+                logits = out[1].reshape(k, wb).masked_fill(~mb.to(device), -1e9)
+                ce_sum += float(F.cross_entropy(logits, bt[sel].to(device)).to("cpu")) * k
+                pick = bt[sel].to(device).view(-1, 1, 1).expand(-1, 1, probs.shape[-1])
+                best_probs = probs.gather(1, pick).squeeze(1)
+                v_sum += float(
+                    F.mse_loss(equity_of_probs(best_probs), yt[sel].to(device)).to("cpu")
+                ) * k
+                correct += int(
+                    (torch.argmax(logits, dim=1) == bt[sel].to(device)).sum().to("cpu")
+                )
+        model.train()
+        return {
+            "ce": ce_sum / total if total else float("nan"),
+            "valueMse": v_sum / total if total else float("nan"),
+            "top1": (correct / total) if total else float("nan"),
+        }
 
     model.to(device)
     model.train()
     params = [p for p in model.parameters() if p.requires_grad]
-    opt = torch.optim.Adam(params, lr=lr)
-    batch = max(1, min(int(batch), n))
+    opt = torch.optim.Adam(params, lr=lr, weight_decay=weight_decay)
+    sched = None
+    if lr_schedule == "cosine":
+        sched = torch.optim.lr_scheduler.CosineAnnealingLR(
+            opt, T_max=max(1, steps), eta_min=lr * lr_final_ratio
+        )
+    batch = max(1, min(int(batch), n_train))
 
     history: list[float] = []
+    val_history: list[dict[str, Any]] = []
+    best_state: dict[str, Any] | None = None
+    best_val = float("inf")
+    best_step = 0
+    stale = 0
+    stopped_early = False
+
     for step in range(1, steps + 1):
-        idx = torch.randint(0, n, (batch,), device=device)
-        out = model(xt[idx].reshape(-1, 221))
-        probs = out[0].reshape(batch, width, -1)
-        logits = out[1].reshape(batch, width).masked_fill(~mt[idx], -1e9)
-        ce = F.cross_entropy(logits, bt[idx])
-        pick = bt[idx].view(-1, 1, 1).expand(-1, 1, probs.shape[-1])
+        idx = tr_idx_t[torch.randint(0, n_train, (batch,))]
+        # Buyuk veri kumelerinde ``[N, L, 221]`` tensori GPU'ya sigmaz; partiler
+        # CPU'da indekslenip cihaza tasinir (PCIe maliyeti adim basina ~24 MB).
+        xb, mb, wb = _batch_tensors(idx)
+        xb = xb.to(device)
+        mb = mb.to(device)
+        bb = bt[idx].to(device)
+        out = model(xb)
+        probs = out[0].reshape(batch, wb, -1)
+        logits = out[1].reshape(batch, wb).masked_fill(~mb, -1e9)
+        ce = F.cross_entropy(logits, bb)
+        pick = bb.view(-1, 1, 1).expand(-1, 1, probs.shape[-1])
         best_probs = probs.gather(1, pick).squeeze(1)
-        vloss = F.mse_loss(equity_of_probs(best_probs), yt[idx])
+        vloss = F.mse_loss(equity_of_probs(best_probs), yt[idx].to(device))
         loss = ce + value_weight * vloss
         if dt is not None:
-            target = dt[idx]
+            target = dt[idx].to(device)
             target = target / target.sum(dim=1, keepdim=True).clamp_min(1e-9)
             kl = F.kl_div(
                 torch.log(best_probs.clamp_min(1e-9)), target, reduction="batchmean"
             )
             loss = loss + dist_weight * kl
+        if rank_weight > 0:
+            rank = out[2].reshape(batch, wb)
+            pos = rank.gather(1, bb.view(-1, 1))
+            neg_mask = mb.clone()
+            neg_mask.scatter_(1, bb.view(-1, 1), False)
+            pair = F.softplus(-(pos - rank))
+            rloss = (pair * neg_mask).sum() / neg_mask.sum().clamp_min(1)
+            loss = loss + rank_weight * rloss
         opt.zero_grad(set_to_none=True)
         loss.backward()
         opt.step()
+        if sched is not None:
+            sched.step()
         history.append(float(loss.detach().to("cpu")))
         if progress:
             progress(step, steps, history[-1])
 
+        if va_idx_t is not None and (step % max(1, eval_every) == 0 or step == steps):
+            metrics = _evaluate(va_idx_t)
+            val_history.append({"step": step, **metrics})
+            if metrics["ce"] < best_val - 1e-6:
+                best_val = metrics["ce"]
+                best_step = step
+                stale = 0
+                best_state = {
+                    k: v.detach().clone() for k, v in model.state_dict().items()
+                }
+            else:
+                stale += 1
+                if patience > 0 and stale >= patience:
+                    stopped_early = True
+                    break
+
+    if best_state is not None:
+        model.load_state_dict(best_state)
+
+    train_metrics = _evaluate(tr_idx_t)
+    val_metrics = _evaluate(va_idx_t) if va_idx_t is not None else None
+    # ``_evaluate`` sonunda modeli tekrar egitim moduna alir; cagiran taraf
+    # egitilmis modeli cikarim icin aldigi icin burada eval'e donulmelidir.
     model.eval()
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for start in range(0, n, 64):
-            stop = min(start + 64, n)
-            out = model(xt[start:stop].reshape(-1, 221))
-            logits = out[1].reshape(stop - start, width).masked_fill(~mt[start:stop], -1e9)
-            pred = torch.argmax(logits, dim=1)
-            correct += int((pred == bt[start:stop]).sum().to("cpu"))
-            total += stop - start
 
     return {
         "steps": int(steps),
+        "stepsRun": len(history),
         "batch": int(batch),
         "lr": float(lr),
         "count": n,
+        "trainCount": n_train,
+        "valCount": n_val,
         "width": int(width),
         "valueWeight": float(value_weight),
         "distWeight": float(dist_weight),
+        "rankWeight": float(rank_weight),
+        "weightDecay": float(weight_decay),
+        "lrSchedule": lr_schedule,
+        "lrFinalRatio": float(lr_final_ratio),
         "hasDist": bool(dataset.has_dist()),
         "firstLoss": history[0] if history else None,
         "lastLoss": history[-1] if history else None,
-        "top1": (correct / total) if total else float("nan"),
+        "top1": train_metrics["top1"],
+        "trainCe": train_metrics["ce"],
+        "trainValueMse": train_metrics["valueMse"],
+        "valTop1": val_metrics["top1"] if val_metrics else None,
+        "valCe": val_metrics["ce"] if val_metrics else None,
+        "valValueMse": val_metrics["valueMse"] if val_metrics else None,
+        "bestStep": best_step,
+        "bestValCe": best_val if best_state is not None else None,
+        "stoppedEarly": stopped_early,
+        "valHistory": val_history,
         "history": history,
     }
 
@@ -1277,7 +1479,34 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="en iyi adayin 6 sinifli gnubg dagilimini da etiketle (K5)",
     )
+    lp.add_argument(
+        "--shard-index",
+        type=int,
+        default=0,
+        help="0 tabanli dilim numarasi (paralel etiketleme icin)",
+    )
+    lp.add_argument(
+        "--shards",
+        type=int,
+        default=1,
+        help="toplam dilim sayisi; her dilim ayri bir tohum kullanir",
+    )
     lp.add_argument("--quiet", action="store_true")
+
+    mp = sub.add_parser(
+        "merge-policy", help="paralel etiketlenmis politika dilimlerini birlestir"
+    )
+    mp.add_argument(
+        "--shard",
+        type=Path,
+        action="append",
+        required=True,
+        metavar="NPZ",
+        help="girdi dilimi (tekrarlanabilir)",
+    )
+    mp.add_argument("--out", type=Path, required=True, help="birlesik cikti .npz")
+    mp.add_argument("--json", type=Path, default=None)
+    mp.add_argument("--quiet", action="store_true")
 
     tp = sub.add_parser("train-policy", help="politika kafasini gnubg hamlesine egit")
     tp.add_argument("--data", type=Path, required=True)
@@ -1292,6 +1521,54 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.0,
         help="6 sinifli KL teriminin agirligi (K5; veri kumesinde dist gerekir)",
+    )
+    tp.add_argument(
+        "--rank-weight",
+        type=float,
+        default=0.0,
+        help="ikili siralama (pairwise ranking) teriminin agirligi; >0 icin model "
+        "siralama kafasi ile kurulur (yalnizca egitimde, ONNX'e cikmaz)",
+    )
+    tp.add_argument(
+        "--profile",
+        default=None,
+        help="kapasite profilini zorla (large/xlarge); checkpoint profilini ezer",
+    )
+    tp.add_argument(
+        "--val-fraction",
+        type=float,
+        default=0.0,
+        help="dogrulama icin ayrilan pozisyon orani (0 = ayirma yok)",
+    )
+    tp.add_argument(
+        "--patience",
+        type=int,
+        default=0,
+        help="dogrulama kaybi iyilesmezse kac degerlendirmeden sonra dur (0 = kapali)",
+    )
+    tp.add_argument(
+        "--eval-every",
+        type=int,
+        default=500,
+        help="dogrulama degerlendirme araligi (adim)",
+    )
+    tp.add_argument(
+        "--weight-decay",
+        type=float,
+        default=0.0,
+        help="Adam L2 cezasi (buyuk kapasitede asiri ogrenmeyi bastirir)",
+    )
+    tp.add_argument(
+        "--lr-schedule",
+        default="none",
+        choices=["none", "cosine"],
+        help="ogrenme orani zamanlamasi (cosine = lr -> lr*lr_final_ratio)",
+    )
+    tp.add_argument(
+        "--lr-final-ratio",
+        type=float,
+        default=0.1,
+        help="kosinus zamanlamasinin son orani (lr'in kaci)",
     )
     tp.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
     tp.add_argument("--seed", type=int, default=0)
@@ -1537,9 +1814,19 @@ def _cmd_label_policy(args: argparse.Namespace) -> int:
     import gnubg_hint  # noqa: PLC0415
 
     exe = Path(args.gnubg) if args.gnubg else gnubg_er.find_gnubg()
-    positions = generate_positions(
-        args.positions, seed=args.seed, max_plies=args.max_plies
-    )
+    shards = int(getattr(args, "shards", 1) or 1)
+    shard_index = int(getattr(args, "shard_index", 0) or 0)
+    if shards < 1:
+        print("[hata] --shards >= 1 olmali", file=sys.stderr)
+        return 2
+    if not 0 <= shard_index < shards:
+        print("[hata] --shard-index 0..shards-1 araliginda olmali", file=sys.stderr)
+        return 2
+    # Her dilim ayri bir tohum kullanir: dilimler ayrik pozisyon kumeleri uretir ve
+    # birlestirildiklerinde tek kosunun orneklemi kadar gecerli bir orneklem olur.
+    seed = int(args.seed) + shard_index
+    count = int(args.positions) if shards == 1 else int(math.ceil(args.positions / shards))
+    positions = generate_positions(count, seed=seed, max_plies=args.max_plies)
     if not positions:
         print("[hata] pozisyon uretilemedi", file=sys.stderr)
         return 2
@@ -1559,12 +1846,14 @@ def _cmd_label_policy(args: argparse.Namespace) -> int:
     meta = {
         "kind": "policy",
         "plies": int(args.plies),
-        "seed": int(args.seed),
+        "seed": seed,
         "maxPlies": int(args.max_plies),
-        "requested": int(args.positions),
+        "requested": int(count),
         "labeled": len(labeled),
         "skipped": len(skipped),
         "dists": bool(args.dists),
+        "shards": shards,
+        "shardIndex": shard_index,
         "elapsedSeconds": round(time.time() - started, 2),
         "gnubg": str(exe),
         "license": LICENSE_NOTE,
@@ -1585,6 +1874,44 @@ def _cmd_label_policy(args: argparse.Namespace) -> int:
     return 0 if labeled else 1
 
 
+def _cmd_merge_policy(args: argparse.Namespace) -> int:
+    parts = [load_policy_dataset(p) for p in args.shard]
+    if not parts:
+        print("[hata] dilim verilmedi", file=sys.stderr)
+        return 2
+    merged = concat_policy_datasets(parts)
+    merged.meta.update(
+        {
+            "kind": "policy",
+            "merged": True,
+            "shardFiles": [str(p) for p in args.shard],
+            "labeled": int(len(merged)),
+            "dists": bool(merged.has_dist()),
+            "license": LICENSE_NOTE,
+        }
+    )
+    save_policy_dataset(merged, args.out)
+    stats = merged.stats()
+    if args.json:
+        Path(args.json).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.json).write_text(
+            json.dumps({"stats": stats, "meta": merged.meta}, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+    if not args.quiet:
+        print(
+            "birlestirildi=%d aday=%d adayOrt=%.1f dist=%s -> %s"
+            % (
+                len(merged),
+                int(stats.get("candidates", 0)),
+                float(stats.get("candidatesMean", 0.0)),
+                merged.has_dist(),
+                args.out,
+            )
+        )
+    return 0
+
+
 def _cmd_train_policy(args: argparse.Namespace) -> int:
     import torch  # noqa: PLC0415
     from model import CAPACITY_PROFILES, DEFAULT_PROFILE, VECTOR_SIZE, build_model  # noqa: PLC0415
@@ -1601,13 +1928,35 @@ def _cmd_train_policy(args: argparse.Namespace) -> int:
         return 2
 
     state = torch.load(str(args.ckpt), map_location=args.device, weights_only=False)
-    profile = state.get("profile") or DEFAULT_PROFILE
+    profile = args.profile or state.get("profile") or DEFAULT_PROFILE
     if profile not in CAPACITY_PROFILES:
         print("[hata] bilinmeyen profil: " + repr(profile), file=sys.stderr)
         return 2
     h1, h2 = CAPACITY_PROFILES[profile][:2]
-    model = build_model(VECTOR_SIZE, h1, h2, seed=0, output_version=2, profile=profile)
-    model.load_state_dict(state["model"])
+    rank_weight = float(getattr(args, "rank_weight", 0.0) or 0.0)
+    model = build_model(
+        VECTOR_SIZE,
+        h1,
+        h2,
+        seed=0,
+        output_version=2,
+        profile=profile,
+        rank_head=rank_weight > 0,
+    )
+    # Profil ezildiginde (or. medium -> xlarge) agirliklar sekil olarak uyusmaz;
+    # o durumda sifirdan baslanir ve bu raporda acikca isaretlenir.
+    init_mode = "checkpoint"
+    try:
+        model.load_state_dict(state["model"])
+    except RuntimeError:
+        if args.profile is None:
+            raise
+        init_mode = "scratch"
+        print(
+            "[bilgi] checkpoint agirliklari %s profiline uymuyor; sifirdan baslaniyor"
+            % profile,
+            file=sys.stderr,
+        )
 
     def progress(step: int, total: int, loss: float) -> None:
         if args.quiet:
@@ -1625,8 +1974,17 @@ def _cmd_train_policy(args: argparse.Namespace) -> int:
         seed=args.seed,
         value_weight=args.value_weight,
         dist_weight=args.dist_weight,
+        rank_weight=rank_weight,
+        val_fraction=float(getattr(args, "val_fraction", 0.0) or 0.0),
+        patience=int(getattr(args, "patience", 0) or 0),
+        eval_every=int(getattr(args, "eval_every", 500) or 500),
+        weight_decay=float(getattr(args, "weight_decay", 0.0) or 0.0),
+        lr_schedule=str(getattr(args, "lr_schedule", "none") or "none"),
+        lr_final_ratio=float(getattr(args, "lr_final_ratio", 0.1) or 0.1),
         progress=progress,
     )
+    report["profile"] = profile
+    report["initMode"] = init_mode
 
     out_state = dict(state)
     out_state["model"] = model.state_dict()
@@ -1642,8 +2000,16 @@ def _cmd_train_policy(args: argparse.Namespace) -> int:
         )
     if not args.quiet:
         print(
-            "loss=%.6f top1=%.4f adayGenislik=%d -> %s"
-            % (report["lastLoss"], report["top1"], report["width"], args.out)
+            "profil=%s baslangic=%s loss=%.6f top1=%.4f valTop1=%s adayGenislik=%d -> %s"
+            % (
+                profile,
+                init_mode,
+                report["lastLoss"],
+                report["top1"],
+                "yok" if report["valTop1"] is None else "%.4f" % report["valTop1"],
+                report["width"],
+                args.out,
+            )
         )
     return 0
 
@@ -1658,6 +2024,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_verdict(args)
     if args.command == "label-policy":
         return _cmd_label_policy(args)
+    if args.command == "merge-policy":
+        return _cmd_merge_policy(args)
     if args.command == "train-policy":
         return _cmd_train_policy(args)
     return 2

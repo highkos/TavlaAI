@@ -56,6 +56,12 @@ OUTPUT_PROBS = "probs"
 OUTPUT_POLICY = "policy_logit"
 PARITY_BATCHES = (1, 2, 13, 64, 2048)
 PARITY_TOLERANCE = 1e-5
+#: Politika logit'i sinirsiz oldugu icin mutlak tolerans yetmez: egitilmis bir
+#: modelde |logit| ~50'ye cikinca float32 birikim hatasi 1e-5'i asar, oysa
+#: bagil hata ~2e-7'de kalir. Bu yuzden politika karsilastirmasi
+#: ``max(PARITY_TOLERANCE, PARITY_RELATIVE_TOLERANCE * max(1, |logit|))``
+#: ile yapilir. Deger cikisi olasilik oldugu icin mutlak toleransta kalir.
+PARITY_RELATIVE_TOLERANCE = 1e-5
 
 #: Faz 6 Bolum 5.4: cikti sozlesmesi surumu. 1 = tek skaler "value" + tek "policy_logit".
 #: 2 = 6 olasilikli "probs" + tek "policy_logit". ``OnnxModelHandle`` 2'den buyugunu reddeder.
@@ -162,6 +168,7 @@ def parity_check(model, onnx_path: str, seed: int = 0x4F4E4E58,
 
     max_dv = 0.0
     max_dp = 0.0
+    max_scale_p = 1.0
     records = []
 
     dev = _device_of(model)
@@ -181,10 +188,15 @@ def parity_check(model, onnx_path: str, seed: int = 0x4F4E4E58,
         max_dv = max(max_dv, dv)
         max_dp = max(max_dp, dp)
 
-        if dv > PARITY_TOLERANCE or dp > PARITY_TOLERANCE:
+        scale_p = max(1.0, float(np.max(np.abs(op))))
+        limit_p = max(PARITY_TOLERANCE, PARITY_RELATIVE_TOLERANCE * scale_p)
+        max_scale_p = max(max_scale_p, scale_p)
+
+        if dv > PARITY_TOLERANCE or dp > limit_p:
             raise RuntimeError(
                 f"Parite basarisiz (batch={batch}): |dvalue|={dv:.3e} |dpolicy|={dp:.3e} "
-                f"tolerans={PARITY_TOLERANCE:.0e}"
+                f"tolerans={PARITY_TOLERANCE:.0e} (politika {limit_p:.3e}, "
+                f"|logit|={scale_p:.3f})"
             )
 
         # parity_cases.json icin ilk satiri kaydet
@@ -204,6 +216,8 @@ def parity_check(model, onnx_path: str, seed: int = 0x4F4E4E58,
         "vectorSize": VECTOR_SIZE,
         "outputVersion": version,
         "tolerance": PARITY_TOLERANCE,
+        "policyTolerance": max(PARITY_TOLERANCE, PARITY_RELATIVE_TOLERANCE * max_scale_p),
+        "policyLogitScale": max_scale_p,
         "generatedBy": "export_onnx.py - Faz 6",
         "maxAbsDeltaValue": max_dv,
         "maxAbsDeltaPolicyLogit": max_dp,

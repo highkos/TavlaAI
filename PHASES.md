@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1434** | ~8 dk 30 s | ✅ 1434/1434 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1919** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1456** | ~8 dk 30 s | ✅ 1456/1456 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **1941** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -4679,3 +4679,115 @@ Toplam pytest sayısı 1433 → **1434**.
 eğitim boyunca izlenmedi (her adımda ölçmek ~%30 yavaşlatır). (c) Değer
 payı ile ppg arasındaki ilişki üç noktaya dayanıyor; dördüncü bir modelle
 doğrulanmadı.
+## 38. Faz 7-S — Kapasite profilleri: `large` / `xlarge` 30 bin pozisyonda
+
+K5'in açık sorusu şuydu: `medium` (156 423 parametre) yeterli mi, yoksa
+kapasite mi sınırlıyor? Bu bölüm soruyu **aynı veri, aynı kayıp, aynı test
+seti** ile üç profil üzerinde yanıtlıyor.
+
+**Veri.** `ml/gnubg_distill.py label-policy` dokuz parçaya bölündü
+(`--shards 9 --shard-index 0..8`); sekizi yerelde, biri uzak işçide
+(F7-108) paralel koştu. `merge-policy` parçaları birleştirdi:
+`ml/runs/capacity30k/policy_30k.npz` — **30 006 pozisyon, 664 778 aday**,
+aday başına ortalama 22,2, `dist` etiketleri var. Etiketleme gnubg 2-ply.
+
+**Eğitim.** `ml/capacity_train.py run` üç profili sırayla eğitti. Ortak
+ayarlar: 5000 adım, `lr` 1e-3, `batch` 64, `value-weight` 0,5,
+`dist-weight` 0,5, `val-fraction` 0,1, `patience` 6, `eval-every` 500,
+`weight-decay` 1e-4, kosinüs zamanlama (`lr-final-ratio` 0,1), CUDA.
+`xlarge` ayrıca `rank-weight` 0,5 ile eğitildi.
+
+| Profil | Parametre | Gizli | Süre | En iyi adım | Val CE | Val top-1 | Val MSE | Erken durdu |
+|---|---|---|---|---|---|---|---|---|
+| `medium` | 156 423 | 256-256-128 | 354 s | 2500 | 0,62328 | 0,7841 | 0,025107 | hayır |
+| `large` | 642 567 | 512-512-512 | 584 s | 2500 | 0,63597 | 0,7857 | 0,024412 | hayır |
+| `xlarge` | 1 805 832 | 1024-1024-512 | 1877 s | 2000 | 0,62749 | 0,7704 | 0,019258 | **evet** |
+
+**Ölçüm.** `er_paths.py measure --plies 2 --limit 1000` (korpus v2, gnubg
+2-ply hakem) ve `antisymmetry.py measure --limit 500 --plies 2`.
+
+| Profil | Politika ER | Değer ER | `search1` ER | Antisimetri corr | meanAbsSum |
+|---|---|---|---|---|---|
+| `medium` | **0,016824** ± 0,001402 | 0,038926 ± 0,003344 | 0,026074 ± 0,001924 | −0,9016 | 0,2944 |
+| `large` | 0,018694 ± 0,001775 | 0,036066 ± 0,003181 | **0,022040** ± 0,001543 | **−0,9428** | **0,2384** |
+| `xlarge` | 0,018891 ± 0,001995 | **0,035147** ± 0,003038 | 0,024256 ± 0,001791 | −0,8370 | 0,4211 |
+
+**Karar: Test 96 kuralı gereği kazanan yok.** Değer ER'si kapasiteyle
+tekdüze düşüyor (0,038926 → 0,036066 → 0,035147) ama 11,5× parametre
+yalnızca **%9,7** kazanç getiriyor; eşik %15. `large` %7,3'te kalıyor ve
+standart hatalar (0,0033 / 0,0032) farkı neredeyse yutuyor.
+
+**Üç ayrı bulgu.**
+
+1. **Politika kafası kapasiteden kazanmıyor, kaybediyor.** `medium`
+   0,016824 ile en iyi; `large` 0,018694, `xlarge` 0,018891. 30 bin
+   pozisyon 156 bin parametre için zaten yeterli; büyük ağ aynı sinyali
+   daha çok ezberliyor (eğitim CE 0,4338 → 0,3900, doğrulama CE tersine
+   dönüyor).
+2. **`xlarge` erken durdu.** 2000. adımda en iyi doğrulama CE'sine ulaşıp
+   6 değerlendirme boyunca iyileşmedi (5000 adımın %40'ı). 1,8 milyon
+   parametre 30 bin pozisyonu taşımıyor; bu turda ölçülen şey kapasite
+   tavanı değil **veri tavanı**.
+3. **`search1` `large`'ı işaret ediyor.** Ürün yolu `search1`; orada
+   `large` **%15,5** kazançla eşiği geçiyor (0,026074 → 0,022040),
+   `xlarge` %7,0'da kalıyor. Değer-ER kuralının görmediği bir sinyal:
+   `large`'ın değer kafası mutlak olarak çok daha iyi değil ama
+   **sıralaması** daha iyi ve arama sıralamadan faydalanıyor (§36.24).
+   Tek ölçüm, tek tohum, 1000 vaka — bu bir **aday**, karar değil.
+
+**Antisimetri kapısı hiçbir profilde geçmiyor.** `large` en yakın
+(−0,9428) ama eşik 0,99; `xlarge` **daha kötü** (−0,8370). Kapasite artışı
+bu kusuru düzeltmiyor, büyütüyor. Bu, F7-101/F7-105'in "kusur mimaride,
+kapasitede değil" teşhisini doğruluyor: çözüm `augment_perspectives` (R-D)
+veya çıkarım anı antisimetrikleştirmesi.
+
+**Ürün önerisi.** Varsayılan model `medium` olarak kalır (politika yolunda
+en iyi, en hızlı, en küçük). `large` `search1` için aday olarak işaretlenir
+ama R-D sonrası artırımlı eğitimle yeniden ölçülmeden ürüne alınmaz.
+`xlarge` bu veri hacminde elenir; 100 bin+ pozisyon olmadan tekrar
+denenmemeli.
+
+**Altyapı değişiklikleri.**
+
+* `ml/gnubg_distill.py` — `label-policy` `--shard-index`/`--shards`;
+  yeni `merge-policy`; `PolicyDataset.subset()`; `concat_policy_datasets()`
+  (parçalar `dist` konusunda anlaşmazsa `dist` düşürülür).
+  `train_policy_head` yeniden yazıldı: `rank_weight`, `val_fraction`,
+  `patience`, `eval_every`, `weight_decay`, `lr_schedule`, `lr_final_ratio`;
+  deterministik doğrulama bölmesi; `_batch_tensors()` (parti başına
+  genişlik kırpma); `_evaluate()`; en iyi duruma geri dönüşlü erken durma.
+* `ml/model.py` — `BackgammonNetV2` `rank_head` aldı; sıralama kafası
+  **yalnızca eğitimde** var, ONNX'e çıkmaz (`output_version = 2`
+  sözleşmesi bozulmaz).
+* `ml/model_large.py`, `ml/model_xlarge.py` — adlandırılmış giriş
+  noktaları; ikinci bir mimari değil.
+* `ml/capacity_train.py` — `run` / `measure` / `report` alt komutları.
+  `measure --reuse` mevcut `er_paths.json` / `antisymmetry.json` dosyalarını
+  gnubg'yi yeniden koşmadan okur. `report --notes` elle yazılmış yorumu
+  rapora ekler.
+* `ml/export_onnx.py` — `PARITY_RELATIVE_TOLERANCE = 1e-5`. Politika
+  logit'i sınırsız; eğitilmiş modelde |logit| ≈ 52'ye çıkıyor ve float32
+  birikim gürültüsü mutlak 1e-5 eşiğini aşıyor (göreli hata 2,2e-7'de
+  kalıyor). `dp` artık `max(PARITY_TOLERANCE, PARITY_RELATIVE_TOLERANCE *
+  max(1, |logit|))` ile karşılaştırılıyor.
+
+**İki performans düzeltmesi.** (a) Küresel genişliğe yastıklama 10×
+yavaşlatıyordu: veri kümesinin en geniş pozisyonu 443 aday, ortalama 22,2.
+`_batch_tensors()` her partiyi kendi genişliğine kırpıyor; adım süresi
+383,8 ms → 234 ms, `valCe` bit bit aynı. (b) Sabit `lr = 1e-3` 1500 adım
+sonra aşırı öğreniyordu (`medium` 0,64605 → 0,83). `weight_decay = 1e-4` +
+kosinüs zamanlama bunu düzeltiyor (ara denemede 0,61645).
+
+**Belgeler.** `ml/artifacts/stage_large_xlarge_report.md` (tablo + karar +
+yorum), `ml/artifacts/stage_large_xlarge.json` (makine okunur),
+`ml/artifacts/stage_large_xlarge_notes.md` (yorumun kaynağı).
+Toplam pytest sayısı 1434 → **1456**; §6 toplamı 1919 → **1941**.
+
+**Açık kalan.** (a) Tek tohum: üç profilin her biri tek koşu, tohum
+varyansı ölçülmedi; `large`–`medium` farkının (%7,3) tohum gürültüsünden
+büyük olduğu gösterilmedi. (b) `search1` kazancı 1000 vaka üzerinden;
+`large`–`medium` farkı 0,004034 ≈ 1,7 SE, sınırda. (c) `xlarge` erken
+durduğu için "kapasite işe yaramıyor" sonucu yalnızca bu veri hacminde
+geçerli. (d) Antisimetri 500 vaka; `large` ile `medium` arasındaki corr
+farkı bu örneklemde anlamlı mı, ölçülmedi. (e) ppg ölçümü yapılmadı;
+`search1` ER kazancının ppg'ye dönüşüp dönüşmediği bilinmiyor.

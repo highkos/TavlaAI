@@ -5999,3 +5999,85 @@ adlar konumdan bagimsiz eslestirildigi icin dogru kurulumlarda etkisizdir.
 **Arac.** `tools/CpuCap.ps1`, `tools/RemoteAgent.ps1` (uzakta `TavlaAgent`
 servisi), `tools/RemoteJob.ps1`; belgeler `tools/README.md`. Test sayisi
 degismedi (1434).
+## F7-109 -- Faz 7-S: kapasite profilleri 30 bin pozisyonda -- "veri tavani" bulgusu
+
+K5'in acik sorusu: `medium` (156 423 parametre) yeterli mi, yoksa kapasite mi
+sinirliyor? Uc profil (`medium` / `large` / `xlarge`) **ayni** veri kumesi,
+**ayni** kayip agirliklari ve **ayni** test seti ile egitilip olculdu.
+
+**Veri.** `label-policy` dokuz parca (`--shards 9`), sekizi yerelde biri uzak
+iscide (F7-108) paralel; `merge-policy` birlestirdi: 30 006 pozisyon,
+664 778 aday, aday basina 22,2, gnubg 2-ply etiket.
+
+**Sonuc.** Deger ER'si kapasiteyle tekduze dusuyor (0,038926 -> 0,036066 ->
+0,035147) ama 11,5x parametre yalnizca **%9,7** kazanc getiriyor; Test 96
+esigi %15. `large` %7,3'te kaliyor ve standart hatalar (0,0033 / 0,0032)
+farki neredeyse yutuyor. **Kazanan yok.**
+
+**Uc ayri bulgu.**
+
+1. **Politika kafasi kapasiteden kazanmiyor, kaybediyor.** `medium`
+   0,016824 ile en iyi; `large` 0,018694, `xlarge` 0,018891. 30 bin pozisyon
+   156 bin parametre icin zaten yeterli; buyuk ag ayni sinyali daha cok
+   ezberliyor (egitim CE 0,4338 -> 0,3900, dogrulama CE tersine donuyor).
+   Bu, F7-105'in "politika kafasi olcekle sinirli" ifadesini **genisletiyor**:
+   sinir yalnizca olcekte degil, **veri hacminde**.
+2. **`xlarge` erken durdu.** 2000. adimda en iyi dogrulama CE'sine ulasip 6
+   degerlendirme boyunca iyilesmedi (5000 adimin %40'i). 1,8 milyon parametre
+   30 bin pozisyonu tasimiyor; bu turda olculen sey kapasite tavani degil
+   **veri tavani**.
+3. **`search1` `large`'i isaret ediyor.** Urunde kullanilan yol `search1`;
+   orada `large` **%15,5** kazancla esigi geciyor (0,026074 -> 0,022040),
+   `xlarge` %7,0'da kaliyor. Deger-ER kuralinin gormedigi bir sinyal:
+   `large`'in deger kafasi mutlak olarak cok daha iyi degil ama **siralamasi**
+   daha iyi ve arama siralamadan faydalaniyor (F7-106/§36.24). Tek olcum, tek
+   tohum, 1000 vaka -- **aday**, karar degil.
+
+**Antisimetri kapisi hicbir profilde gecmiyor.** `large` en yakin (-0,9428)
+ama esik 0,99; `xlarge` **daha kotu** (-0,8370, meanAbsSum 0,4211). Kapasite
+artisi bu kusuru duzeltmiyor, buyutuyor. F7-101/F7-105'in "kusur mimaride,
+kapasitede degil" teshisinin dogrudan dogrulamasidir: cozum
+`augment_perspectives` (R-D) veya cikarim ani antisimetrikletirmesi.
+
+**Urun karari.** Varsayilan model `medium` kalir (politika yolunda en iyi, en
+hizli 354 s, en kucuk). `large` `search1` icin aday olarak isaretlenir ama
+R-D sonrasi artirimli egitimle yeniden olculmeden urune alinmaz. `xlarge` bu
+veri hacminde elenir; 100 bin+ pozisyon olmadan tekrar denenmemeli.
+
+**Iki performans dersinin nicel bicimi.**
+
+* **Kuresel yastiklama 10x yavaslatiyordu.** Duzensiz veri kumesinin en genis
+  pozisyonu 443 aday, ortalama 22,2. Eski kod her partiyi kuresel genislige
+  yastikliyordu: 383,8 ms/adim. `_batch_tensors()` her partiyi kendi
+  genisligine kirpiyor: 234 ms/adim, `valCe` bit bit ayni (1,004775449618702
+  vs 1,0047754621910914). Maske yastigi zaten sifirladigi icin sonuc
+  degismemeli -- degismedigi olculdu.
+* **Sabit `lr = 1e-3` 1500 adim sonra asiri ogreniyor.** 27 bin egitim
+  pozisyonunda `medium` en iyi dogrulama CE'si 0,64605 (adim 1500), sonra
+  0,83'e tirmaniyor; `large` 0,64222 -> 0,87. `weight_decay = 1e-4` +
+  kosinus zamanlama (`lr_final_ratio = 0,1`) ile ara denemede 0,61645 ve
+  iraksama yok. Bu, "az veri + sabit yuksek ogrenme orani" tuzaginin
+  olculmus halidir.
+
+**ONNX parite toleransi goreli olmak zorunda.** Politika logit'i sinirsiz;
+egitilmis modelde |logit| ~ 52'ye cikiyor ve float32 birikim gurultusu
+(~2,2e-7 **goreli**) mutlak 1e-5 esigini asiyor. `PARITY_RELATIVE_TOLERANCE =
+1e-5` eklendi; `dp` artik `max(PARITY_TOLERANCE, PARITY_RELATIVE_TOLERANCE *
+max(1, |logit|))` ile karsilastiriliyor. Deger ciktisi olasilik oldugu icin
+mutlak tolerans orada dogru kalir. Egitilmemis modeller hala 8,9e-08 /
+4,8e-08 ile geciyor.
+
+**Arac.** `ml/capacity_train.py` (`run` / `measure` / `report`),
+`ml/model_large.py`, `ml/model_xlarge.py`; `ml/gnubg_distill.py`'ye
+`--shard-index`/`--shards`, `merge-policy`, `rank_weight`, `val_fraction`,
+`patience`, `eval_every`, `weight_decay`, `lr_schedule`, `lr_final_ratio`;
+`ml/model.py`'ye egitim-disi siralama kafasi. Raporlar
+`ml/artifacts/stage_large_xlarge_report.md` / `.json` / `_notes.md`.
+Test sayisi 1434 -> **1456**.
+
+**Acik kalan.** (a) Tek tohum; tohum varyansi olculmedi, `large`-`medium`
+farkinin (%7,3) gurultuden buyuk oldugu gosterilmedi. (b) `search1` kazanci
+1000 vaka; fark 0,004034 ~ 1,7 SE, sinirda. (c) `xlarge` erken durdugu icin
+sonuc yalnizca bu veri hacminde gecerli. (d) Antisimetri 500 vaka; profiller
+arasi corr farki anlamli mi, olculmedi. (e) ppg olcumu yapilmadi; `search1`
+ER kazancinin ppg'ye donusup donusmedigi bilinmiyor.

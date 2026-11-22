@@ -1,0 +1,131 @@
+{
+  "decision": {
+    "arms": [
+      {
+        "meetsThreshold": false,
+        "profile": "xlarge",
+        "relativeGain": 0.09708164209011982,
+        "search1Er": 0.024256,
+        "search1RelativeGain": 0.06972462989951676,
+        "valueEr": 0.035147
+      },
+      {
+        "meetsThreshold": false,
+        "profile": "large",
+        "relativeGain": 0.07347274315367625,
+        "search1Er": 0.02204,
+        "search1RelativeGain": 0.1547135077088287,
+        "valueEr": 0.036066
+      }
+    ],
+    "available": true,
+    "baseline": "medium",
+    "baselineValueEr": 0.038926,
+    "threshold": 0.15,
+    "winner": null
+  },
+  "rows": [
+    {
+      "antisymmetryCorr": -0.9016232696316115,
+      "antisymmetryMeanAbsSum": 0.29436557625887066,
+      "bestStep": 2500,
+      "distWeight": 0.5,
+      "elapsedSeconds": 354.41,
+      "hidden": [
+        256,
+        256,
+        128
+      ],
+      "params": 156423,
+      "parityMaxAbsDeltaPolicyLogit": 5.340576171875e-05,
+      "parityMaxAbsDeltaValue": 9.5367431640625e-07,
+      "policyEr": 0.016824,
+      "policyExact": 0.629,
+      "policySe": 0.001402,
+      "profile": "medium",
+      "rankWeight": 0.0,
+      "search1Er": 0.026074,
+      "search1Exact": 0.577,
+      "search1Se": 0.001924,
+      "stepsRun": 5000,
+      "stoppedEarly": false,
+      "trainCount": 27005,
+      "trainTop1": 0.8423625254582485,
+      "trainValueMse": 0.025094065532071726,
+      "valCount": 3001,
+      "valTop1": 0.7840719760079974,
+      "valValueMse": 0.02510691484109297,
+      "valueEr": 0.038926,
+      "valueExact": 0.536,
+      "valueSe": 0.003344
+    },
+    {
+      "antisymmetryCorr": -0.9427880562156624,
+      "antisymmetryMeanAbsSum": 0.23837932977746148,
+      "bestStep": 2500,
+      "distWeight": 0.5,
+      "elapsedSeconds": 584.33,
+      "hidden": [
+        512,
+        512,
+        512
+      ],
+      "params": 642567,
+      "parityMaxAbsDeltaPolicyLogit": 4.57763671875e-05,
+      "parityMaxAbsDeltaValue": 1.1920928955078125e-06,
+      "policyEr": 0.018694,
+      "policyExact": 0.621,
+      "policySe": 0.001775,
+      "profile": "large",
+      "rankWeight": 0.0,
+      "search1Er": 0.02204,
+      "search1Exact": 0.588,
+      "search1Se": 0.001543,
+      "stepsRun": 5000,
+      "stoppedEarly": false,
+      "trainCount": 27005,
+      "trainTop1": 0.8586558044806517,
+      "trainValueMse": 0.02375259673717099,
+      "valCount": 3001,
+      "valTop1": 0.7857380873042319,
+      "valValueMse": 0.024411769071764566,
+      "valueEr": 0.036066,
+      "valueExact": 0.548,
+      "valueSe": 0.003181
+    },
+    {
+      "antisymmetryCorr": -0.8370145543626607,
+      "antisymmetryMeanAbsSum": 0.4210807347411209,
+      "bestStep": 2000,
+      "distWeight": 0.5,
+      "elapsedSeconds": 1876.98,
+      "hidden": [
+        1024,
+        1024,
+        512
+      ],
+      "params": 1805832,
+      "parityMaxAbsDeltaPolicyLogit": 3.814697265625e-05,
+      "parityMaxAbsDeltaValue": 1.7881393432617188e-06,
+      "policyEr": 0.018891,
+      "policyExact": 0.63,
+      "policySe": 0.001995,
+      "profile": "xlarge",
+      "rankWeight": 0.5,
+      "search1Er": 0.024256,
+      "search1Exact": 0.577,
+      "search1Se": 0.001791,
+      "stepsRun": 5000,
+      "stoppedEarly": true,
+      "trainCount": 27005,
+      "trainTop1": 0.8389927791149787,
+      "trainValueMse": 0.020881676248388034,
+      "valCount": 3001,
+      "valTop1": 0.7704098633788737,
+      "valValueMse": 0.019257903806008683,
+      "valueEr": 0.035147,
+      "valueExact": 0.534,
+      "valueSe": 0.003038
+    }
+  ]
+}
