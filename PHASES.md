@@ -4922,3 +4922,191 @@ ile kaba tahmin: politika −0,0039 ER → ~0,056 ppg). (d) Antisimetri kapısı
 verilmedi. (e) `maskedCandidateRate = 0,6272` — etiketsiz adayların hedef
 dağılımdan tamamen çıkarılması, gerçek "ikinci en iyi" bilgisini
 kaybettiriyor olabilir; denenmedi.
+## 40. Faz 7-R / R-E — Kapasite yeniden testi ve küp ER'si
+
+**Tarih.** 2026-02 (R-D sonrası).
+
+**Amaç.** `large`, `medium`'a göre hamle kalitesinde gerçekten daha iyi mi —
+aynı veri, aynı adım, aynı tohum setiyle, eşleştirilmiş bootstrap GA ile? Ve
+bu kazanç **küp kararına** yansıyor mu? (Faz 7 v2.5 §4, R-E maddeleri 1–4.)
+
+**Kurulum.** `ml/artifacts/reference_corpus_v2.json`, `--stride 3 --limit 300`
+(faz temsili: bar 84 / contact 200 / race 16), gnubg 2-ply hakem, 3 tohum
+(0, 1, 2), eşleştirilmiş bootstrap 2000 yeniden örnekleme, `Δ_min = %15`.
+
+**Hamle ER'si.**
+
+| koşu | politika | değer | search1 |
+|---|---|---|---|
+| `medium` (3 tohum) | 0,020402 | 0,034547 | 0,021723 |
+| `large` (3 tohum) | 0,016347 | 0,031123 | 0,023166 |
+| R-D `large` (5 tohum) | **0,012408** | **0,019507** | **0,014360** |
+
+`medium` → `large` (aynı veri, aynı kayıp):
+
+| yol | fark | %95 GA | göreli | p | anlamlı | Δ ≥ Δ_min |
+|---|---|---|---|---|---|---|
+| politika | −0,004056 | [−0,009667; −0,000293] | **−19,9 %** | 0,0250 | evet | **evet** |
+| değer | −0,003423 | [−0,006753; −0,000223] | −9,9 % | 0,0390 | evet | hayır |
+| search1 | +0,001442 | [−0,001374; +0,003934] | +6,6 % | 0,2760 | **hayır** | hayır |
+
+`large` (R-E) → `large` (R-D, liste kaybı): politika −23,5 % (p = 0,0030),
+değer −40,4 % (p = 0,0000), search1 −38,0 % (p = 0,0000) — üçü de anlamlı.
+
+**Küp ER'si (madde 4).** `ml/artifacts/cube_corpus.json` (400 vaka, para +
+5 ve 9 puan, Crawford hariç), gnubg 2-ply cubeful referans, 3 tohum. Hedef
+**0,02**.
+
+| koşu | tohum 0 | tohum 1 | tohum 2 | ortalama | sd |
+|---|---|---|---|---|---|
+| `medium` | 0,0753 | 0,0698 | 0,0772 | **0,0741** | 0,0038 |
+| `large` | 0,0782 | 0,0576 | 0,0797 | **0,0718** | 0,0124 |
+| R-D `large` | 0,0855 | 0,0898 | 0,0710 | **0,0821** | 0,0099 |
+
+Eşleştirilmiş bootstrap (3 tohum × 400 vaka): `medium` → `large` −0,0022
+GA [−0,0129; +0,0061] p = 0,6230; `large` → R-D `large` +0,0102
+GA [−0,0092; +0,0343] p = 0,3810; `medium` → R-D `large` +0,0080
+GA [−0,0079; +0,0265] p = 0,3250. **Hiçbiri anlamlı değil.**
+
+**Kritik bulgu.** Liste kaybı hamle ER'sini üç yolda da %23–40 düşürdü ama
+küp ER'sini **anlamlı şekilde değiştirmedi** (+0,0102, p = 0,38). Yani hamle
+kalitesi kazancı küp kararına **transfer olmuyor**. Küp ER'si hedefin
+3,6–4,1 katında (0,072–0,082 vs 0,02) ve R-C'de ölçülen 0,0642'den de kötü.
+
+**Gecikme bütçesi.** Bütçe depth-2 p95 ≤ 2 s (Faz 7 §5.2 bacak b); üretim
+derinliği **depth 1** (F7-09). 30 pozisyon, CPU:
+
+| koşu | p50 | p95 | ortalama | bütçenin %'si |
+|---|---|---|---|---|
+| `medium` | 0,0175 s | **0,0626 s** | 0,0239 s | %3,1 |
+| `large` | 0,0610 s | **0,2062 s** | 0,0714 s | %10,3 |
+| R-D `large` | 0,0570 s | **0,2042 s** | 0,0744 s | %10,2 |
+
+**B3 gerekçesiyle çelişki.** B3 (R-01) `medium`'u seçti çünkü `large` depth-2
+p95 = 13,68 s > 2 s. Ama üretim depth-1'de çalışıyor ve orada `large` p95
+0,2042 s. Yani B3'ün `large`'ı eleme gerekçesi **üretimde kullanılmayan bir
+derinliğe** dayanıyordu. Bu bir hata değil, ama gerekçe artık geçerli değil.
+
+**Karar: etiket `kanıtlanmadı`** (üç yolun üçü birden sağlanmadı;
+`yanlışlandı` değil). Seçilen profil **`large`**: politika yolunda Δ_min ve GA
+alt sınırı > 0 sağlanıyor, gecikme bütçenin %10'unda, ve R-D ile birlikte üç
+yolda da anlamlı kazanç var. Ama "kapasite tek başına üç yolda kanıtlandı"
+**denmez**.
+
+**Araç.** `ml/capacity_train.py compare --seeds`; `Backgammon.MatchBench cube`
++ `ml/cube_er.py measure`; `Backgammon.MatchBench decision-latency`. Rapor
+`ml/artifacts/stage_r_e_report.{json,md}`; karar dosyaları
+`ml/runs/capacity_re/compare/medium_vs_large.{json,md}`,
+`ml/runs/capacity_rd/compare/re_medium_vs_rd_large.{json,md}`.
+
+**Açık kalan.** (a) Küp ER'si hiçbir profilde hedefe yaklaşmıyor; hamle
+kalitesi ile küp kararı arasındaki bağ **kurulmadı**. (b) `xlarge` R-E'ye
+girmedi. (c) ER 300 vaka, `race` fazında 16 vaka. (d) ppg ölçümü R-F'de.
+## 41. Faz 7-R / R-F — Final kanıt tanımı (üç satır)
+
+**Tarih.** 2026-02. **Durum.** Tamamlandı. **Etiket.** `eşdeğerlik kanıtlanmadı`.
+
+**Amaç.** Modelin seviyesini tahminle değil ölçümle koymak. Nihai iddia **üç
+ayrı satırdır** ve satırlar **toplanmaz** (Faz 7 v2.5 §4 R-F madde 4).
+
+### Üç satırlık nihai rapor
+
+| # | Satır | Ölçüm | Hedef | Sonuç |
+|---|---|---|---|---|
+| 1 | **Hamle kalitesi** | politika ER **0,0111** [0,0077; 0,0152], search1 **0,0139** [0,0101; 0,0185] (gnubg 2-ply hakem, 300 pozisyon) | gnubg 2-ply seviyesi | ❌ **Eşdeğer değil.** gnubg 0-ply 0,0062, gnubg 1-ply 0,0044 → model **gnubg 0-ply seviyesinde** |
+| 2 | **Küp** | küp ER **0,0821** (3 tohum, 400 vaka) | 0,02 | ❌ **Karşılanmadı.** Hedefin **4,1 katı** |
+| 3 | **Oyun gücü** | ppg **−0,2445** [−0,3055; −0,1835] (gnubg 2-ply'a karşı, 2000 oyun) | `H0: ppg_fark ≤ −m`, m = 0,1115 | ❌ **Eşdeğerlik kanıtlanmadı.** Üst sınır −0,1835 < −0,1115 → **daha kötü** |
+
+**Rapor dili (madde 5).** "gnubg 4-ply'a göre eşdeğer" **denmez**;
+"eşdeğerlik kanıtlanmadı" denir. "İnsan şampiyonu yendik" **denmez**.
+
+### Madde 1 — Referans zinciri
+
+Hakem kendi kendini ölçemez. İki derin hakem kullanıldı:
+
+| Hakem | n | 0-ply | 1-ply | 2-ply | 3-ply | 4-ply |
+|---|---|---|---|---|---|---|
+| `hint`@3 | 40 | 0,0063 | 0,0027 | **0,0013** | — | — |
+| `hint`@4 | 20 | 0,0049 | 0,0040 | **0,0006** | **0,0002** | ölçülemez |
+
+**ER çözünürlük tabanı 0,0006–0,0013.** 4-ply'ın kendi ER'si **ölçülemez**
+(5-ply/rollout bu makinede yok) ve satır öyle işaretlendi.
+
+**Modelin merdivendeki yeri** (gnubg 2-ply hakem, 300 pozisyon):
+
+| Oyuncu | ER | %95 GA | σ |
+|---|---|---|---|
+| gnubg 0-ply | **0,0062** | [0,0040; 0,0088] | 0,0212 |
+| gnubg 1-ply | **0,0044** | [0,0029; 0,0063] | 0,0153 |
+| R-D `large` politika | 0,0111 | [0,0077; 0,0152] | 0,0334 |
+| R-D `large` search1 | 0,0139 | [0,0101; 0,0185] | 0,0375 |
+| R-D `large` değer | 0,0173 | [0,0105; 0,0264] | 0,0711 |
+| R-E `large` politika | 0,0172 | [0,0119; 0,0235] | 0,0524 |
+| R-E `medium` politika | 0,0189 | [0,0133; 0,0255] | 0,0546 |
+
+Model **gnubg 0-ply seviyesinde, biraz altında**. Tabanın 9–18 katı, yani
+sinyal gürültüden net ayrılıyor.
+
+**Yeni bulgu: `search1` politikadan kötü** (0,0139 vs 0,0111). Değer kafası en
+zayıf yol (0,0173) ve `search1` derinlik-1 değerlendirmesini ondan alıyor.
+**Arama, zayıf değer kafası yüzünden politikayı bozuyor.** Değer hedefi
+değişikliği tartışması artık ölçülmüş bir gerekçeye sahip.
+
+### Madde 2 — Rollout: ölçülemez
+
+gnubg 1.08.003-mingw `rollout` komutu `Rollout done. Printing final results.`
+basar ama **equity satırı basmaz**. Beş bağımsız deneme (`-t`, `-t -d`, `-c`,
+`-p`, `set rollout cubeful off` + `set cube use off`, `set rollout trials 36`
++ `set rollout chequerplay plies 0`) hepsi aynı sonucu verdi. `rollout`
+sonrası `eval` **statik** değer döndürür; Python API'sinde `rolloutcontext`
+var ama `rollout` fonksiyonu yok; `--help` rollout seçeneği listelemez.
+
+Maliyet ölçüldü: 36 deneme ≈ 30 s → 1296 deneme ≈ 18 dk → 400 rollout ≈
+**120 saat tek çekirdek**. Kural 6 uyarınca **sıfır uydurulmadı**; satır
+`ölçülemez` ve yerine madde 1'in çözünürlük tabanı kondu.
+
+### Madde 3 — Oyun gücü
+
+Eşleştirilmiş zar + renk takası, küpsüz para, 10 paralel süreç, gnubg
+**2-ply** rakibe karşı 2000 oyun (1000 çift):
+
+| Ölçüm | Değer |
+|---|---|
+| Kazanma | 839/2000 = 0,4195 |
+| **ppg** | **−0,2445** |
+| ppg %95 GA | **[−0,3055; −0,1835]** |
+| Eşleştirilmiş fark | −0,4890 [−0,5990; −0,3770] |
+| Oyun başına ply | 55,9 |
+| Süre | ~3 sa 20 dk |
+
+`H0: ppg_fark ≤ −m`, m = 0,1115. GA'nın **üst** sınırı −0,1835 < −0,1115 →
+**eşdeğerlik kanıtlanmadı**; model m'den fazla kötü. Güç borcu: m ve
+σ = 2,9960 için gereken **4337** oyun, koşulan **2000** → **%46**.
+
+**Tutarlılık kontrolü.** gnubg 0-ply, gnubg 2-ply'a karşı **−0,2229 ppg**;
+modelimiz **−0,2445 ppg**. İki bağımsız ölçüm (ER merdiveni ve ppg) **aynı
+yeri** gösteriyor. Bu, ölçüm zincirinin kendi kendini doğrulamasıdır.
+
+### Madde 4 — Küp ayrı satır
+
+R-D `large` küp ER'si **0,0821** (3 tohum, 400 vaka), hedef 0,02 → **4,1 kat**.
+R-E'de hiçbir eşleştirilmiş bootstrap anlamlı değildi (p ≥ 0,32). **Hamle
+kalitesi kazancı küp kararına transfer olmuyor.**
+
+### Araç
+
+`ml/gnubg_ladder.py` (`--deep`, `--deep-referee-plies`, `--deep-player-plies`,
+`--deep-limit`, `--models-only`, `--model-er` virgüllü liste);
+`ml/gnubg_rollout.py`; `ml/vs_gnubg.py` (başlık artık `--gnubg-plies`'i
+yansıtır — eski sürüm "0-ply" yazısını sabit tutuyordu). Artefaktlar
+`ml/artifacts/gnubg_ladder{,_deep,_deep4}.{json,md}`, `gnubg_rollout.{json,md}`,
+`ppg_rd_large_s0_2ply.{json,md}`, `stage_r_f_report.{json,md}`. Test sayısı
+**1497** (11 yeni: `test_gnubg_ladder.py` 322–327 + 332,
+`test_gnubg_rollout.py` 328–331); §6 toplamı **1982**.
+
+### Açık kalan
+
+(a) `search1` politikadan kötü — değer kafası en zayıf yol. (b) Küp ER'si hiç
+iyileşmedi. (c) ppg güç borcu %46. (d) 4-ply'ın kendi ER'si ölçülemedi.
+(e) gnubg GPL lisansı ürün dağıtımı öncesi çözülmedi (§36.10/5). (f)
+`m = 0,1115` yalnızca money; maç hücreleri (5 ve 9 puan) ayrı raporlanmadı.

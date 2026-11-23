@@ -1,0 +1,54 @@
+{
+  "refereePlies": 3,
+  "referee": "hint",
+  "positions": 40,
+  "mappingFailures": 0,
+  "methodNote": "2-ply degerleri gnubg `eval` ile, 3-ply ve 4-ply degerleri gnubg `hint` ile olculur (F7-04). Iki protokol ayni pozisyonda birebir ayni sonucu vermez; 2/3 sinirindaki merdiven adimi elma-elmadir degildir.",
+  "rungs": [
+    {
+      "playerPlies": 0,
+      "refereePlies": 3,
+      "referee": "hint",
+      "measurable": true,
+      "count": 40,
+      "skipped": 0,
+      "censored": 0,
+      "coverage": 1.0,
+      "mean": 0.006325,
+      "ciLow": 0.0009500000000000005,
+      "ciHigh": 0.013524999999999999,
+      "sigma": 0.02067872373684158,
+      "exactMatchRate": 0.775
+    },
+    {
+      "playerPlies": 1,
+      "refereePlies": 3,
+      "referee": "hint",
+      "measurable": true,
+      "count": 40,
+      "skipped": 0,
+      "censored": 0,
+      "coverage": 1.0,
+      "mean": 0.002699999999999999,
+      "ciLow": 0.0005000000000000002,
+      "ciHigh": 0.005675624999999944,
+      "sigma": 0.008449548614859357,
+      "exactMatchRate": 0.825
+    },
+    {
+      "playerPlies": 2,
+      "refereePlies": 3,
+      "referee": "hint",
+      "measurable": true,
+      "count": 40,
+      "skipped": 0,
+      "censored": 0,
+      "coverage": 1.0,
+      "mean": 0.0013250000000000009,
+      "ciLow": 0.0003250000000000003,
+      "ciHigh": 0.0026750000000000007,
+      "sigma": 0.0038589722293204806,
+      "exactMatchRate": 0.825
+    }
+  ]
+}

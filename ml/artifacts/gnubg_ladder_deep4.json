@@ -1,0 +1,69 @@
+{
+  "refereePlies": 4,
+  "referee": "hint",
+  "positions": 20,
+  "mappingFailures": 0,
+  "methodNote": "2-ply degerleri gnubg `eval` ile, 3-ply ve 4-ply degerleri gnubg `hint` ile olculur (F7-04). Iki protokol ayni pozisyonda birebir ayni sonucu vermez; 2/3 sinirindaki merdiven adimi elma-elmadir degildir.",
+  "rungs": [
+    {
+      "playerPlies": 0,
+      "refereePlies": 4,
+      "referee": "hint",
+      "measurable": true,
+      "count": 20,
+      "skipped": 0,
+      "censored": 0,
+      "coverage": 1.0,
+      "mean": 0.0049,
+      "ciLow": 0.00015000000000000012,
+      "ciHigh": 0.011199999999999998,
+      "sigma": 0.013038001138372802,
+      "exactMatchRate": 0.8
+    },
+    {
+      "playerPlies": 1,
+      "refereePlies": 4,
+      "referee": "hint",
+      "measurable": true,
+      "count": 20,
+      "skipped": 0,
+      "censored": 0,
+      "coverage": 1.0,
+      "mean": 0.003950000000000002,
+      "ciLow": 0.0,
+      "ciHigh": 0.009150000000000002,
+      "sigma": 0.010811665240061682,
+      "exactMatchRate": 0.85
+    },
+    {
+      "playerPlies": 2,
+      "refereePlies": 4,
+      "referee": "hint",
+      "measurable": true,
+      "count": 20,
+      "skipped": 0,
+      "censored": 0,
+      "coverage": 1.0,
+      "mean": 0.0005999999999999998,
+      "ciLow": 0.0,
+      "ciHigh": 0.0016499999999999993,
+      "sigma": 0.002087557121815377,
+      "exactMatchRate": 0.9
+    },
+    {
+      "playerPlies": 3,
+      "refereePlies": 4,
+      "referee": "hint",
+      "measurable": true,
+      "count": 20,
+      "skipped": 0,
+      "censored": 0,
+      "coverage": 1.0,
+      "mean": 0.00020000000000000017,
+      "ciLow": 0.0,
+      "ciHigh": 0.0006000000000000005,
+      "sigma": 0.0008944271909999167,
+      "exactMatchRate": 0.95
+    }
+  ]
+}

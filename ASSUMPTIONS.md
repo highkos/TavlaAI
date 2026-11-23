@@ -6211,3 +6211,169 @@ kapisi (`|corr| >= 0,99`) hala dusuk; esik mi yanlis, kusur mu kaldi,
 karar verilmedi. (e) `maskedCandidateRate = 0,6272` -- etiketsiz adaylarin
 hedef dagilimdan tamamen cikarilmasi, gercek "ikinci en iyi" bilgisini
 kaybettiriyor olabilir; denenmedi.
+## F7-111 - R-E: kapasite yeniden testi (medium vs large) ve kup ER'si
+
+**Soru.** `large`, `medium`'a gore hamle kalitesinde gercekten daha iyi mi --
+ayni veri, ayni adim, ayni tohum setiyle, eslestirilmis bootstrap GA ile? Ve
+bu kazanc **kup kararina** yansiyor mu?
+
+**Kurulum.** `ml/artifacts/reference_corpus_v2.json`, `--stride 3 --limit 300`
+(faz temsili: bar 84 / contact 200 / race 16), gnubg 2-ply hakem, 3 tohum
+(0,1,2), eslestirilmis bootstrap 2000 yeniden ornekleme, `Delta_min = %15`
+(`CAPACITY_GAIN_THRESHOLD`).
+
+**Hamle ER'si.**
+
+| kosu | politika | deger | search1 |
+|---|---|---|---|
+| `medium` (3 tohum) | 0,020402 | 0,034547 | 0,021723 |
+| `large` (3 tohum) | 0,016347 | 0,031123 | 0,023166 |
+| R-D `large` (5 tohum) | **0,012408** | **0,019507** | **0,014360** |
+
+`medium` -> `large` (ayni veri, ayni kayip):
+
+| yol | fark | %95 GA | goreli | p | anlamli | Delta >= Delta_min |
+|---|---|---|---|---|---|---|
+| politika | -0,004056 | [-0,009667; -0,000293] | **-19,9%** | 0,0250 | evet | **evet** |
+| deger | -0,003423 | [-0,006753; -0,000223] | -9,9% | 0,0390 | evet | hayir |
+| search1 | +0,001442 | [-0,001374; +0,003934] | +6,6% | 0,2760 | **hayir** | hayir |
+
+`large` (R-E) -> `large` (R-D, liste kaybi): politika -23,5% (p=0,0030),
+deger -40,4% (p=0,0000), search1 -38,0% (p=0,0000) -- ucu de anlamli.
+
+**Kup ER'si (R-E madde 4).** `ml/artifacts/cube_corpus.json` (400 vaka, para +
+5 ve 9 puan, Crawford haric), gnubg 2-ply cubeful referans, 3 tohum. Hedef
+**0,02**.
+
+| kosu | tohum 0 | tohum 1 | tohum 2 | ortalama | sd |
+|---|---|---|---|---|---|
+| `medium` | 0,0753 | 0,0698 | 0,0772 | **0,0741** | 0,0038 |
+| `large` | 0,0782 | 0,0576 | 0,0797 | **0,0718** | 0,0124 |
+| R-D `large` | 0,0855 | 0,0898 | 0,0710 | **0,0821** | 0,0099 |
+
+Eslestirilmis bootstrap (3 tohum x 400 vaka): `medium` -> `large` -0,0022
+GA [-0,0129; +0,0061] p=0,6230; `large` -> R-D `large` +0,0102
+GA [-0,0092; +0,0343] p=0,3810; `medium` -> R-D `large` +0,0080
+GA [-0,0079; +0,0265] p=0,3250. **Hicbiri anlamli degil.**
+
+**Kritik bulgu.** Liste kaybi hamle ER'sini uc yolda da %23-40 dusurdu ama
+kup ER'sini **anlamli sekilde degistirmedi** (+0,0102, p=0,38). Yani hamle
+kalitesi kazanci kup kararina **transfer olmuyor**. Kup ER'si hedefin
+3,6-4,1 katinda (0,072-0,082 vs 0,02) ve R-C'de olculen 0,0642'den de kotu.
+
+**Gecikme butcesi.** Butce depth-2 p95 <= 2 s (Faz 7 §5.2 bacak b); uretim
+derinligi **depth 1** (F7-09). 30 pozisyon, CPU:
+
+| kosu | p50 | p95 | ortalama | butcenin %'si |
+|---|---|---|---|---|
+| `medium` | 0,0175 s | **0,0626 s** | 0,0239 s | %3,1 |
+| `large` | 0,0610 s | **0,2062 s** | 0,0714 s | %10,3 |
+| R-D `large` | 0,0570 s | **0,2042 s** | 0,0744 s | %10,2 |
+
+**B3 gerekcesiyle celiski.** B3 (R-01) `medium`'u secti cunku `large` depth-2
+p95 = 13,68 s > 2 s. Ama uretim depth-1'de calisiyor ve orada `large` p95
+0,2042 s. Yani B3'un `large`'i eleme gerekcesi **uretimde kullanilmayan bir
+derinlige** dayaniyordu. Bu bir hata degil, ama gerekce artik gecerli degil.
+
+**Karar: etiket `kanitlanmadi`** (uc yolun ucu birden saglanmadi;
+`yanlislandi` degil). Secilen profil **`large`**: politika yolunda Delta_min
+ve GA alt siniri > 0 saglaniyor, gecikme butcenin %10'unda, ve R-D ile
+birlikte uc yolda da anlamli kazanc var. Ama "kapasite tek basina uc yolda
+kanitlandi" **denmez**.
+
+**Arac.** `ml/capacity_train.py compare --seeds`; `Backgammon.MatchBench cube`
++ `ml/cube_er.py measure`; `Backgammon.MatchBench decision-latency`. Rapor
+`ml/artifacts/stage_r_e_report.{json,md}`; karar dosyalari
+`ml/runs/capacity_re/compare/medium_vs_large.{json,md}`,
+`ml/runs/capacity_rd/compare/re_medium_vs_rd_large.{json,md}`.
+
+**Acik kalan.** (a) Kup ER'si hicbir profilde hedefe yaklasmiyor; hamle
+kalitesi ile kup karari arasindaki bag **kurulmadi**. (b) `xlarge` R-E'ye
+girmedi. (c) ER 300 vaka, `race` fazinda 16 vaka. (d) ppg olcumu R-F'de.
+## F7-112 - R-F: final kanit tanimi (uc satir)
+
+**Soru.** Modelin seviyesi **tahminle degil olcumle** nedir? Uc ayri satir:
+hamle kalitesi / kup / oyun gucu. Satirlar **toplanmaz** (Faz 7 v2.5 §4 R-F
+madde 4).
+
+**Madde 1 - referans zinciri.** Hakem kendi kendini olcemez. Iki derin hakem:
+
+| Hakem | n | 0-ply | 1-ply | 2-ply | 3-ply | 4-ply |
+|---|---|---|---|---|---|---|
+| `hint`@3 | 40 | 0,0063 | 0,0027 | **0,0013** | - | - |
+| `hint`@4 | 20 | 0,0049 | 0,0040 | **0,0006** | **0,0002** | olculemez |
+
+**ER cozunurluk tabani 0,0006-0,0013.** 4-ply'in kendi ER'si **olculemez**
+(5-ply/rollout bu makinede yok) ve satir oyle isaretlendi.
+
+**Modelin merdivendeki yeri** (gnubg 2-ply hakem, 300 pozisyon):
+
+| Oyuncu | ER | %95 GA |
+|---|---|---|
+| gnubg 0-ply | **0,0062** | [0,0040; 0,0088] |
+| gnubg 1-ply | **0,0044** | [0,0029; 0,0063] |
+| R-D `large` politika | 0,0111 | [0,0077; 0,0152] |
+| R-D `large` search1 | 0,0139 | [0,0101; 0,0185] |
+| R-D `large` deger | 0,0173 | [0,0105; 0,0264] |
+
+Model **gnubg 0-ply seviyesinde, biraz altinda**. Tabanin 9-18 kati, yani
+sinyal gurultuden net ayriliyor.
+
+**Yeni bulgu: `search1` politikadan kotu** (0,0139 vs 0,0111). Deger kafasi en
+zayif yol (0,0173) ve `search1` derinlik-1 degerlendirmesini ondan aliyor.
+**Arama, zayif deger kafasi yuzunden politikayi bozuyor.** Deger hedefi
+degisikligi tartismasi artik olculmus bir gerekceye sahip.
+
+**Madde 2 - rollout: olculemez.** gnubg 1.08.003-mingw `rollout` komutu
+`Rollout done. Printing final results.` basar ama **equity satiri basmaz**.
+Bes bagimsiz deneme (`-t`, `-t -d`, `-c`, `-p`, `set rollout cubeful off` +
+`set cube use off`, `set rollout trials 36` + `set rollout chequerplay plies
+0`) hepsi ayni sonucu verdi. `rollout` sonrasi `eval` **statik** deger
+dondurur; Python API'sinde `rolloutcontext` var ama `rollout` fonksiyonu yok;
+`--help` rollout secenegi listelemez. Maliyet olculdu: 36 deneme ~30 s ->
+1296 deneme ~18 dk -> 400 rollout ~**120 saat tek cekirdek**. Kural 6 uyarinca
+**sifir uydurulmadi**; satir `olculemez` ve yerine madde 1'in cozunurluk
+tabani kondu.
+
+**Madde 3 - oyun gucu.** Eslestirilmis zar + renk takasi, kupsuz para, 10
+paralel surec, gnubg **2-ply** rakibe karsi 2000 oyun (1000 cift):
+
+| Olcum | Deger |
+|---|---|
+| Kazanma | 839/2000 = 0,4195 |
+| **ppg** | **-0,2445** |
+| ppg %95 GA | **[-0,3055; -0,1835]** |
+| Eslestirilmis fark | -0,4890 [-0,5990; -0,3770] |
+| Oyun basina ply | 55,9 |
+| Sure | ~3 sa 20 dk |
+
+`H0: ppg_fark <= -m`, m = 0,1115. GA'nin **ust** siniri -0,1835 < -0,1115 ->
+**esdegerlik kanitlanmadi**; model m'den fazla kotu. Guc borcu: m ve
+sigma = 2,9960 icin gereken **4337** oyun, kosulan **2000** -> **%46**.
+
+**Tutarlilik kontrolu.** gnubg 0-ply, gnubg 2-ply'a karsi **-0,2229 ppg**;
+modelimiz **-0,2445 ppg**. Iki bagimsiz olcum (ER merdivani ve ppg) **ayni
+yeri** gosteriyor. Bu, olcum zincirinin kendi kendini dogrulamasidir.
+
+**Madde 4 - kup ayri satir.** R-D `large` kup ER'si **0,0821** (3 tohum, 400
+vaka), hedef 0,02 -> **4,1 kat**. R-E'de hicbir eslestirilmis bootstrap
+anlamli degildi (p >= 0,32). **Hamle kalitesi kazanci kup kararina transfer
+olmuyor.**
+
+**Madde 5 - rapor dili.** "gnubg 4-ply'a gore esdeger" **denmez**;
+"esdegerlik kanitlanmadi" denir. "Insan sampiyonu yendik" **denmez**.
+
+**Arac.** `ml/gnubg_ladder.py` (`--deep`, `--deep-referee-plies`,
+`--deep-player-plies`, `--deep-limit`, `--models-only`, `--model-er` virgullu
+liste); `ml/gnubg_rollout.py`; `ml/vs_gnubg.py` (baslik artik
+`--gnubg-plies`'i yansitir - eski surum "0-ply" yazisini sabit tutuyordu).
+Artefaktlar `ml/artifacts/gnubg_ladder{,_deep,_deep4}.{json,md}`,
+`gnubg_rollout.{json,md}`, `ppg_rd_large_s0_2ply.{json,md}`,
+`stage_r_f_report.{json,md}`. Test sayisi **1497** (11 yeni:
+`test_gnubg_ladder.py` 322-327 + 332, `test_gnubg_rollout.py` 328-331).
+
+**Acik kalan.** (a) `search1` politikadan kotu - deger kafasi en zayif yol.
+(b) Kup ER'si hic iyilesmedi. (c) ppg guc borcu %46. (d) 4-ply'in kendi ER'si
+olculemedi. (e) gnubg GPL lisansi urun dagitimi oncesi cozulmedi (§36.10/5).
+(f) `m = 0,1115` yalnizca money; mac hucreleri (5 ve 9 puan) ayri
+raporlanmadi.

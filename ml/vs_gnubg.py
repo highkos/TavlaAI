@@ -337,15 +337,16 @@ def run_match(
 
 
 def build_markdown(report: dict[str, Any]) -> str:
+    plies = int(report["gnubgPlies"])
     lines = [
-        "# Faz 7-R - Model vs gnubg 0-ply (kupsuz para oyunu)",
+        "# Faz 7-R - Model vs gnubg %d-ply (kupsuz para oyunu)" % plies,
         "",
         "R-D oncesi **taban**. Eslestirilmis zar + renk takasi: ayni zar dizisi",
         "bir kez biz beyaz, bir kez biz siyah oynanir; zar sansi iki kolda aynidir.",
         "",
         "Model: `%s`" % report["model"],
         "Yol: `%s`" % report["path"],
-        "gnubg: **%d-ply**" % report["gnubgPlies"],
+        "gnubg: **%d-ply**" % plies,
         "",
         "| Olcum | Deger |",
         "|---|---|",
@@ -363,8 +364,8 @@ def build_markdown(report: dict[str, Any]) -> str:
         "| Bitmeyen oyun | %d (%.4f) |"
         % (report.get("unfinished", 0), report.get("unfinishedRate", 0.0)),
         "",
-        "**Yorum.** ppg > 0 ise model gnubg 0-ply'i yeniyor demektir. "
-        "Eslestirilmis fark, ayni zar dizisinin iki renginin toplamidir; "
+        "**Yorum.** ppg > 0 ise model gnubg %d-ply'i yeniyor demektir. " % plies
+        + "Eslestirilmis fark, ayni zar dizisinin iki renginin toplamidir; "
         "zar gurultusunu iptal ettigi icin **daha dar** bir GA verir.",
         "",
     ]

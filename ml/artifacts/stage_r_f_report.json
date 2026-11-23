@@ -1,0 +1,162 @@
+{
+  "reportVersion": 1,
+  "stage": "R-F",
+  "title": "Final kanit tanimi - uc satir",
+  "corpus": "ml/artifacts/reference_corpus_v2.json",
+  "corpusStride": 3,
+  "corpusLimit": 300,
+  "equivalenceMarginPpg": 0.1115,
+  "requiredGames": 4337,
+  "ppgSigma": 2.996,
+  "lines": {
+    "moveQuality": {
+      "referee": "gnubg 2-ply (eval)",
+      "positions": 300,
+      "model": {
+        "label": "capacity_rd/large/seed0",
+        "policy": {
+          "er": 0.0111,
+          "ciLow": 0.0077,
+          "ciHigh": 0.0152
+        },
+        "search1": {
+          "er": 0.0139,
+          "ciLow": 0.0101,
+          "ciHigh": 0.0185
+        },
+        "value": {
+          "er": 0.0173,
+          "ciLow": 0.0105,
+          "ciHigh": 0.0264
+        }
+      },
+      "gnubg": {
+        "0-ply": {
+          "er": 0.0062,
+          "ciLow": 0.004,
+          "ciHigh": 0.0088
+        },
+        "1-ply": {
+          "er": 0.0044,
+          "ciLow": 0.0029,
+          "ciHigh": 0.0063
+        }
+      },
+      "resolutionFloor": {
+        "referee3ply": {
+          "2-ply": 0.0013,
+          "positions": 40
+        },
+        "referee4ply": {
+          "2-ply": 0.0006,
+          "3-ply": 0.0002,
+          "positions": 20
+        }
+      },
+      "verdict": "gnubg 2-ply ile esdeger degil; gnubg 0-ply seviyesinde"
+    },
+    "cube": {
+      "corpus": "ml/artifacts/cube_corpus.json",
+      "cases": 400,
+      "target": 0.02,
+      "model": {
+        "label": "capacity_rd/large",
+        "er": 0.0821,
+        "seeds": 3
+      },
+      "baseline": {
+        "label": "capacity_re/medium",
+        "er": 0.0741,
+        "seeds": 3
+      },
+      "ratioToTarget": 4.1,
+      "verdict": "hedefin 4.1 katinda; karsilanmadi"
+    },
+    "gameStrength": {
+      "opponent": "gnubg 2-ply",
+      "model": "ml/runs/capacity_rd/large/seed0/model.onnx",
+      "path": "search1",
+      "games": 2000,
+      "pairs": 1000,
+      "winRate": 0.4195,
+      "ppg": -0.2445,
+      "ppgCiLow": -0.3055,
+      "ppgCiHigh": -0.1835,
+      "ppgStdError": 0.03100549217917103,
+      "pairedDiffMean": -0.489,
+      "pairedDiffCiLow": -0.599,
+      "pairedDiffCiHigh": -0.377,
+      "meanPlies": 55.9375,
+      "powerFraction": 0.46114825916532165,
+      "verdict": "esdegerlik kanitlanmadi; ustunluk iddia edilmez",
+      "artifact": "ml/artifacts/ppg_rd_large_s0_2ply.json"
+    }
+  },
+  "referenceChain": {
+    "referee3ply": {
+      "referee": "gnubg hint 3-ply",
+      "positions": 40,
+      "rungs": {
+        "0-ply": {
+          "er": 0.0063,
+          "ciLow": 0.001,
+          "ciHigh": 0.0135
+        },
+        "1-ply": {
+          "er": 0.0027,
+          "ciLow": 0.0005,
+          "ciHigh": 0.0057
+        },
+        "2-ply": {
+          "er": 0.0013,
+          "ciLow": 0.0003,
+          "ciHigh": 0.0027
+        }
+      }
+    },
+    "referee4ply": {
+      "referee": "gnubg hint 4-ply",
+      "positions": 20,
+      "rungs": {
+        "0-ply": {
+          "er": 0.0049,
+          "ciLow": 0.0002,
+          "ciHigh": 0.0112
+        },
+        "1-ply": {
+          "er": 0.004,
+          "ciLow": 0.0,
+          "ciHigh": 0.0092
+        },
+        "2-ply": {
+          "er": 0.0006,
+          "ciLow": 0.0,
+          "ciHigh": 0.0016
+        },
+        "3-ply": {
+          "er": 0.0002,
+          "ciLow": 0.0,
+          "ciHigh": 0.0006
+        }
+      }
+    },
+    "unmeasurable": {
+      "4-ply": "daha derin referans (5-ply/rollout) bu makinede yok",
+      "rollout": "gnubg 1.08.003-mingw rollout equity basmiyor"
+    }
+  },
+  "consistency": {
+    "note": "ER merdiveni ile ppg ayni yeri gosteriyor",
+    "gnubg0plyVs2plyPpg": -0.2229,
+    "modelVs2plyPpg": -0.2445,
+    "modelPolicyEr": 0.0111,
+    "gnubg0plyEr": 0.0062
+  },
+  "openQuestions": [
+    "search1 politika yolundan kotu (0.0139 vs 0.0111): deger kafasi en zayif yol (0.0173) ve search1 onu miras aliyor.",
+    "Kup ER'si hedefin 4.1 katinda; hamle kalitesi kazanci kup kararina transfer olmuyor (R-E).",
+    "ppg 2000 oyun; m=0.1115 icin 4337 gerekiyordu -> guc borcu %46.",
+    "4-ply'in kendi ER'si olculemedi (5-ply/rollout yok).",
+    "gnubg GPL lisansi urun dagitimi oncesi cozulmedi (PHASES 36.10/5)."
+  ]
+}

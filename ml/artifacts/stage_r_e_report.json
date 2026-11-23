@@ -1,0 +1,182 @@
+{
+  "reportVersion": 1,
+  "stage": "R-E",
+  "corpus": "ml/artifacts/reference_corpus_v2.json",
+  "measureArgs": {
+    "stride": 3,
+    "limit": 300,
+    "plies": 2
+  },
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "gainThreshold": 0.15,
+  "er": {
+    "medium": {
+      "policy": 0.020402,
+      "value": 0.034547,
+      "search1": 0.021723
+    },
+    "large": {
+      "policy": 0.016347,
+      "value": 0.031123,
+      "search1": 0.023166
+    },
+    "rdLarge": {
+      "policy": 0.012408,
+      "value": 0.019507,
+      "search1": 0.01436
+    }
+  },
+  "paired": {
+    "mediumVsLarge": {
+      "policy": {
+        "delta": -0.004056,
+        "ciLow": -0.009667,
+        "ciHigh": -0.000293,
+        "relative": -0.199,
+        "p": 0.025,
+        "significant": true,
+        "meetsDeltaMin": true
+      },
+      "value": {
+        "delta": -0.003423,
+        "ciLow": -0.006753,
+        "ciHigh": -0.000223,
+        "relative": -0.099,
+        "p": 0.039,
+        "significant": true,
+        "meetsDeltaMin": false
+      },
+      "search1": {
+        "delta": 0.001442,
+        "ciLow": -0.001374,
+        "ciHigh": 0.003934,
+        "relative": 0.066,
+        "p": 0.276,
+        "significant": false,
+        "meetsDeltaMin": false
+      }
+    },
+    "reLargeVsRdLarge": {
+      "policy": {
+        "delta": -0.003836,
+        "ciLow": -0.00644,
+        "ciHigh": -0.001218,
+        "relative": -0.235,
+        "p": 0.003,
+        "significant": true
+      },
+      "value": {
+        "delta": -0.012564,
+        "ciLow": -0.02114,
+        "ciHigh": -0.00656,
+        "relative": -0.404,
+        "p": 0.0,
+        "significant": true
+      },
+      "search1": {
+        "delta": -0.008792,
+        "ciLow": -0.011966,
+        "ciHigh": -0.005593,
+        "relative": -0.38,
+        "p": 0.0,
+        "significant": true
+      }
+    }
+  },
+  "cubeEr": {
+    "corpus": "ml/artifacts/cube_corpus.json",
+    "cases": 400,
+    "refereePlies": 2,
+    "target": 0.02,
+    "medium": {
+      "perSeed": [
+        0.0753,
+        0.0698,
+        0.0772
+      ],
+      "mean": 0.0741,
+      "sd": 0.0038
+    },
+    "large": {
+      "perSeed": [
+        0.0782,
+        0.0576,
+        0.0797
+      ],
+      "mean": 0.0718,
+      "sd": 0.0124
+    },
+    "rdLarge": {
+      "perSeed": [
+        0.0855,
+        0.0898,
+        0.071
+      ],
+      "mean": 0.0821,
+      "sd": 0.0099
+    },
+    "paired": {
+      "mediumVsLarge": {
+        "delta": -0.0022,
+        "ciLow": -0.0129,
+        "ciHigh": 0.0061,
+        "p": 0.623,
+        "significant": false
+      },
+      "reLargeVsRdLarge": {
+        "delta": 0.0102,
+        "ciLow": -0.0092,
+        "ciHigh": 0.0343,
+        "p": 0.381,
+        "significant": false
+      },
+      "mediumVsRdLarge": {
+        "delta": 0.008,
+        "ciLow": -0.0079,
+        "ciHigh": 0.0265,
+        "p": 0.325,
+        "significant": false
+      }
+    }
+  },
+  "latency": {
+    "depth": 1,
+    "positions": 30,
+    "budgetSeconds": 2.0,
+    "budgetBasis": "depth 2 p95 <= 2 s (Faz 7 §5.2 bacak b); depth 1 uretim derinligi",
+    "medium": {
+      "p50": 0.0175,
+      "p95": 0.0626,
+      "mean": 0.0239
+    },
+    "large": {
+      "p50": 0.061,
+      "p95": 0.2062,
+      "mean": 0.0714
+    },
+    "rdLarge": {
+      "p50": 0.057,
+      "p95": 0.2042,
+      "mean": 0.0744
+    }
+  },
+  "verdict": {
+    "label": "kanitlanmadi",
+    "selectedProfile": "large",
+    "detail": "large politika yolunda Delta_min'i (>=15%) ve GA alt siniri > 0 kosulunu sagliyor (-19.9%, GA [-0.009667, -0.000293]); deger yolunda anlamli ama Delta_min'in altinda (-9.9%); search1'de anlamli degil (+6.6%, GA sifiri iceriyor). Depth-1 p95 0.2042 s, 2 s butcesinin %10,2'si. Uc yolun ucu birden saglanmadigi icin etiket 'kanitlanmadi' -- 'yanlislandi' degil."
+  },
+  "b3Comparison": {
+    "b3Rationale": "B3 (R-01) medium'u secti cunku large depth-2 p95 = 13.68 s > 2 s butcesi.",
+    "inconsistency": "Butce depth-2 uzerinden tanimli, ama uretim derinligi depth-1 (F7-09). Depth-1'de large p95 0.2042 s, butcenin %10,2'si. Yani B3'un large'i eleme gerekcesi uretimde kullanilmayan bir derinlige dayaniyordu."
+  },
+  "notes": [
+    "R-E karsilastirmasi ayni veri, ayni adim sayisi, ayni 3 tohum ile yapildi (eski kayip).",
+    "Kup ER'si hamle ER'si ile toplanmaz; ayri satirdir (R-F madde 4).",
+    "Kup ER'si hedefi 0.02; olculen 0.072-0.082, hedefin 3,6-4,1 kati.",
+    "R-D (liste kaybi) hamle ER'sini uc yolda da anlamli dusurdu ama kup ER'sini anlamli degistirmedi (+0.0102, p=0.38)."
+  ]
+}

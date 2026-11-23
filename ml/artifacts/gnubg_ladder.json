@@ -1,5 +1,5 @@
 {
-  "ladderVersion": 1,
+  "ladderVersion": 2,
   "corpus": "ml/artifacts/reference_corpus_v2.json",
   "refereePlies": 2,
   "rungs": [
@@ -7,25 +7,25 @@
       "playerPlies": 0,
       "refereePlies": 2,
       "measurable": true,
-      "count": 500,
+      "count": 300,
       "skipped": 0,
-      "mean": 0.00444,
-      "ciLow": 0.00319995,
-      "ciHigh": 0.005818,
-      "sigma": 0.015002284395189566,
-      "exactMatchRate": 0.818
+      "mean": 0.006220000000000002,
+      "ciLow": 0.003986666666666669,
+      "ciHigh": 0.008806666666666666,
+      "sigma": 0.02121032436177657,
+      "exactMatchRate": 0.8066666666666666
     },
     {
       "playerPlies": 1,
       "refereePlies": 2,
       "measurable": true,
-      "count": 500,
+      "count": 300,
       "skipped": 0,
-      "mean": 0.0025580000000000004,
-      "ciLow": 0.001794,
-      "ciHigh": 0.0034699999999999987,
-      "sigma": 0.009661538524133031,
-      "exactMatchRate": 0.836
+      "mean": 0.004446666666666667,
+      "ciLow": 0.00285,
+      "ciHigh": 0.006319999999999998,
+      "sigma": 0.015257011839033564,
+      "exactMatchRate": 0.7833333333333333
     },
     {
       "playerPlies": 2,
@@ -39,32 +39,106 @@
       "sigma": null,
       "exactMatchRate": null,
       "reason": "Hakem kendi kendini olcemez; 2-ply'in ER'i icin 3-ply/rollout referans gerekir ve gnubg 'eval' 2-ply'den derin sutun uretmez (F6-32). R-F madde 1 uyarinca 'olculemez' isaretlendi."
+    },
+    {
+      "playerPlies": 3,
+      "refereePlies": 3,
+      "measurable": false,
+      "count": 0,
+      "skipped": 0,
+      "mean": null,
+      "ciLow": null,
+      "ciHigh": null,
+      "sigma": null,
+      "exactMatchRate": null,
+      "reason": "3-ply oyuncu icin 4-ply hakem gerekir; gnubg 3-ply'i yalnizca 'hint' protokolu ile verir ve 'hint' afterstate basina deger dondurmez (F6-32). R-F madde 1 uyarinca 'olculemez' isaretlendi."
+    },
+    {
+      "playerPlies": 4,
+      "refereePlies": 4,
+      "measurable": false,
+      "count": 0,
+      "skipped": 0,
+      "mean": null,
+      "ciLow": null,
+      "ciHigh": null,
+      "sigma": null,
+      "exactMatchRate": null,
+      "reason": "4-ply gnubg'de yok (en derin statik degerlendirme 3-ply, en derin 'eval' sutunu 2-ply). R-F madde 1'in ongordugu 'daha derin referans (5-ply/rollout)' bu makinede mevcut degil; satir 'olculemez'."
     }
   ],
   "models": [
     {
-      "label": "policy",
-      "count": 1000,
-      "mean": 0.040174,
-      "ciLow": 0.035017,
-      "ciHigh": 0.045683,
-      "sigma": 0.086727
+      "label": "capacity_re/medium/seed0:policy",
+      "count": 300,
+      "mean": 0.018877,
+      "ciLow": 0.013293,
+      "ciHigh": 0.02554,
+      "sigma": 0.05463
     },
     {
-      "label": "search1",
-      "count": 1000,
-      "mean": 0.020936,
-      "ciLow": 0.018055,
-      "ciHigh": 0.023963,
-      "sigma": 0.0473
+      "label": "capacity_re/medium/seed0:search1",
+      "count": 300,
+      "mean": 0.023753,
+      "ciLow": 0.01774,
+      "ciHigh": 0.03048,
+      "sigma": 0.056225
     },
     {
-      "label": "value",
-      "count": 1000,
-      "mean": 0.044199,
-      "ciLow": 0.038445,
-      "ciHigh": 0.050356,
-      "sigma": 0.095736
+      "label": "capacity_re/medium/seed0:value",
+      "count": 300,
+      "mean": 0.03672,
+      "ciLow": 0.02562,
+      "ciHigh": 0.049713,
+      "sigma": 0.106277
+    },
+    {
+      "label": "capacity_re/large/seed0:policy",
+      "count": 300,
+      "mean": 0.017157,
+      "ciLow": 0.011887,
+      "ciHigh": 0.0235,
+      "sigma": 0.052389
+    },
+    {
+      "label": "capacity_re/large/seed0:search1",
+      "count": 300,
+      "mean": 0.023077,
+      "ciLow": 0.017873,
+      "ciHigh": 0.028837,
+      "sigma": 0.048519
+    },
+    {
+      "label": "capacity_re/large/seed0:value",
+      "count": 300,
+      "mean": 0.031847,
+      "ciLow": 0.021737,
+      "ciHigh": 0.04417,
+      "sigma": 0.099525
+    },
+    {
+      "label": "capacity_rd/large/seed0:policy",
+      "count": 300,
+      "mean": 0.011117,
+      "ciLow": 0.00768,
+      "ciHigh": 0.015163,
+      "sigma": 0.033394
+    },
+    {
+      "label": "capacity_rd/large/seed0:search1",
+      "count": 300,
+      "mean": 0.01393,
+      "ciLow": 0.01006,
+      "ciHigh": 0.018537,
+      "sigma": 0.037494
+    },
+    {
+      "label": "capacity_rd/large/seed0:value",
+      "count": 300,
+      "mean": 0.017263,
+      "ciLow": 0.010533,
+      "ciHigh": 0.026403,
+      "sigma": 0.071133
     }
   ],
   "notes": [

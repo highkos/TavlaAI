@@ -1,0 +1,22 @@
+{
+  "matchVersion": 1,
+  "model": "ml\\runs\\capacity_rd\\large\\seed0\\model.onnx",
+  "path": "search1",
+  "gnubgPlies": 2,
+  "games": 2000,
+  "pairs": 1000,
+  "workers": 10,
+  "wins": 839,
+  "winRate": 0.4195,
+  "ppg": -0.2445,
+  "ppgCiLow": -0.3055,
+  "ppgCiHigh": -0.1835,
+  "ppgStdError": 0.03100549217917103,
+  "pairedDiffMean": -0.489,
+  "pairedDiffCiLow": -0.599,
+  "pairedDiffCiHigh": -0.377,
+  "meanPlies": 55.9375,
+  "unfinished": 0,
+  "unfinishedRate": 0.0,
+  "seed": 2026
+}
