@@ -359,6 +359,12 @@ _HINT_RE = re.compile(
 
 _HINT_PREFIX_RE = re.compile(r"^(?:Cubeful|Cubeless)\s+\d+-ply\s+")
 
+#: ``Eq.`` satirinin altindaki ``w wg wb - l lg lb`` satiri (F7-114).
+_HINT_PROBS_RE = re.compile(
+    r"^\s*(?P<w>" + _NUMBER + r")\s+(?P<wg>" + _NUMBER + r")\s+(?P<wb>" + _NUMBER + r")"
+    r"\s+-\s+(?P<l>" + _NUMBER + r")\s+(?P<lg>" + _NUMBER + r")\s+(?P<lb>" + _NUMBER + r")\s*$"
+)
+
 _EVAL_RE = re.compile(r"^\s*(?P<label>static|\d+\s*ply):\s*(?P<rest>.+)$", re.MULTILINE)
 
 #: ``show pipcount`` ciktisinin sabit on eki; kalici surecte senkron isareti olarak da kullanilir.
@@ -379,12 +385,58 @@ def parse_number(text: str) -> float:
 
 @dataclass(frozen=True)
 class HintMove:
-    """gnubg ``hint`` listesindeki tek bir hamle."""
+    """gnubg ``hint`` listesindeki tek bir hamle.
+
+    ``probs`` (F7-114, R-Q2): ``hint`` ciktisi ``Eq.`` satirinin **altinda**
+    alti olasiligi da yaziyor -- ``w wg wb - l lg lb``. Bunlar zaten odenen
+    ciktinin icinde; ayristirilmadiklari icin bugune kadar atiliyordu.
+    ``w`` gammon/backgammon'u **kapsar**, yani ``w + l == 1``.
+    """
 
     rank: int
     move: str
     equity: float
     loss: float | None
+    probs: tuple[float, ...] | None = None
+
+    @property
+    def win(self) -> float | None:
+        return None if self.probs is None else self.probs[0]
+
+    @property
+    def win_gammon(self) -> float | None:
+        return None if self.probs is None else self.probs[1]
+
+    @property
+    def win_backgammon(self) -> float | None:
+        return None if self.probs is None else self.probs[2]
+
+    @property
+    def lose(self) -> float | None:
+        return None if self.probs is None else self.probs[3]
+
+    @property
+    def lose_gammon(self) -> float | None:
+        return None if self.probs is None else self.probs[4]
+
+    @property
+    def lose_backgammon(self) -> float | None:
+        return None if self.probs is None else self.probs[5]
+
+
+def _probs_after(text: str, pos: int) -> tuple[float, ...] | None:
+    """``Eq.`` satirindan sonraki ilk dolu satiri alti olasilik olarak okur."""
+    for line in text[pos:].splitlines():
+        if not line.strip():
+            continue
+        match = _HINT_PROBS_RE.match(line)
+        if not match:
+            return None
+        return tuple(
+            parse_number(match.group(key))
+            for key in ("w", "wg", "wb", "l", "lg", "lb")
+        )
+    return None
 
 
 def parse_hint(text: str) -> list[HintMove]:
@@ -403,6 +455,7 @@ def parse_hint(text: str) -> list[HintMove]:
                 move=body,
                 equity=parse_number(match.group("eq")),
                 loss=parse_number(loss_text) if loss_text else None,
+                probs=_probs_after(text, match.end()),
             )
         )
     return moves

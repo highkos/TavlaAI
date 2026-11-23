@@ -27,7 +27,7 @@ COUNT_DOCS = [
 
 #: Belgenin iddia ettigi test sayilari (kaynak: gercek kosular).
 EXPECTED_COUNTS = {
-    "pytest": 1505,
+    "pytest": 1508,
     "inference": 100,
     "core": 297,
     "ui": 88,

@@ -6420,3 +6420,43 @@ satir** (`moveQuality`, `cube`, `gameStrength`) tasir; her satirda `budget`
 **Test sayisi.** 1497 -> **1505** (8 yeni: `test_stage_r_f.py`); §6 toplami
 1982 -> **1990**. `test_docs_consistency.py`, `PHASES.md` §6,
 `ARCHITECTURE.md` §51.5 ve `ml/artifacts/stage_d_report.md` guncellendi.
+## F7-114 - R-Q2 kapanisi: `hint` alti olasiligi zaten veriyor (2026-02-19)
+
+**Bulgu.** R-Q2 "`hint` kubusuz 6 olasiligi veriyor mu, yoksa yalnizca skaler
+equity mi?" sorusu **kismen** yanitlanmisti: `label-policy --dists` 6 sinifli
+dagilim uretiyor, ama bunu `eval` yolundan (`eval_afterstates(dists=True)`)
+aliyor. `hint` yolunda ise `parse_hint` yalnizca `equity` ve `loss`
+ayristiriyordu.
+
+**Olculen cikti (gnubg 1.08.003-mingw, 2-ply, canli):**
+
+```
+    1. Cubeless 0-ply   bar/22                       Eq.: -0,164
+       0,357 0,115 0,007 - 0,643 0,000 0,000
+```
+
+Yani `hint` **alti olasiligi da yaziyor**: `w wg wb - l lg lb`. Bunlar zaten
+odenen ciktinin icinde; ayristirilmadiklari icin atiliyordu. `w` gammon ve
+backgammon'u **kapsar**, dolayisiyla `w + l == 1` (olculen: 0,357 + 0,643 =
+1,000).
+
+**Degisiklik.** `ml/gnubg_er.py`: `HintMove`'ya `probs: tuple[float, ...] |
+None = None` ve `win`/`win_gammon`/`win_backgammon`/`lose`/`lose_gammon`/
+`lose_backgammon` ozellikleri eklendi; `_HINT_PROBS_RE` + `_probs_after`
+`Eq.` satirinin altindaki satiri okur. Olasilik satiri yoksa `probs = None`
+(eski davranis bozulmaz).
+
+**Neden onemli.** R-F'nin en onemli bulgusu "deger kafasi en zayif yol
+(ER 0,0173) ve `search1` onu miras aldigi icin politikadan kotu (0,0139 vs
+0,0111)" idi. Deger kafasini 6 sinifli dagilimla egitmek icin gereken
+etiketler artik **`hint` yolundan ek maliyet olmadan** alinabiliyor; ER
+kosularinda `hint` zaten cagriliyor. Bu, acik "deger kafasi hedefi"
+kararinin maliyet tarafini sifira indirir.
+
+**Testler.** 333-335 (`test_gnubg_er.py`): alti olasilik okunur; `w + l == 1`
+ve alt kumeler tutarli; olasilik satiri yoksa `None`. Test sayisi 1505 ->
+**1508**; §6 toplami 1990 -> **1993**.
+
+**Sinir.** `hint` ciktisindaki olasiliklar **cubeless** ve **secili ply**
+icindir; kup karari icin kullanilamaz. `eval` yolundaki `dists=True` ile ayni
+sayilar beklenir ama bu ayri bir dogrulama ister (yapilmadi).

@@ -498,3 +498,50 @@ def test_onnx_scorer_accepts_intra_op_threads():
     assert scorer is not None
     default = G.OnnxScorer(_stage_d_model())
     assert default is not None
+
+# ----------------------------------------------------------------------
+# F7-114 / R-Q2: ``hint`` alti olasiligi da veriyor
+# ----------------------------------------------------------------------
+
+_HINT_WITH_PROBS = """    1. Cubeless 0-ply   bar/22                       Eq.: -0,164
+       0,357 0,115 0,007 - 0,643 0,000 0,000
+        0-ply cubeless prune
+    2. Cubeless 0-ply   13/10 6/5                    Eq.: -0,201 (-0,037)
+       0,340 0,101 0,005 - 0,660 0,000 0,000
+"""
+
+
+def test_333_parse_hint_reads_six_probabilities():
+    """R-Q2: ``Eq.`` satirinin altindaki ``w wg wb - l lg lb`` okunur."""
+    moves = G.parse_hint(_HINT_WITH_PROBS)
+    assert len(moves) == 2
+    first, second = moves
+    assert first.probs == pytest.approx((0.357, 0.115, 0.007, 0.643, 0.0, 0.0))
+    assert second.probs == pytest.approx((0.340, 0.101, 0.005, 0.660, 0.0, 0.0))
+    assert first.win == pytest.approx(0.357)
+    assert first.win_gammon == pytest.approx(0.115)
+    assert first.win_backgammon == pytest.approx(0.007)
+    assert first.lose == pytest.approx(0.643)
+    assert first.lose_gammon == pytest.approx(0.0)
+    assert first.lose_backgammon == pytest.approx(0.0)
+
+
+def test_334_parse_hint_probabilities_are_a_distribution():
+    """``w`` gammon/backgammon'u kapsar: ``w + l == 1`` ve alt kumeler tutarli."""
+    for move in G.parse_hint(_HINT_WITH_PROBS):
+        assert move.win + move.lose == pytest.approx(1.0, abs=1e-9)
+        assert move.win_gammon <= move.win
+        assert move.win_backgammon <= move.win_gammon
+        assert move.lose_gammon <= move.lose
+        assert move.lose_backgammon <= move.lose_gammon
+
+
+def test_335_parse_hint_without_probability_line_is_none():
+    """Olasilik satiri yoksa ``probs`` ``None``; eski davranis bozulmaz."""
+    text = "    1. Cubeless 0-ply   bar/22                       Eq.: -0,164\n"
+    moves = G.parse_hint(text)
+    assert len(moves) == 1
+    assert moves[0].probs is None
+    assert moves[0].win is None
+    assert moves[0].equity == pytest.approx(-0.164)
+

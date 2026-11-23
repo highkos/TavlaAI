@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1505** | ~10 dk | ✅ 1505/1505 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1990** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1508** | ~10 dk | ✅ 1508/1508 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **1993** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -3194,8 +3194,9 @@ Düzeltildi: `test_corpus2.py` → Test 128–133, R-C testleri → Test 134–1
 3. `er_paths.search1` Python, C# `BackgammonSearch` değil — parite kanıtlanmadı.
 4. `er_paths.terminal_equity` C# `IsGameOver` ile doğrulanmadı.
 5. R-02 / R-03 / R-06 / R-17 / F7-55 → R-D'de.
-6. R-Q1 (GPL), R-Q2 (hint 6 olasılığı), R-Q5 (G7 λ/terminal birimi) açık;
-   R-Q5 **kısmen** yanıtlandı (birim uyumsuzluğu kanıtlandı ve düzeltildi).
+6. R-Q1 (GPL) ve R-Q5 (G7 λ/terminal birimi) açık; R-Q5 **kısmen**
+   yanıtlandı (birim uyumsuzluğu kanıtlandı ve düzeltildi). R-Q2 **kapandı**
+   (§43, F7-114): `hint` altı olasılığı zaten veriyor, artık ayrıştırılıyor.
 7. `degisenler.zip` hâlâ izlenmiyor.
 
 ### 31.10 Sonraki aşama
@@ -5152,3 +5153,43 @@ satır** (`moveQuality`, `cube`, `gameStrength`) taşır; her satırda `budget`
 **Test sayısı.** 1497 → **1505** (8 yeni: `test_stage_r_f.py`); §6 toplamı
 1982 → **1990**. `test_docs_consistency.py`, `PHASES.md` §6,
 `ARCHITECTURE.md` §51.5 ve `ml/artifacts/stage_d_report.md` güncellendi.
+## 43. R-Q2 kapanışı — `hint` altı olasılığı zaten veriyor
+
+**Bulgu.** R-Q2 "`hint` kübüsüz 6 olasılığı veriyor mu, yoksa yalnızca skaler
+equity mi?" sorusu **kısmen** yanıtlanmıştı: `label-policy --dists` 6 sınıflı
+dağılım üretiyor, ama bunu `eval` yolundan (`eval_afterstates(dists=True)`)
+alıyor. `hint` yolunda ise `parse_hint` yalnızca `equity` ve `loss`
+ayrıştırıyordu.
+
+**Ölçülen çıktı (gnubg 1.08.003-mingw, 2-ply, canlı):**
+
+```
+    1. Cubeless 0-ply   bar/22                       Eq.: -0,164
+       0,357 0,115 0,007 - 0,643 0,000 0,000
+```
+
+Yani `hint` **altı olasılığı da yazıyor**: `w wg wb - l lg lb`. Bunlar zaten
+ödenen çıktının içinde; ayrıştırılmadıkları için atılıyordu. `w` gammon ve
+backgammon'u **kapsar**, dolayısıyla `w + l == 1` (ölçülen: 0,357 + 0,643 =
+1,000).
+
+**Değişiklik.** `ml/gnubg_er.py`: `HintMove`'ya `probs: tuple[float, ...] |
+None = None` ve `win`/`win_gammon`/`win_backgammon`/`lose`/`lose_gammon`/
+`lose_backgammon` özellikleri eklendi; `_HINT_PROBS_RE` + `_probs_after`
+`Eq.` satırının altındaki satırı okur. Olasılık satırı yoksa `probs = None`
+(eski davranış bozulmaz).
+
+**Neden önemli.** R-F'nin en önemli bulgusu "değer kafası en zayıf yol
+(ER 0,0173) ve `search1` onu miras aldığı için politikadan kötü (0,0139 vs
+0,0111)" idi. Değer kafasını 6 sınıflı dağılımla eğitmek için gereken
+etiketler artık **`hint` yolundan ek maliyet olmadan** alınabiliyor; ER
+koşularında `hint` zaten çağrılıyor. Bu, açık "değer kafası hedefi"
+kararının maliyet tarafını sıfıra indirir.
+
+**Testler.** 333–335 (`test_gnubg_er.py`): altı olasılık okunur; `w + l == 1`
+ve alt kümeler tutarlı; olasılık satırı yoksa `None`. Test sayısı 1505 →
+**1508**; §6 toplamı 1990 → **1993**.
+
+**Sınır.** `hint` çıktısındaki olasılıklar **cubeless** ve **seçili ply**
+içindir; küp kararı için kullanılamaz. `eval` yolundaki `dists=True` ile aynı
+sayılar beklenir ama bu ayrı bir doğrulama ister (yapılmadı).
