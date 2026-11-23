@@ -359,6 +359,7 @@ def measure_paths(
     progress: bool = True,
     phase_weights: dict[str, float] | None = None,
     paths: Sequence[str] = PLAY_PATHS,
+    per_case: bool = False,
 ) -> dict[str, Any]:
     """Ayni vakalar uzerinde **uc yolu** olcer.
 
@@ -376,6 +377,7 @@ def measure_paths(
     losses: dict[str, list[float]] = {p: [] for p in paths}
     phases: list[str] = []
     sources: list[str] = []
+    names: list[str] = []
     matches: dict[str, int] = {p: 0 for p in paths}
     terminal_counts: dict[str, int] = {p: 0 for p in paths}
 
@@ -391,6 +393,7 @@ def measure_paths(
 
         phases.append(str(case.get("phase", "?")))
         sources.append(str(case.get("source", "?")))
+        names.append(str(case.get("name", "?")))
 
         for path in paths:
             if path == "policy":
@@ -431,6 +434,10 @@ def measure_paths(
         payload["sourceMeans"] = _group_means(losses[path], sources)
         payload["sourceCounts"] = _group_counts(sources)
         out["paths"][path] = payload
+    if per_case:
+        # Eslesmis bootstrap icin pozisyon basina kayip (ayni vaka sirasi).
+        out["caseNames"] = names
+        out["caseLosses"] = {p: [round(v, 9) for v in losses[p]] for p in paths}
     return out
 
 
@@ -718,10 +725,21 @@ def build_parser():
     measure.add_argument("--legacy", action="store_true", help="v1 dondurulmus korpusu kullan")
     measure.add_argument("--split", default="all")
     measure.add_argument("--limit", type=int, default=None)
+    measure.add_argument(
+        "--stride",
+        type=int,
+        default=1,
+        help="her N'inci vakayi al (faz temsili alt orneklem; --limit'ten once)",
+    )
     measure.add_argument("--gnubg", type=Path, default=None)
     measure.add_argument("--plies", type=int, default=2)
     measure.add_argument("--timeout", type=int, default=120)
     measure.add_argument("--out", type=Path, default=None)
+    measure.add_argument(
+        "--per-case",
+        action="store_true",
+        help="pozisyon basina kaybi da yaz (eslesmis bootstrap icin)",
+    )
     measure.add_argument("--quiet", action="store_true")
 
     compare = sub.add_parser("compare", help="iki raporu yol bazinda karsilastir")
@@ -786,6 +804,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         weights = dict(corpus.get("realGamePhaseWeights", {}))
 
     cases = corpus2.select_cases(corpus, args.split) if not args.legacy else er_harness.select_cases(corpus, args.split)
+    if args.stride > 1:
+        cases = cases[:: args.stride]
     if args.limit is not None:
         cases = cases[: max(args.limit, 0)]
 
@@ -802,9 +822,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         timeout=args.timeout,
         progress=not args.quiet,
         phase_weights=weights,
+        per_case=args.per_case,
     )
     report["corpus"] = "legacy-v1" if args.legacy else "v2"
     report["split"] = args.split
+    report["stride"] = args.stride
 
     text = build_markdown(report)
     print(text)

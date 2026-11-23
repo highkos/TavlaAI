@@ -394,6 +394,10 @@ class PolicyPosition:
     mapping_failures: int = 0
     #: K5: en iyi adayin gnubg 6 sinifli dagilimi (``equity.PROB_ORDER``).
     best_dist: list[float] | None = None
+    #: R-04/R-17: **her** adayin gnubg equity'si; etiketlenemeyen aday ``None``.
+    #: ``hint`` en fazla 10 hamle bastigi icin uzun aday kumelerinde bazi
+    #: satirlar etiketsiz kalir ve egitimde **maskelenir** (negatif sayilmaz).
+    candidate_equities: list[float | None] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -405,6 +409,11 @@ class PolicyPosition:
             "candidates": self.candidates,
             "mappingFailures": self.mapping_failures,
             "bestDist": list(self.best_dist) if self.best_dist else None,
+            "labeledCandidates": (
+                None
+                if self.candidate_equities is None
+                else sum(1 for v in self.candidate_equities if v is not None)
+            ),
         }
 
 
@@ -423,6 +432,8 @@ class PolicyDataset:
     y: np.ndarray
     meta: dict[str, Any] = field(default_factory=dict)
     dist: np.ndarray | None = None
+    #: R-04: ``[M]`` aday basina gnubg equity'si; etiketsiz aday ``nan``.
+    cand_equity: np.ndarray | None = None
 
     def __len__(self) -> int:
         return int(self.best.shape[0])
@@ -432,6 +443,22 @@ class PolicyDataset:
 
     def has_dist(self) -> bool:
         return self.dist is not None and int(np.asarray(self.dist).shape[0]) == len(self)
+
+    def has_cand_equity(self) -> bool:
+        """Aday basina equity sutunu dolu mu (liste bazli kayip icin gerekli)."""
+        return (
+            self.cand_equity is not None
+            and int(np.asarray(self.cand_equity).shape[0]) == int(self.x.shape[0])
+        )
+
+    def masked_candidate_rate(self) -> float | None:
+        """Etiketsiz aday orani (R-17: maskelenen oran raporlanir)."""
+        if not self.has_cand_equity():
+            return None
+        values = np.asarray(self.cand_equity, dtype=np.float64)
+        if values.size == 0:
+            return None
+        return float(np.mean(np.isnan(values)))
 
     def subset(self, indices: Sequence[int]) -> "PolicyDataset":
         """Verilen pozisyon indekslerinden yeni bir kume kurar (egitim/dogrulama)."""
@@ -454,6 +481,11 @@ class PolicyDataset:
                 if self.has_dist()
                 else None
             ),
+            cand_equity=(
+                np.asarray(self.cand_equity[take], dtype=np.float32)
+                if self.has_cand_equity()
+                else None
+            ),
         )
 
     def stats(self) -> dict[str, Any]:
@@ -472,6 +504,8 @@ class PolicyDataset:
             "min": float(np.min(y)),
             "max": float(np.max(y)),
             "hasDist": bool(self.has_dist()),
+            "hasCandEquity": bool(self.has_cand_equity()),
+            "maskedCandidateRate": self.masked_candidate_rate(),
         }
 
 
@@ -558,6 +592,10 @@ def label_policy_positions(
                 progress(i, total, None)
             continue
         best_hint, best_index = max(matched, key=lambda pair: pair[0].equity)
+        # R-04/R-17: her adayin equity'si; ``hint`` gormedigi aday ``None``.
+        candidate_equities: list[float | None] = [None] * len(case["afterStates"])
+        for hint, index in matched:
+            candidate_equities[int(index)] = float(hint.equity)
         vectors = [
             gnubg_er.vectorize(
                 a["board"], a["whiteOff"], a["blackOff"], perspective=int(turn)
@@ -592,6 +630,7 @@ def label_policy_positions(
             candidates=len(vectors),
             mapping_failures=len(failures),
             best_dist=best_dist,
+            candidate_equities=candidate_equities,
         )
         out.append(item)
         if progress:
@@ -616,7 +655,9 @@ def build_policy_dataset(
     best: list[int] = []
     y: list[float] = []
     dist: list[list[float]] = []
+    cand_equity: list[float] = []
     have_dist = True
+    have_cand_equity = True
     for p in labeled:
         rows.extend(p.vectors)
         offsets.append(len(rows))
@@ -626,6 +667,12 @@ def build_policy_dataset(
             have_dist = False
         else:
             dist.append([float(v) for v in p.best_dist])
+        if p.candidate_equities is None or len(p.candidate_equities) != len(p.vectors):
+            have_cand_equity = False
+        else:
+            cand_equity.extend(
+                float("nan") if v is None else float(v) for v in p.candidate_equities
+            )
     return PolicyDataset(
         x=np.asarray(rows, dtype=np.float32),
         offsets=np.asarray(offsets, dtype=np.int64),
@@ -633,6 +680,11 @@ def build_policy_dataset(
         y=np.asarray(y, dtype=np.float32),
         meta=dict(meta or {}),
         dist=np.asarray(dist, dtype=np.float32) if have_dist and dist else None,
+        cand_equity=(
+            np.asarray(cand_equity, dtype=np.float32)
+            if have_cand_equity and cand_equity
+            else None
+        ),
     )
 
 
@@ -649,6 +701,8 @@ def save_policy_dataset(dataset: PolicyDataset, path: Path) -> None:
     }
     if dataset.has_dist():
         payload["dist"] = np.asarray(dataset.dist, dtype=np.float32)
+    if dataset.has_cand_equity():
+        payload["cand_equity"] = np.asarray(dataset.cand_equity, dtype=np.float32)
     np.savez_compressed(p, **payload)
 
 
@@ -661,6 +715,11 @@ def load_policy_dataset(path: Path) -> PolicyDataset:
             text = str(raw.item()) if raw.shape == () else str(raw)
             meta = json.loads(text) if text else {}
         dist = np.asarray(data["dist"], dtype=np.float32) if "dist" in data else None
+        cand_equity = (
+            np.asarray(data["cand_equity"], dtype=np.float32)
+            if "cand_equity" in data
+            else None
+        )
         return PolicyDataset(
             x=np.asarray(data["x"], dtype=np.float32),
             offsets=np.asarray(data["offsets"], dtype=np.int64),
@@ -668,6 +727,7 @@ def load_policy_dataset(path: Path) -> PolicyDataset:
             y=np.asarray(data["y"], dtype=np.float32),
             meta=meta,
             dist=dist,
+            cand_equity=cand_equity,
         )
 
 
@@ -683,6 +743,7 @@ def concat_policy_datasets(
     if not parts:
         raise ValueError("birlestirilecek bos olmayan dilim yok")
     has_dist = all(p.has_dist() for p in parts)
+    has_cand_equity = all(p.has_cand_equity() for p in parts)
     offsets = np.zeros(1, dtype=np.int64)
     xs: list[np.ndarray] = []
     for p in parts:
@@ -701,6 +762,11 @@ def concat_policy_datasets(
         dist=(
             np.concatenate([np.asarray(p.dist, dtype=np.float32) for p in parts])
             if has_dist
+            else None
+        ),
+        cand_equity=(
+            np.concatenate([np.asarray(p.cand_equity, dtype=np.float32) for p in parts])
+            if has_cand_equity
             else None
         ),
     )
@@ -739,6 +805,7 @@ def train_policy_head(
     weight_decay: float = 0.0,
     lr_schedule: str = "none",
     lr_final_ratio: float = 0.1,
+    policy_temperature: float = 0.0,
     progress: Callable[[int, int, float], None] | None = None,
 ) -> dict[str, Any]:
     """Politika kafasini gnubg'nin en iyi hamlesine capraz-entropi ile egitir.
@@ -765,6 +832,11 @@ def train_policy_head(
     Buyuk kapasitelerde (>=512 gizli birim) sabit ``lr=1e-3`` ile dogrulama
     kaybi 1500 adimdan sonra **iraksiyordu** (asiri ogrenme); bu iki dugme
     olmadan 30 bin pozisyonluk karsilastirma yanilti olur.
+
+    ``policy_temperature > 0`` ise sert top-1 CE yerine **liste bazli** kayip
+    kullanilir (R-04): ``KL(softmax(equity_gnubg / T) || softmax(logits))``.
+    ``hint`` en fazla 10 hamle bastigi icin etiketsiz adaylar **maskelenir**
+    (R-17: negatif sayilmaz). Bu kip ``dataset.cand_equity`` gerektirir.
     """
     import torch  # noqa: PLC0415
     import torch.nn.functional as F  # noqa: PLC0415
@@ -785,6 +857,13 @@ def train_policy_head(
         raise ValueError("lr_schedule 'none' veya 'cosine' olmali")
     if not 0.0 < lr_final_ratio <= 1.0:
         raise ValueError("lr_final_ratio (0, 1] araliginda olmali")
+    if policy_temperature < 0:
+        raise ValueError("policy_temperature >= 0 olmali")
+    if policy_temperature > 0 and not dataset.has_cand_equity():
+        raise ValueError(
+            "policy_temperature > 0 icin veri kumesinde aday basina equity "
+            "(cand_equity) gerekli; ``label-policy`` ile yeniden etiketleyin"
+        )
 
     torch.manual_seed(seed)
     n = len(dataset)
@@ -810,6 +889,17 @@ def train_policy_head(
         if dist_weight > 0
         else None
     )
+    # R-04: aday basina equity; etiketsiz aday ``nan`` (maskelenecek).
+    # ``cand_equity`` 1-B'dir; maske ile ayni genislige yastiklanir.
+    ceq = None
+    if policy_temperature > 0:
+        padded = np.full((n, width), np.nan, dtype=np.float32)
+        raw_equity = np.asarray(dataset.cand_equity, dtype=np.float32)
+        for i in range(n):
+            start = int(dataset.offsets[i])
+            stop = int(dataset.offsets[i + 1])
+            padded[i, : stop - start] = raw_equity[start:stop]
+        ceq = torch.from_numpy(padded)
     tr_idx_t = torch.from_numpy(np.asarray(train_idx, dtype=np.int64))
     va_idx_t = (
         torch.from_numpy(np.asarray(val_idx, dtype=np.int64)) if n_val else None
@@ -828,6 +918,23 @@ def train_policy_head(
         w = max(1, min(w, width))
         return xt[indices][:, :w].reshape(-1, 221), m[:, :w], w
 
+    def _policy_loss(
+        logits: torch.Tensor, mb: torch.Tensor, eq: torch.Tensor | None, bb: torch.Tensor
+    ) -> torch.Tensor:
+        """Sert CE ya da liste bazli KL (R-04); etiketsiz adaylar maskeli."""
+        if eq is None:
+            return F.cross_entropy(logits, bb)
+        labelled = mb & ~torch.isnan(eq)
+        target_logits = torch.where(
+            labelled, eq / policy_temperature, torch.full_like(eq, -1e9)
+        )
+        log_target = F.log_softmax(target_logits, dim=1)
+        target = log_target.exp()
+        log_pred = F.log_softmax(logits, dim=1)
+        per_position = (target * (log_target - log_pred)).sum(dim=1)
+        valid = labelled.any(dim=1)
+        return (per_position * valid).sum() / valid.sum().clamp_min(1)
+
     def _evaluate(indices: torch.Tensor) -> dict[str, float]:
         """Verilen indekslerde kayip bilesenleri ve top-1 dogruluk."""
         model.eval()
@@ -843,7 +950,10 @@ def train_policy_head(
                 out = model(xb.to(device))
                 probs = out[0].reshape(k, wb, -1)
                 logits = out[1].reshape(k, wb).masked_fill(~mb.to(device), -1e9)
-                ce_sum += float(F.cross_entropy(logits, bt[sel].to(device)).to("cpu")) * k
+                eq = ceq[sel][:, :wb].to(device) if ceq is not None else None
+                ce_sum += float(
+                    _policy_loss(logits, mb.to(device), eq, bt[sel].to(device)).to("cpu")
+                ) * k
                 pick = bt[sel].to(device).view(-1, 1, 1).expand(-1, 1, probs.shape[-1])
                 best_probs = probs.gather(1, pick).squeeze(1)
                 v_sum += float(
@@ -889,7 +999,9 @@ def train_policy_head(
         out = model(xb)
         probs = out[0].reshape(batch, wb, -1)
         logits = out[1].reshape(batch, wb).masked_fill(~mb, -1e9)
-        ce = F.cross_entropy(logits, bb)
+        ce = _policy_loss(
+            logits, mb, ceq[idx][:, :wb].to(device) if ceq is not None else None, bb
+        )
         pick = bb.view(-1, 1, 1).expand(-1, 1, probs.shape[-1])
         best_probs = probs.gather(1, pick).squeeze(1)
         vloss = F.mse_loss(equity_of_probs(best_probs), yt[idx].to(device))
@@ -958,6 +1070,8 @@ def train_policy_head(
         "weightDecay": float(weight_decay),
         "lrSchedule": lr_schedule,
         "lrFinalRatio": float(lr_final_ratio),
+        "policyTemperature": float(policy_temperature),
+        "maskedCandidateRate": dataset.masked_candidate_rate(),
         "hasDist": bool(dataset.has_dist()),
         "firstLoss": history[0] if history else None,
         "lastLoss": history[-1] if history else None,
@@ -972,6 +1086,94 @@ def train_policy_head(
         "stoppedEarly": stopped_early,
         "valHistory": val_history,
         "history": history,
+    }
+
+
+#: R-04: ``T`` dogrulama kumesinde secilir; bu izgara taranir.
+TEMPERATURE_GRID = (0.02, 0.05, 0.1, 0.2, 0.5, 1.0)
+
+
+def select_policy_temperature(
+    model,
+    dataset: PolicyDataset,
+    *,
+    temperatures: Sequence[float] = TEMPERATURE_GRID,
+    val_fraction: float = 0.1,
+    seed: int = 0,
+    batch: int = 64,
+    device: str = "cpu",
+) -> dict[str, Any]:
+    """Dogrulama kumesinde ``T``'yi secer (R-04: "T dogrulamada secilir").
+
+    Her ``T`` icin **ayni** agirliklarla liste bazli KL hesaplanir; en dusuk
+    dogrulama KL'sini veren ``T`` secilir. Bu bir *hedef keskinligi*
+    kalibrasyonudur, egitim degil: model guncellenmez.
+    """
+    import torch  # noqa: PLC0415
+    import torch.nn.functional as F  # noqa: PLC0415
+
+    if not dataset.has_cand_equity():
+        raise ValueError("T secimi icin aday basina equity (cand_equity) gerekli")
+    if not temperatures:
+        raise ValueError("bos sicaklik izgarasi")
+    if any(t <= 0 for t in temperatures):
+        raise ValueError("sicakliklar > 0 olmali")
+
+    n = len(dataset)
+    n_val = int(round(n * val_fraction)) if val_fraction > 0 else 0
+    if n_val <= 0:
+        raise ValueError("T secimi icin val_fraction > 0 gerekli")
+    perm = np.random.default_rng(seed).permutation(n)
+    val_idx = np.sort(perm[:n_val])
+
+    x, mask, width = _pad_policy(dataset)
+    # ``cand_equity`` aday basina 1-B'dir; maske ile ayni sekilde yastiklanir.
+    ceq = np.full((n, width), np.nan, dtype=np.float32)
+    raw_equity = np.asarray(dataset.cand_equity, dtype=np.float32)
+    for i in range(n):
+        start = int(dataset.offsets[i])
+        stop = int(dataset.offsets[i + 1])
+        ceq[i, : stop - start] = raw_equity[start:stop]
+    xt = torch.from_numpy(x)
+    mt = torch.from_numpy(mask)
+    et = torch.from_numpy(ceq)
+
+    model.to(device)
+    model.eval()
+    totals = {float(t): 0.0 for t in temperatures}
+    count = 0
+    with torch.no_grad():
+        for start in range(0, int(val_idx.size), batch):
+            sel = torch.from_numpy(np.asarray(val_idx[start : start + batch], dtype=np.int64))
+            k = int(sel.numel())
+            m = mt[sel]
+            w = max(1, min(int(m.sum(dim=1).max().item()), width))
+            xb = xt[sel][:, :w].reshape(-1, 221).to(device)
+            mb = m[:, :w].to(device)
+            eq = et[sel][:, :w].to(device)
+            logits = model(xb)[1].reshape(k, w).masked_fill(~mb, -1e9)
+            labelled = mb & ~torch.isnan(eq)
+            valid = labelled.any(dim=1)
+            log_pred = F.log_softmax(logits, dim=1)
+            for t in temperatures:
+                target_logits = torch.where(
+                    labelled, eq / float(t), torch.full_like(eq, -1e9)
+                )
+                log_target = F.log_softmax(target_logits, dim=1)
+                target = log_target.exp()
+                per_position = (target * (log_target - log_pred)).sum(dim=1)
+                totals[float(t)] += float(
+                    ((per_position * valid).sum() / valid.sum().clamp_min(1)).to("cpu")
+                ) * k
+            count += k
+    scores = {t: (v / count if count else float("nan")) for t, v in totals.items()}
+    best = min(scores, key=lambda t: scores[t])
+    return {
+        "best": best,
+        "scores": {("%g" % t): scores[t] for t in sorted(scores)},
+        "valCount": count,
+        "valFraction": float(val_fraction),
+        "seed": int(seed),
     }
 
 
@@ -1570,6 +1772,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.1,
         help="kosinus zamanlamasinin son orani (lr'in kaci)",
     )
+    tp.add_argument(
+        "--policy-temperature",
+        type=float,
+        default=0.0,
+        help=">0 ise sert top-1 CE yerine liste bazli KL(softmax(equity/T) || "
+        "softmax(logits)) kullanilir (R-04); aday basina equity gerekir",
+    )
+    tp.add_argument(
+        "--select-temperature",
+        action="store_true",
+        help="egitimden once dogrulama kumesinde T'yi tara ve en iyisini kullan",
+    )
     tp.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
     tp.add_argument("--seed", type=int, default=0)
     tp.add_argument("--json", type=Path, default=None)
@@ -1964,6 +2178,28 @@ def _cmd_train_policy(args: argparse.Namespace) -> int:
         if step % 200 == 0 or step == total:
             print("[%d/%d] loss=%.6f" % (step, total, loss), file=sys.stderr)
 
+    policy_temperature = float(getattr(args, "policy_temperature", 0.0) or 0.0)
+    temperature_report = None
+    if getattr(args, "select_temperature", False):
+        temperature_report = select_policy_temperature(
+            model,
+            dataset,
+            val_fraction=float(getattr(args, "val_fraction", 0.0) or 0.0) or 0.1,
+            seed=args.seed,
+            batch=args.batch,
+            device=args.device,
+        )
+        policy_temperature = float(temperature_report["best"])
+        if not args.quiet:
+            print(
+                "[bilgi] secilen T=%g (dogrulama KL=%s)"
+                % (
+                    policy_temperature,
+                    "%.6f" % temperature_report["scores"]["%g" % policy_temperature],
+                ),
+                file=sys.stderr,
+            )
+
     report = train_policy_head(
         model,
         dataset,
@@ -1981,10 +2217,13 @@ def _cmd_train_policy(args: argparse.Namespace) -> int:
         weight_decay=float(getattr(args, "weight_decay", 0.0) or 0.0),
         lr_schedule=str(getattr(args, "lr_schedule", "none") or "none"),
         lr_final_ratio=float(getattr(args, "lr_final_ratio", 0.1) or 0.1),
+        policy_temperature=policy_temperature,
         progress=progress,
     )
     report["profile"] = profile
     report["initMode"] = init_mode
+    if temperature_report is not None:
+        report["temperatureSelection"] = temperature_report
 
     out_state = dict(state)
     out_state["model"] = model.state_dict()

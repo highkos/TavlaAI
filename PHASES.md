@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1456** | ~8 dk 30 s | ✅ 1456/1456 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1941** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1497** | ~10 dk | ✅ 1497/1497 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **1982** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -4791,3 +4791,134 @@ durduğu için "kapasite işe yaramıyor" sonucu yalnızca bu veri hacminde
 geçerli. (d) Antisimetri 500 vaka; `large` ile `medium` arasındaki corr
 farkı bu örneklemde anlamlı mı, ölçülmedi. (e) ppg ölçümü yapılmadı;
 `search1` ER kazancının ppg'ye dönüşüp dönüşmediği bilinmiyor.
+## 39. Faz 7-R — Aşama R-D: liste tabanlı KL politika kaybı (F7-110)
+
+**Soru.** R-C sonunda politika kafası hâlâ "oynanan hamle" üzerinden sert
+çapraz entropi ile eğitiliyordu. gnubg etiketleyicisi zaten **aday başına
+equity** üretiyor (`cand_equity`, R-04/R-17); bu bilgi kullanılmıyordu.
+Liste tabanlı kayıp bunu kullanır mı, ve kazanç gerçek mi?
+
+**Kayıp.** `_policy_loss` (`ml/gnubg_distill.py`) iki modda çalışıyor:
+
+* `policy_temperature = 0` → eski davranış, `F.cross_entropy(logits, best)`.
+* `policy_temperature > 0` → liste bazlı KL. Etiketli adaylar için
+  `target = softmax(cand_equity / T)`, `pred = softmax(logits)`,
+  `KL(target ‖ pred)`; etiketsiz adaylar (`nan`) `-1e9` ile maskelenir.
+  Pozisyon, en az bir etiketli aday varsa kayba girer.
+
+Maskeli aday oranı `policy_30k_rd.npz` üzerinde **0,6272**; yani adayların
+%62,7'si etiketsiz (gnubg `hint` en fazla 10 hamle yazıyor). Bunlar negatif
+örnek değil, maskeleniyor (R-17).
+
+**Sıcaklık pilotu.** `medium`, tohum 0, 5000 adım, 30 bin R-D verisi,
+6 değer, sıralı koşu (~3,5 dk/değer):
+
+| T | valTop1 | valValueMse | valCe |
+|---|---|---|---|
+| 0,02 | 0,8044 | 0,01408 | 0,2345 |
+| 0,05 | 0,8127 | **0,01255** | 0,1133 |
+| **0,1** | **0,8157** | 0,01329 | **0,1094** |
+| 0,2 | 0,8051 | 0,01519 | 0,1707 |
+| 0,5 | 0,7711 | 0,01630 | 0,2669 |
+| 1,0 | 0,7391 | 0,01644 | 0,3142 |
+
+Hepsi 5000 adımı tamamladı, erken durma yok. **T = 0,1 seçildi** (en iyi
+`valCe` ve `valTop1`). T = 0,05 değer kafasında biraz daha iyi ama politika
+CE'si %3,6 daha kötü; T ≥ 0,5 keskin bozuluyor — hedef dağılım düzleşince
+sinyal kayboluyor.
+
+**5 tohumlu `large` taraması** (T = 0,1, 5000 adım, hepsi `bestStep = 5000`,
+erken durma yok):
+
+| tohum | valCe | valTop1 | valValueMse |
+|---|---|---|---|
+| 0 | 0,10624 | 0,8224 | 0,01381 |
+| 1 | 0,10680 | 0,8181 | 0,01198 |
+| 2 | 0,10604 | 0,8197 | 0,01134 |
+| 3 | 0,10542 | 0,8184 | 0,01139 |
+| 4 | 0,10747 | 0,8137 | 0,01203 |
+| **ortalama** | **0,1064** (sd 0,00078) | **0,8185** (sd 0,0031) | **0,01211** (sd 0,00101) |
+
+Karşılaştırma: R-E `large` (eski kayıp) valTop1 0,7829 (sd 0,0037),
+valValueMse 0,0218 (sd 0,00487); R-E `medium` 0,7793 / 0,02358. Yani
+`valTop1` **+4,6% göreli**, `valValueMse` **−44% göreli**.
+
+**ER ölçümü — metodolojik düzeltme (`--stride`).** `reference_corpus_v2.json`
+vakaları faz sırasına göre diziliyor: contact(600) → bar(250) → race(150).
+Bu yüzden `--limit 300` **%100 contact** veriyordu; faz temsili değil.
+`er_paths.py` ve `antisymmetry.py`'ye `--stride` eklendi ve `--limit`'ten
+**önce** uygulanıyor. `--stride 3 --limit 300` → {bar 84, contact 200,
+race 16}; gerçek oyun ağırlıkları {bar 0,3706, contact 0,5564, race 0,0730}.
+**Alt örneklemeli her ER ölçümü `--stride` kullanmak zorunda.**
+
+**ER sonuçları** (300 vaka, `--stride 3`, 2-ply):
+
+| koşu | politika | değer | search1 |
+|---|---|---|---|
+| R-E `medium` (3 tohum) | 0,020402 | 0,034547 | 0,021723 |
+| R-E `large` (3 tohum) | 0,016347 | 0,031124 | 0,023166 |
+| **R-D `large` (5 tohum)** | **0,012408** (sd 0,00089) | **0,019507** (sd 0,00160) | **0,014360** (sd 0,00061) |
+
+**Eşleşmiş bootstrap** (3 ortak tohum × 300 vaka, 2000 yeniden örnekleme):
+
+| karşılaştırma | yol | kontrol | tedavi | göreli | p |
+|---|---|---|---|---|---|
+| R-E `large` → R-D `large` | politika | 0,016347 | 0,012511 | **−23,5%** | 0,0030 |
+| | değer | 0,031123 | 0,018559 | **−40,4%** | 0,0000 |
+| | search1 | 0,023166 | 0,014373 | **−38,0%** | 0,0000 |
+| R-E `medium` → R-D `large` | politika | 0,020402 | 0,012511 | **−38,7%** | 0,0000 |
+| | değer | 0,034547 | 0,018559 | **−46,3%** | 0,0000 |
+| | search1 | 0,021723 | 0,014373 | **−33,8%** | 0,0000 |
+
+Üç yolun üçü de anlamlı. R-D `large`, R-E `medium`'ı da anlamlı şekilde
+geçiyor — yani kazanç yalnızca kapasite değil, kayıp değişikliği.
+
+**Ablasyon — kayıp mı, veri mi?** Aynı R-D verisi, aynı tohum 0, yalnızca
+`--policy-temperature 0` (eski kayıp): valCe 0,63653, valTop1 0,7861,
+valValueMse 0,02437. ER: politika 0,016927, değer 0,031500, search1 0,023077.
+R-D verisi + yeni kayıp (tohum 0): 0,011117 / 0,017263 / 0,013930.
+
+| yol | eski kayıp | yeni kayıp | göreli | p |
+|---|---|---|---|---|
+| politika | 0,016927 | 0,011117 | **−34,3%** | 0,0030 |
+| değer | 0,031500 | 0,017263 | **−45,2%** | 0,0000 |
+| search1 | 0,023077 | 0,013930 | **−39,6%** | 0,0010 |
+
+Kontrolün ER'si R-E `large` tohum 0'a neredeyse eşit (0,016927 vs 0,017157):
+**veri değişikliği tek başına nötr, kazancın tamamı kayıp değişikliğinden.**
+
+**Antisimetri — kapı hâlâ düşüyor ama pratik asimetri 4 kat azaldı.**
+`|corr| ≥ 0,99` kapısı R-D'de de geçmiyor (corr −0,9464 … −0,9562). Ama
+`erMinus` 0,19–0,24 → **0,047–0,054**, `argmaxRate` 0,18 → **0,47–0,52**.
+Yani liste kaybı bakış tutarlılığını ciddi şekilde düzeltiyor; kalan corr
+kusuru ER farkına neredeyse yansımıyor. `meanAbsSum` hafifçe kötüleşti
+(0,23 → 0,29) — corr'un neden düşük kaldığının açıklaması bu olabilir:
+büyük hatalar azaldı, küçük sistematik sapma kaldı.
+
+**Çıkarım anında antisimetrikleştirme denendi, kazanmadı.** Önceki segmentte
+`antisymmetry.py symmetrise` ile `ê(x) = (f(x,+1) − f(x,−1))/2` ölçüldü:
+politika ER 0,038488 → 0,048880 (**+0,0104, kötü**), değer 0,200420 →
+0,191039 (−0,0094, GA sıfırı içeriyor). Yani çıkarım anında düzeltme
+kalıcı çözüm değil; eğitim tarafı (liste kaybı) doğru yol.
+
+**Araç.** `ml/gnubg_distill.py` (`policy_temperature`, `_policy_loss`,
+`TEMPERATURE_GRID`, `select_policy_temperature`); `ml/capacity_train.py`
+(`--policy-temperature`, `compare --seeds`, `--stride`); `ml/er_paths.py` +
+`ml/antisymmetry.py` (`--stride`). Koşu betikleri
+`ml/runs/capacity_rd/run_tpilot.ps1`, `run_sweep_large.ps1`,
+`run_control_large.ps1`, `run_measure_shard.ps1`. Karar dosyaları
+`ml/runs/capacity_rd/compare/re_vs_rd_large.{json,md}`,
+`ablation_loss.{json,md}`, `re_medium_vs_rd_large.{json,md}`.
+Test sayısı 1494 → **1497** (3 yeni `--stride` testi); §6 toplamı
+1979 → **1982**.
+
+**Açık kalan.** (a) `xlarge` R-D ile denenmedi; `large` 5 tohumda hâlâ
+erken durmuyor, `xlarge` için veri tavanı sorusu açık. (b) ER 300 vaka;
+`--stride 3` faz temsili ama örneklem küçük — `search1` farkı 0,0088 ≈ 3 SE,
+sağlam, ama `race` fazında yalnızca 16 vaka var. (c) ppg ölçümü yok; ER
+kazancının ppg'ye dönüşüp dönüşmediği hâlâ bilinmiyor (eğim −14,30 ppg/ER
+ile kaba tahmin: politika −0,0039 ER → ~0,056 ppg). (d) Antisimetri kapısı
+(`|corr| ≥ 0,99`) hâlâ düşük; eşik mi yanlış, kusur mu kaldı, karar
+verilmedi. (e) `maskedCandidateRate = 0,6272` — etiketsiz adayların hedef
+dağılımdan tamamen çıkarılması, gerçek "ikinci en iyi" bilgisini
+kaybettiriyor olabilir; denenmedi.

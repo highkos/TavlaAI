@@ -1023,6 +1023,7 @@ def test_127j_policy_position_to_dict() -> None:
         "candidates",
         "mappingFailures",
         "bestDist",
+        "labeledCandidates",
     }
     assert data["bestDist"] is None
 
@@ -1219,3 +1220,241 @@ def test_127k_random_positions_is_deterministic() -> None:
     a = refgen.random_positions(random.Random(5), 50, max_plies=20)
     b = refgen.random_positions(random.Random(5), 50, max_plies=20)
     assert a == b
+
+# ----------------------------------------------------------------------
+# R-D: liste tabanli politika kaybi (R-04) ve maskeli adaylar (R-17)
+# ----------------------------------------------------------------------
+
+
+def _equity_dataset(rows: list[list[float | None]], n: int = 3):
+    """Her pozisyon icin aday basina equity verilmis kume kurar."""
+    import tools.reference_gen as refgen
+
+    positions = [(list(refgen.START_BOARD), 1, [3, 4], 0, 0)] * len(rows)
+    labeled, _ = gd.label_policy_positions(_PolicyReferee(), positions)
+    assert len(labeled) == len(rows)
+    for item, row in zip(labeled, rows):
+        assert len(row) == item.candidates
+        item.candidate_equities = list(row)
+    return gd.build_policy_dataset(labeled, meta={"kind": "policy"})
+
+
+def _only_best_labelled(n: int = 4):
+    """Yalnizca en iyi aday etiketli; digerleri ``None`` (maskelenecek)."""
+    import tools.reference_gen as refgen
+
+    positions = [(list(refgen.START_BOARD), 1, [3, 4], 0, 0)] * n
+    labeled, _ = gd.label_policy_positions(_PolicyReferee(), positions)
+    for item in labeled:
+        row: list[float | None] = [None] * item.candidates
+        row[item.best_index] = item.best_equity
+        item.candidate_equities = row
+    return gd.build_policy_dataset(labeled, meta={"kind": "policy"})
+
+
+def test_127l_policy_position_to_dict_reports_labeled_candidates() -> None:
+    import tools.reference_gen as refgen
+
+    labeled, _ = gd.label_policy_positions(
+        _PolicyReferee(), [(list(refgen.START_BOARD), 1, [3, 4], 0, 0)]
+    )
+    item = labeled[0]
+    assert item.to_dict()["labeledCandidates"] == 1
+    item.candidate_equities = None
+    assert item.to_dict()["labeledCandidates"] is None
+
+
+def test_127l_build_policy_dataset_masks_unlabelled_candidates() -> None:
+    ds = _only_best_labelled(3)
+    assert ds.has_cand_equity()
+    values = np.asarray(ds.cand_equity, dtype=np.float64)
+    assert values.shape == (ds.x.shape[0],)
+    labelled = int(np.sum(~np.isnan(values)))
+    assert labelled == 3
+    assert ds.masked_candidate_rate() == pytest.approx(1.0 - 3.0 / values.size)
+
+
+def _no_equity_dataset(n: int = 2):
+    """``cand_equity`` sutunu olmayan kume (eski veri kumeleri gibi)."""
+    ds = _policy_dataset(n)
+    ds.cand_equity = None
+    return ds
+
+
+def test_127l_policy_dataset_masked_rate_none_without_column() -> None:
+    ds = _no_equity_dataset(2)
+    assert not ds.has_cand_equity()
+    assert ds.masked_candidate_rate() is None
+    assert ds.stats()["hasCandEquity"] is False
+    assert ds.stats()["maskedCandidateRate"] is None
+
+
+def test_127l_policy_dataset_stats_report_masked_rate() -> None:
+    ds = _only_best_labelled(2)
+    stats = ds.stats()
+    assert stats["hasCandEquity"] is True
+    assert stats["maskedCandidateRate"] == pytest.approx(ds.masked_candidate_rate())
+
+
+def test_127l_policy_dataset_roundtrip_keeps_cand_equity(tmp_path: Path) -> None:
+    ds = _only_best_labelled(2)
+    path = tmp_path / "policy.npz"
+    gd.save_policy_dataset(ds, path)
+    back = gd.load_policy_dataset(path)
+    assert back.has_cand_equity()
+    assert np.array_equal(
+        np.isnan(np.asarray(back.cand_equity, dtype=np.float64)),
+        np.isnan(np.asarray(ds.cand_equity, dtype=np.float64)),
+    )
+
+
+def test_127l_subset_keeps_cand_equity() -> None:
+    ds = _only_best_labelled(4)
+    sub = ds.subset([1, 3])
+    assert len(sub) == 2
+    assert sub.has_cand_equity()
+    assert int(np.sum(~np.isnan(np.asarray(sub.cand_equity, dtype=np.float64)))) == 2
+
+
+def test_127l_concat_drops_partial_cand_equity() -> None:
+    full = _only_best_labelled(2)
+    partial = _no_equity_dataset(2)
+    merged = gd.concat_policy_datasets([full, partial])
+    assert not merged.has_cand_equity()
+    assert merged.cand_equity is None
+
+
+def test_127l_concat_keeps_full_cand_equity() -> None:
+    merged = gd.concat_policy_datasets([_only_best_labelled(2), _only_best_labelled(2)])
+    assert merged.has_cand_equity()
+    assert int(np.sum(~np.isnan(np.asarray(merged.cand_equity, dtype=np.float64)))) == 4
+
+
+def test_127l_train_policy_temperature_requires_cand_equity() -> None:
+    pytest.importorskip("torch")
+    ds = _no_equity_dataset(2)
+    with pytest.raises(ValueError, match="cand_equity"):
+        gd.train_policy_head(_tiny_model(), ds, steps=1, policy_temperature=0.1)
+
+
+def test_127l_train_policy_rejects_negative_temperature() -> None:
+    pytest.importorskip("torch")
+    ds = _only_best_labelled(2)
+    with pytest.raises(ValueError, match="policy_temperature"):
+        gd.train_policy_head(_tiny_model(), ds, steps=1, policy_temperature=-0.5)
+
+
+def test_127l_train_policy_reports_temperature_and_masked_rate() -> None:
+    pytest.importorskip("torch")
+    ds = _only_best_labelled(4)
+    report = gd.train_policy_head(
+        _tiny_model(), ds, steps=2, lr=0.0, batch=2, seed=0, policy_temperature=0.1
+    )
+    assert report["policyTemperature"] == pytest.approx(0.1)
+    assert report["maskedCandidateRate"] == pytest.approx(ds.masked_candidate_rate())
+
+
+def test_127l_unlabelled_candidates_are_not_counted_negative() -> None:
+    """R-17: etiketsiz adaylar maskelenir; hedef tek adayliysa KL == sert CE."""
+    pytest.importorskip("torch")
+    ds = _only_best_labelled(4)
+    hard = gd.train_policy_head(
+        _tiny_model(), ds, steps=1, lr=0.0, batch=4, seed=0, policy_temperature=0.0
+    )
+    soft = gd.train_policy_head(
+        _tiny_model(), ds, steps=1, lr=0.0, batch=4, seed=0, policy_temperature=0.1
+    )
+    assert soft["trainCe"] == pytest.approx(hard["trainCe"], abs=1e-5)
+    assert soft["valCe"] == pytest.approx(hard["valCe"], abs=1e-5)
+
+
+def test_127l_temperature_changes_loss_when_candidates_labelled() -> None:
+    """Adaylarin hepsi etiketliyse T hedefi yumusatir; kayip degisir."""
+    pytest.importorskip("torch")
+    import tools.reference_gen as refgen
+
+    positions = [(list(refgen.START_BOARD), 1, [3, 4], 0, 0)] * 4
+    labeled, _ = gd.label_policy_positions(_PolicyReferee(), positions)
+    for item in labeled:
+        item.candidate_equities = [0.4 - 0.1 * i for i in range(item.candidates)]
+    ds = gd.build_policy_dataset(labeled, meta={"kind": "policy"})
+    assert ds.masked_candidate_rate() == pytest.approx(0.0)
+    hard = gd.train_policy_head(
+        _tiny_model(), ds, steps=1, lr=0.0, batch=4, seed=0, policy_temperature=0.0
+    )
+    soft = gd.train_policy_head(
+        _tiny_model(), ds, steps=1, lr=0.0, batch=4, seed=0, policy_temperature=0.5
+    )
+    assert soft["trainCe"] != pytest.approx(hard["trainCe"], abs=1e-6)
+
+
+def test_127l_select_policy_temperature_contract() -> None:
+    pytest.importorskip("torch")
+    ds = _only_best_labelled(6)
+    result = gd.select_policy_temperature(
+        _tiny_model(), ds, temperatures=(0.05, 0.2), val_fraction=0.5, seed=0
+    )
+    assert result["best"] in (0.05, 0.2)
+    assert set(result["scores"]) == {"0.05", "0.2"}
+    assert result["valCount"] == 3
+    best_key = min(result["scores"], key=lambda k: result["scores"][k])
+    assert result["best"] == pytest.approx(float(best_key))
+
+
+def test_127l_select_policy_temperature_flat_target_is_tie() -> None:
+    """Tum aday equity'leri esitse hedef T'den bagimsizdir; skorlar esit cikar."""
+    pytest.importorskip("torch")
+    import tools.reference_gen as refgen
+
+    positions = [(list(refgen.START_BOARD), 1, [3, 4], 0, 0)] * 4
+    labeled, _ = gd.label_policy_positions(_PolicyReferee(), positions)
+    for item in labeled:
+        item.candidate_equities = [0.0] * item.candidates
+    ds = gd.build_policy_dataset(labeled, meta={"kind": "policy"})
+    result = gd.select_policy_temperature(
+        _tiny_model(), ds, temperatures=(0.05, 0.5), val_fraction=0.5, seed=0
+    )
+    scores = list(result["scores"].values())
+    assert scores[0] == pytest.approx(scores[1], abs=1e-5)
+
+
+def test_127l_select_policy_temperature_requires_cand_equity() -> None:
+    pytest.importorskip("torch")
+    with pytest.raises(ValueError, match="cand_equity"):
+        gd.select_policy_temperature(_tiny_model(), _no_equity_dataset(2), val_fraction=0.5)
+
+
+def test_127l_select_policy_temperature_rejects_bad_grid() -> None:
+    pytest.importorskip("torch")
+    ds = _only_best_labelled(4)
+    with pytest.raises(ValueError, match="sicaklik"):
+        gd.select_policy_temperature(_tiny_model(), ds, temperatures=(0.0,), val_fraction=0.5)
+    with pytest.raises(ValueError, match="val_fraction"):
+        gd.select_policy_temperature(_tiny_model(), ds, val_fraction=0.0)
+
+
+def test_127l_parser_train_policy_temperature_defaults() -> None:
+    args = gd.build_parser().parse_args(
+        ["train-policy", "--data", "d.npz", "--ckpt", "c.pt", "--out", "o.pt"]
+    )
+    assert args.policy_temperature == 0.0
+    assert args.select_temperature is False
+
+
+def test_127l_parser_train_policy_temperature_flags() -> None:
+    args = gd.build_parser().parse_args(
+        [
+            "train-policy",
+            "--data",
+            "d.npz",
+            "--ckpt",
+            "c.pt",
+            "--out",
+            "o.pt",
+            "--policy-temperature",
+            "0.2",
+            "--select-temperature",
+        ]
+    )
+    assert args.policy_temperature == pytest.approx(0.2)
+    assert args.select_temperature is True

@@ -534,3 +534,209 @@ def test_report_appends_notes(tmp_path):
     assert "## Yorum" in text
     assert "elle yazildi" in text
     assert "\r" not in text
+
+# ----------------------------------------------------------------------
+# R-E: coklu tohum (sweep) ve eslesmis bootstrap (compare)
+# ----------------------------------------------------------------------
+
+
+def test_311_parse_seeds_accepts_list_and_rejects_duplicates():
+    assert capacity_train._parse_seeds("0,1,2") == [0, 1, 2]
+    assert capacity_train._parse_seeds(" 3 , 7 ") == [3, 7]
+    with pytest.raises(ValueError):
+        capacity_train._parse_seeds("0,0")
+    with pytest.raises(ValueError):
+        capacity_train._parse_seeds(" , ")
+
+
+def test_312_aggregate_sweep_reports_mean_sd_and_se():
+    rows = [
+        {"seed": 0, "valueEr": 0.040, "search1Er": 0.020},
+        {"seed": 1, "valueEr": 0.042, "search1Er": 0.021},
+        {"seed": 2, "valueEr": 0.041, "search1Er": 0.019},
+    ]
+    summary = capacity_train.aggregate_sweep(rows)
+    assert summary["count"] == 3
+    assert summary["seeds"] == [0, 1, 2]
+    value = summary["metrics"]["valueEr"]
+    assert value["mean"] == pytest.approx(0.041)
+    assert value["sd"] == pytest.approx(0.001)
+    assert value["se"] == pytest.approx(0.001 / 3 ** 0.5)
+    assert value["min"] == pytest.approx(0.040)
+    assert value["max"] == pytest.approx(0.042)
+
+
+def test_313_aggregate_sweep_single_seed_has_no_spread():
+    summary = capacity_train.aggregate_sweep([{"seed": 0, "valueEr": 0.04}])
+    assert summary["metrics"]["valueEr"]["sd"] is None
+    assert summary["metrics"]["valueEr"]["se"] is None
+    assert capacity_train.aggregate_sweep([])["count"] == 0
+
+
+def test_314_paired_bootstrap_detects_shift_and_keeps_pairing():
+    import random
+
+    rng = random.Random(7)
+    control = [[rng.gauss(0.04, 0.01) for _ in range(300)] for _ in range(3)]
+    treatment = [[c - 0.002 for c in row] for row in control]
+    result = capacity_train.paired_bootstrap(control, treatment, resamples=400)
+    assert result["diff"] == pytest.approx(-0.002, abs=1e-12)
+    assert result["ciHigh"] < 0.0
+    assert result["significant"] is True
+    assert result["seeds"] == 3
+    assert result["cases"] == 300
+
+
+def test_315_paired_bootstrap_null_is_not_significant():
+    import random
+
+    rng = random.Random(11)
+    control = [[rng.gauss(0.04, 0.01) for _ in range(300)] for _ in range(3)]
+    treatment = [[rng.gauss(0.04, 0.01) for _ in range(300)] for _ in range(3)]
+    result = capacity_train.paired_bootstrap(control, treatment, resamples=400)
+    assert result["significant"] is False
+    assert result["ciLow"] < 0.0 < result["ciHigh"]
+
+
+def test_316_paired_bootstrap_rejects_mismatched_shapes():
+    with pytest.raises(ValueError):
+        capacity_train.paired_bootstrap([[0.1, 0.2]], [[0.1, 0.2], [0.1, 0.2]])
+    with pytest.raises(ValueError):
+        capacity_train.paired_bootstrap([[0.1, 0.2]], [[0.1]])
+    with pytest.raises(ValueError):
+        capacity_train.paired_bootstrap([], [])
+
+
+def _write_sweep_seed(root, seed, *, value, search1, cases=4):
+    import json
+
+    seed_dir = root / ("seed%d" % seed)
+    seed_dir.mkdir(parents=True)
+    losses = {
+        "policy": [value] * cases,
+        "value": [value] * cases,
+        "search1": [search1] * cases,
+    }
+    (seed_dir / "er_paths.json").write_text(
+        json.dumps({"caseLosses": losses, "caseNames": ["c%d" % i for i in range(cases)]}),
+        encoding="utf-8",
+    )
+    return seed_dir
+
+
+def test_317_compare_sweeps_uses_per_case_losses(tmp_path):
+    import json
+
+    control = tmp_path / "medium"
+    treatment = tmp_path / "large"
+    for seed in (0, 1, 2):
+        _write_sweep_seed(control, seed, value=0.040, search1=0.026)
+        _write_sweep_seed(treatment, seed, value=0.036, search1=0.022)
+    out = tmp_path / "compare.json"
+    md = tmp_path / "compare.md"
+    code = capacity_train.main(
+        [
+            "compare",
+            "--control",
+            str(control),
+            "--treatment",
+            str(treatment),
+            "--resamples",
+            "200",
+            "--json",
+            str(out),
+            "--markdown",
+            str(md),
+            "--quiet",
+        ]
+    )
+    assert code == 0
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["seedCount"] == 3
+    rows = {r["path"]: r for r in payload["rows"]}
+    assert rows["value"]["control"] == pytest.approx(0.040)
+    assert rows["value"]["treatment"] == pytest.approx(0.036)
+    assert rows["value"]["diff"] == pytest.approx(-0.004)
+    assert rows["value"]["relative"] == pytest.approx(-0.1)
+    assert rows["value"]["significant"] is True
+    text = md.read_text(encoding="utf-8")
+    assert "R-E" in text
+    assert "eslesmis bootstrap" in text
+
+
+def test_318_compare_sweeps_requires_per_case_losses(tmp_path):
+    import json
+
+    control = tmp_path / "a"
+    treatment = tmp_path / "b"
+    for root in (control, treatment):
+        seed_dir = root / "seed0"
+        seed_dir.mkdir(parents=True)
+        (seed_dir / "er_paths.json").write_text(
+            json.dumps({"paths": {"value": {"mean": 0.04}}}), encoding="utf-8"
+        )
+    with pytest.raises(ValueError):
+        capacity_train.compare_sweeps(control, treatment)
+
+
+# ----------------------------------------------------------------------
+# 319-321: faz temsili alt orneklem (--stride)
+# ----------------------------------------------------------------------
+
+
+def test_319_er_paths_parser_accepts_stride():
+    import er_paths
+
+    args = er_paths.build_parser().parse_args(
+        ["measure", "--model", "m.onnx", "--stride", "3"]
+    )
+    assert args.stride == 3
+    default = er_paths.build_parser().parse_args(["measure", "--model", "m.onnx"])
+    assert default.stride == 1
+
+
+def test_320_measure_profile_forwards_stride_to_both_tools(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run(cmd, quiet=False):
+        calls.append(list(cmd))
+        return 0
+
+    monkeypatch.setattr(capacity_train, "_run", fake_run)
+    capacity_train.measure_profile(
+        tmp_path / "model.onnx",
+        corpus=tmp_path / "corpus.json",
+        out_dir=tmp_path / "out",
+        gnubg=None,
+        plies=2,
+        limit=300,
+        quiet=True,
+        stride=3,
+    )
+    assert len(calls) == 2
+    for cmd in calls:
+        assert "--stride" in cmd
+        assert cmd[cmd.index("--stride") + 1] == "3"
+        assert cmd[cmd.index("--limit") + 1] == "300"
+
+
+def test_321_measure_profile_omits_stride_when_one(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run(cmd, quiet=False):
+        calls.append(list(cmd))
+        return 0
+
+    monkeypatch.setattr(capacity_train, "_run", fake_run)
+    capacity_train.measure_profile(
+        tmp_path / "model.onnx",
+        corpus=tmp_path / "corpus.json",
+        out_dir=tmp_path / "out",
+        gnubg=None,
+        plies=2,
+        limit=None,
+        quiet=True,
+    )
+    assert len(calls) == 2
+    for cmd in calls:
+        assert "--stride" not in cmd
