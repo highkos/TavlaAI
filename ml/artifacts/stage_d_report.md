@@ -278,7 +278,7 @@ Yeni testler:
 * `test_artifact_roundtrip.py` (3) — `settings_table.md`, `stage_d_er.md` ve
   `stage_d_eval.md` dosyalarının kendi `.json` çıktılarından bayt bayt yeniden üretimi.
 * `test_docs_consistency.py` (21) — belgelerdeki ters-tırnaklı yolların varlığı, üç
-  belgede test sayılarının tutarlılığı (`1497/1497`, `100/100`, `297/297`, `88/88`), `PHASES.md` §6
+  belgede test sayılarının tutarlılığı (`1505/1505`, `100/100`, `297/297`, `88/88`), `PHASES.md` §6
   başlığının test durumu olması, `ARCHITECTURE.md` bölüm numaralarının tekrar etmemesi ve
   artan sırada olması, sahipsiz `### N.M` alt bölümü bulunmaması, `ASSUMPTIONS.md` karar
   kimliklerinin benzersiz ve F4 sırasının artan olması, F4-24'ün güncel gnubg ifadesi,

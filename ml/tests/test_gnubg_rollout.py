@@ -1,8 +1,12 @@
-"""Faz 7-R R-F madde 2: gnubg rollout hakemi testleri (Test 328-330).
+"""Faz 7-R R-F madde 2: gnubg rollout hakemi testleri (Test 328-331).
 
-R-T20 ``Rollout_Unmeasurable``  -- sonuc yoksa sifir uydurulmaz
-R-T21 ``Rollout_Parse``         -- equity satiri ayristirilir
-R-T22 ``Rollout_Report``        -- rapor gerekceyi ve yerine koyulan olcumu tasir
+R-F'nin kabul testleri (R-T19...R-T22) ``test_stage_r_f.py``'dedir; buradakiler
+``gnubg_rollout`` modulunun birim testleridir:
+
+* 328 -- sonuc yoksa sifir uydurulmaz (``parse_rollout_equity`` -> ``None``)
+* 329 -- equity satiri ayristirilir
+* 330 -- rapor gerekceyi ve yerine koyulan olcumu tasir
+* 331 -- CLI varsayilanlari
 """
 
 from __future__ import annotations

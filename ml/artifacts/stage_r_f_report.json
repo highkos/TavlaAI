@@ -53,7 +53,9 @@
           "positions": 20
         }
       },
-      "verdict": "gnubg 2-ply ile esdeger degil; gnubg 0-ply seviyesinde"
+      "verdict": "gnubg 2-ply ile esdeger degil; gnubg 0-ply seviyesinde",
+      "budget": "ER <= gnubg 2-ply seviyesi (cozunurluk tabani 0,0013)",
+      "elapsedSeconds": 12300
     },
     "cube": {
       "corpus": "ml/artifacts/cube_corpus.json",
@@ -70,7 +72,9 @@
         "seeds": 3
       },
       "ratioToTarget": 4.1,
-      "verdict": "hedefin 4.1 katinda; karsilanmadi"
+      "verdict": "hedefin 4.1 katinda; karsilanmadi",
+      "budget": "kup ER <= 0,02",
+      "elapsedSeconds": 1200
     },
     "gameStrength": {
       "opponent": "gnubg 2-ply",
@@ -89,9 +93,15 @@
       "meanPlies": 55.9375,
       "powerFraction": 0.46114825916532165,
       "verdict": "esdegerlik kanitlanmadi; ustunluk iddia edilmez",
-      "artifact": "ml/artifacts/ppg_rd_large_s0_2ply.json"
+      "artifact": "ml/artifacts/ppg_rd_large_s0_2ply.json",
+      "verdictLabel": "daha-kotu",
+      "budget": "H0: ppg_fark <= -m, m = 0,1115 ppg, 4337 oyun",
+      "elapsedSeconds": 12000,
+      "requiredGamesFormula": 4464
     }
   },
+  "verdict": "karşılanmadı",
+  "verdictNote": "Üç satırın hiçbiri bütçesini karşılamadı. Kapı ölçümün geçerliliğidir, sayısal ER hedefi değil (Faz 7 v2.5 §6).",
   "referenceChain": {
     "referee3ply": {
       "referee": "gnubg hint 3-ply",
@@ -158,5 +168,11 @@
     "ppg 2000 oyun; m=0.1115 icin 4337 gerekiyordu -> guc borcu %46.",
     "4-ply'in kendi ER'si olculemedi (5-ply/rollout yok).",
     "gnubg GPL lisansi urun dagitimi oncesi cozulmedi (PHASES 36.10/5)."
-  ]
+  ],
+  "verdictLabels": [
+    "esdeger",
+    "esdegerlik-kanitlanmadi",
+    "daha-kotu"
+  ],
+  "elapsedSecondsTotal": 25500
 }

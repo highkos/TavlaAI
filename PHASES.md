@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1497** | ~10 dk | ✅ 1497/1497 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1982** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1505** | ~10 dk | ✅ 1505/1505 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **1990** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -5110,3 +5110,45 @@ yansıtır — eski sürüm "0-ply" yazısını sabit tutuyordu). Artefaktlar
 iyileşmedi. (c) ppg güç borcu %46. (d) 4-ply'ın kendi ER'si ölçülemedi.
 (e) gnubg GPL lisansı ürün dağıtımı öncesi çözülmedi (§36.10/5). (f)
 `m = 0,1115` yalnızca money; maç hücreleri (5 ve 9 puan) ayrı raporlanmadı.
+## 42. R-F kabul testleri — R-T19…R-T22
+
+**Karar.** R-F'nin kabul ölçütü "Test R-T19…R-T22 yeşil"dir. Dört test tek
+dosyada, spec'teki adlarıyla tutulur: `ml/tests/test_stage_r_f.py` (8 test).
+`test_gnubg_ladder.py` ve `test_gnubg_rollout.py` ilgili modüllerin birim
+testleridir; rollout testlerinin docstring'i yanlışlıkla R-T20/R-T21/R-T22
+etiketi taşıyordu, düzeltildi.
+
+**R-T19 `Ladder_Measured`.** Her basamak ya ölçülmüş (n > 0, sonlu ortalama,
+σ > 0, GA ortalamayı içerir, `exactMatchRate` ∈ [0,1]) ya da **gerekçesiyle**
+ölçülemez (`mean`/GA `None`, `reason` dolu) olmalı. Ölçülen en küçük ER
+çözünürlük tabanını verir: **0,0013**.
+
+**R-T20 `Ladder_NoSelfReferee`.** Üç merdivenin (shallow, deep3, deep4) her
+basamağında ölçülmüş satırlar için `playerPlies < refereePlies`; ölçülemez
+satırlarda tersi ve gerekçe zorunlu.
+
+**R-T21 `Equivalence_Test`.** `ml/ppg_measure.py`'ye `equivalence_verdict`
+eklendi: `H0: ppg_fark ≤ −m` testini **doğru yönde** çalıştırır. GA'nın alt
+sınırı `−m`'in üstündeyse `esdeger` (H0 reddedilir), üst sınırı `−m`'in
+altındaysa `daha-kotu` (kötülük kanıtlandı), aksi hâlde
+`esdegerlik-kanitlanmadi`. Üç etiket `EQUIVALENCE_LABELS`'ta sabit. Sentetik
+vakalarla yön testi + kötü girdi reddi (marj ≤ 0, GA nokta tahminini
+içermiyor). Ayrıca `required_games` (Acklam `_norm_ppf`, α = 0,05 tek yönlü,
+güç = 0,80) eklendi: m = 0,1115, σ = 2,9960 → **4464**. Onaylanmış sayı
+**4337**; %3 fark hiçbir hükmü değiştirmez, ikisi de raporlanır.
+
+**R-T22 `Final_Report_ThreeLines`.** `stage_r_f_report.json` **tam olarak üç
+satır** (`moveQuality`, `cube`, `gameStrength`) taşır; her satırda `budget`
+(dolu metin) ve `elapsedSeconds` (pozitif tamsayı) zorunlu.
+`elapsedSecondsTotal` satırların toplamı olmalı. Oyun gücü satırının
+`verdictLabel`'i `equivalence_verdict` çağrısının sonucuyla **aynı** olmalı
+(`daha-kotu`). Üst düzey `verdict` = `karşılanmadı`.
+
+**Bütçe ve süre (R-T22 için eklendi).** Hamle kalitesi bütçesi "ER ≤ gnubg
+2-ply seviyesi (taban 0,0013)", ~3 sa 25 dk; küp bütçesi "küp ER ≤ 0,02",
+~20 dk; oyun gücü bütçesi "H0: ppg_fark ≤ −m, m = 0,1115, 4337 oyun",
+~3 sa 20 dk. Toplam **25 500 s (~7 sa 5 dk)**.
+
+**Test sayısı.** 1497 → **1505** (8 yeni: `test_stage_r_f.py`); §6 toplamı
+1982 → **1990**. `test_docs_consistency.py`, `PHASES.md` §6,
+`ARCHITECTURE.md` §51.5 ve `ml/artifacts/stage_d_report.md` güncellendi.

@@ -6377,3 +6377,46 @@ Artefaktlar `ml/artifacts/gnubg_ladder{,_deep,_deep4}.{json,md}`,
 olculemedi. (e) gnubg GPL lisansi urun dagitimi oncesi cozulmedi (§36.10/5).
 (f) `m = 0,1115` yalnizca money; mac hucreleri (5 ve 9 puan) ayri
 raporlanmadi.
+## F7-113 - R-F kabul testleri R-T19...R-T22 (2026-02-19)
+
+**Karar.** R-F'nin kabul olcutu "Test R-T19...R-T22 yesil"dir. Bu dort test
+tek dosyada, spec'teki adlariyla tutulur: `ml/tests/test_stage_r_f.py`
+(8 test). `test_gnubg_ladder.py` ve `test_gnubg_rollout.py` ilgili
+modullerin birim testleridir; rollout testlerinin docstring'i yanlislikla
+R-T20/R-T21/R-T22 etiketi tasiyordu, duzeltildi.
+
+**R-T19 `Ladder_Measured`.** Her basamak ya olculmus (n > 0, sonlu ortalama,
+sigma > 0, GA ortalamayi icerir, `exactMatchRate` [0,1]) ya da
+**gerekcesiyle** olculemez (`mean`/GA `None`, `reason` dolu) olmali. Olculen
+en kucuk ER cozunurluk tabanini verir: **0,0013**.
+
+**R-T20 `Ladder_NoSelfReferee`.** Uc merdivenin (shallow, deep3, deep4) her
+basamaginda olculmus satirlar icin `playerPlies < refereePlies`; olculemez
+satirlarda tersi ve gerekce zorunlu.
+
+**R-T21 `Equivalence_Test`.** `ml/ppg_measure.py`'ye `equivalence_verdict`
+eklendi: `H0: ppg_fark <= -m` testini **dogru yonde** calistirir. GA'nin alt
+siniri `-m`'in ustundeyse `esdeger` (H0 reddedilir), ust siniri `-m`'in
+altindaysa `daha-kotu` (kotuluk kanitlandi), aksi halde
+`esdegerlik-kanitlanmadi`. Uc etiket `EQUIVALENCE_LABELS`'ta sabit. Sentetik
+vakalarla yon testi + kotu girdi reddi (`marj <= 0`, GA nokta tahminini
+icermiyor). Ayrica `required_games` (Acklam `_norm_ppf`, alfa = 0,05 tek
+yonlu, guc = 0,80) eklendi: m = 0,1115, sigma = 2,9960 -> **4464**.
+Onaylanmis sayi **4337**; %3 fark hicbir hukmu degistirmez, ikisi de
+raporlanir.
+
+**R-T22 `Final_Report_ThreeLines`.** `stage_r_f_report.json` **tam olarak uc
+satir** (`moveQuality`, `cube`, `gameStrength`) tasir; her satirda `budget`
+(dolu metin) ve `elapsedSeconds` (pozitif tamsayi) zorunlu.
+`elapsedSecondsTotal` satirlarin toplami olmali. Oyun gucu satirinin
+`verdictLabel`'i `equivalence_verdict` cagrisinin sonucuyla **ayni** olmali
+(`daha-kotu`). Ust duzey `verdict` = `karsilanmadi`.
+
+**Butce ve sure (R-T22 icin eklendi).** Hamle kalitesi butcesi "ER <= gnubg
+2-ply seviyesi (taban 0,0013)", ~3 sa 25 dk; kup butcesi "kup ER <= 0,02",
+~20 dk; oyun gucu butcesi "H0: ppg_fark <= -m, m = 0,1115, 4337 oyun",
+~3 sa 20 dk. Toplam **25 500 s (~7 sa 5 dk)**.
+
+**Test sayisi.** 1497 -> **1505** (8 yeni: `test_stage_r_f.py`); §6 toplami
+1982 -> **1990**. `test_docs_consistency.py`, `PHASES.md` §6,
+`ARCHITECTURE.md` §51.5 ve `ml/artifacts/stage_d_report.md` guncellendi.

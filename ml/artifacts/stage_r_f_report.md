@@ -9,11 +9,16 @@ satırdır** ve satırlar **toplanmaz** (madde 4).
 
 ## Üç satırlık nihai rapor
 
-| # | Satır | Ölçüm | Hedef | Sonuç |
-|---|---|---|---|---|
-| 1 | **Hamle kalitesi** | politika ER **0,0111** [0,0077; 0,0152], search1 **0,0139** [0,0101; 0,0185] (gnubg 2-ply hakem, 300 pozisyon) | gnubg 2-ply seviyesi | ❌ **Eşdeğer değil.** gnubg 0-ply 0,0062, gnubg 1-ply 0,0044 → model **gnubg 0-ply seviyesinde** |
-| 2 | **Küp** | küp ER **0,0821** (3 tohum, 400 vaka) | 0,02 | ❌ **Karşılanmadı.** Hedefin **4,1 katı** |
-| 3 | **Oyun gücü** | ppg **−0,2445** [−0,3055; −0,1835] (gnubg 2-ply'a karşı, 2000 oyun) | `H0: ppg_fark ≤ −m`, m = 0,1115 | ❌ **Eşdeğerlik kanıtlanmadı.** Üst sınır −0,1835 < −0,1115 → **daha kötü** |
+| # | Satır | Ölçüm | Bütçe | Sonuç | Süre |
+|---|---|---|---|---|---|
+| 1 | **Hamle kalitesi** | politika ER **0,0111** [0,0077; 0,0152], search1 **0,0139** [0,0101; 0,0185] (gnubg 2-ply hakem, 300 pozisyon) | ER ≤ gnubg 2-ply seviyesi (taban 0,0013) | ❌ **Eşdeğer değil.** gnubg 0-ply 0,0062, gnubg 1-ply 0,0044 → model **gnubg 0-ply seviyesinde** | ~3 sa 25 dk |
+| 2 | **Küp** | küp ER **0,0821** (3 tohum, 400 vaka) | küp ER ≤ 0,02 | ❌ **Karşılanmadı.** Hedefin **4,1 katı** | ~20 dk |
+| 3 | **Oyun gücü** | ppg **−0,2445** [−0,3055; −0,1835] (gnubg 2-ply'a karşı, 2000 oyun) | `H0: ppg_fark ≤ −m`, m = 0,1115, 4337 oyun | ❌ **`daha-kotu`.** Üst sınır −0,1835 < −0,1115 | ~3 sa 20 dk |
+
+**Toplam gerçekleşen süre: ~7 sa 5 dk** (25 500 s). Üç satırın hiçbiri
+bütçesini karşılamadı; kapı **ölçümün geçerliliğidir**, sayısal ER hedefi
+değil (Faz 7 v2.5 §6 notu) — bu üç satır ölçümü geçerli kılar, hedefi
+karşılamaz.
 
 **Rapor dili (madde 5).** "gnubg 4-ply'a göre eşdeğer" **denmez**;
 "eşdeğerlik kanıtlanmadı" denir. "İnsan şampiyonu yendik" **denmez**.
@@ -116,11 +121,12 @@ Eşleştirilmiş zar + renk takası, küpsüz para oyunu, 10 paralel süreç.
 
 **İddia testi.** `H0: ppg_fark ≤ −m`, m = **0,1115** (F7-79: gnubg 0-ply vs
 2-ply = −0,2229 ppg'nin yarısı). GA'nın **üst** sınırı −0,1835, yani
-−m = −0,1115'in **altında**. Sonuç: **eşdeğerlik kanıtlanmadı**; model
-gnubg 2-ply'dan m'den fazla kötü.
+−m = −0,1115'in **altında**. `ppg_measure.equivalence_verdict` bu durumda
+**`daha-kotu`** döndürür: eşdeğerlik kanıtlanmadı, **kötülük kanıtlandı**.
 
-**Güç borcu.** m = 0,1115 ve σ = 2,9960 için gereken oyun **4337**; koşulan
-**2000** → güç borcu **%46**. Yine de GA sıfırı ve −m'i dışladığı için
+**Güç borcu.** m = 0,1115 ve σ = 2,9960 için onaylanmış gereken oyun
+**4337**; standart formül (α = 0,05 tek yönlü, güç 0,80) **4464** verir —
+%3 fark, hiçbir hükmü değiştirmez. Koşulan **2000** → güç borcu **%46**. Yine de GA sıfırı ve −m'i dışladığı için
 "eşdeğer değil" hükmü sağlam; "ne kadar kötü" tahmini ±0,06 ppg
 belirsizlikle okunmalı.
 
