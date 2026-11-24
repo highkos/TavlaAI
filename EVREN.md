@@ -247,3 +247,91 @@ gnubg icin harcama.
 | antisimetri kapisi dusuk | `--symmetry` unutulmus | bayragi ekle; artirimla duzeltmeye calisma |
 | `resume` sifirdan basladi | `train_checkpoint.pt` yok | `--checkpoint-every > 0` ile baslat |
 | ppg `MatchError: denetim noktasi baska kosuya ait` | farkli model/seed | `--restart` veya yeni `--checkpoint` yolu |
+
+---
+
+## 9. 100k veri ile xlarge tekrar denemesi (hazir kosu plani)
+
+Bu bolum, "xlarge ppg'de medium'dan iyi cikmadi" dalinin hazir planidir.
+Yerel makinede 30k pozisyonla xlarge ile medium arasinda anlamli fark
+cikmadi (en kucuk p = 0.1880). Veri eksikligi en olasi nedendir; bu yuzden
+veri 100k'ya cikarilip xlarge tekrar denenir.
+
+### 9.1 Veri uretimi (CPU, GPU harcamaz)
+
+Etiketleme CPU'da ve gnubg ile yapilir; GPU'yu buna harcama. Betik hazir:
+
+```powershell
+# 12 dilim x 8335 pozisyon = 100 020 pozisyon, gnubg 2-ply, --dists acik
+pwsh -File ml\runs\capacity100k_rd\run_label.ps1
+```
+
+Cikti: `ml\runs\capacity100k_rd\policy_100k_rd.npz` + `merge.json`.
+`merge.json` icindeki `stats.count` 100 020 olmali; `hasDist` ve
+`hasCandEquity` `true` olmali. Degilse egitime baslama.
+
+Yerel sure: 30k icin ~2.5 saat idi, 100k icin ~8-9 saat (12 paralel dilim).
+
+### 9.2 Egitim (GPU)
+
+```powershell
+python ml\capacity_train.py sweep `
+  --data ml\runs\capacity100k_rd\policy_100k_rd.npz `
+  --profiles medium,large,xlarge `
+  --seeds 0,1,2,3,4 `
+  --out ml\runs\capacity100k_rd_sweep `
+  --steps 5000 --lr 1e-3 --batch 256 `
+  --value-weight 0.5 --dist-weight 0.5 --policy-temperature 0.1 `
+  --weight-decay 1e-4 --lr-schedule cosine --lr-final-ratio 0.1 `
+  --symmetry --symmetry-mode higgins `
+  --checkpoint-every 500 --skip-existing `
+  --measure --corpus ml\artifacts\reference_corpus_v2.json --stride 3 --limit 300
+```
+
+Notlar:
+
+* `--batch 256` GPU icin; yerelde 64 kullaniliyordu. Ayni `--lr` ile
+  karsilastirma yapma — batch degisince etkin ogrenme orani degisir. Ya
+  `--batch 64` ile devam et ya da 100k kosusunun **tamamini** 256 ile yap.
+* `--symmetry-mode higgins` zorunlu: `basis` valTop1'de 0.10+ kaybediyor,
+  duz model ise antisimetri kapisini dusuruyor (F7-120).
+* `--skip-existing` + `--checkpoint-every 500` ile kesilen kosu kaldigi
+  yerden devam eder. GPU saati parayla alindigi icin bu iki bayrak acik.
+* `--measure` sonunda `antisymmetry.py` adimi kendi varsayilan korpusunu
+  kullanir ve `--corpus` kabul etmez. Takilirsa taramayi durdurup kapıyı
+  ayri kos:
+
+```powershell
+python ml\antisymmetry.py measure `
+  --model ml\runs\capacity100k_rd_sweep\xlarge\seed0\model.onnx `
+  --stride 10 --limit 120
+```
+
+### 9.3 Karar kurali (kosudan ONCE sabitlenir)
+
+1. Tohum bazinda `valTop1` ile **en iyi xlarge tohumunu** sec (ER'ye bakmadan).
+   Bu, tohum secme yanliligini onler.
+2. O modelle ppg olc (asagidaki komut). `m = 0.1115` ppg esigi gecerlidir.
+3. Karar:
+   * ppg farki CI'si `-m` uzerindeyse → xlarge'a gec.
+   * CI `-m` ile `+m` arasindaysa → esdeger; **medium'da kal** (daha ucuz).
+   * CI `+m` altindaysa → xlarge daha kotu; medium'da kal, veri buyutmeyi durdur.
+
+```powershell
+python ml\vs_gnubg.py `
+  --model ml\runs\capacity100k_rd_sweep\xlarge\seed0\model.onnx `
+  --path search1 --gnubg-plies 2 --games 4400 --workers 10 `
+  --seed 2026 --checkpoint ml\runs\capacity100k_rd_sweep\ppg_xlarge.ckpt.jsonl `
+  --out ml\artifacts\ppg_xlarge_100k_s0_2ply.json
+```
+
+### 9.4 GPU maliyet beklentisi
+
+| is | GPU saati |
+| --- | --- |
+| 3 profil x 5 tohum x 5000 adim, 100k veri | 2–5 |
+| on-kontrol | < 0.05 |
+| ppg 4400 oyun | 0 (CPU) |
+
+Once **on-kontrol** calistir (`python ml\preflight.py --require-gpu ...`);
+`HAZIR` cikmadan ucretli GPU'yu baslatma.
