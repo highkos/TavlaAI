@@ -1,0 +1,82 @@
+{
+  "diagnostic1500": [
+    {
+      "params": 156423,
+      "valTop1": 0.7827,
+      "valValueMse": 0.01686,
+      "variant": "plain"
+    },
+    {
+      "params": 131619,
+      "valTop1": 0.6614,
+      "valValueMse": 0.05851,
+      "variant": "sym-qminus-ew32"
+    },
+    {
+      "params": 158211,
+      "valTop1": 0.6668,
+      "valValueMse": 0.05649,
+      "variant": "sym-qminus-ew128"
+    },
+    {
+      "params": 160291,
+      "valTop1": 0.7527,
+      "valValueMse": 0.02737,
+      "variant": "sym-full-ew32"
+    },
+    {
+      "params": 186883,
+      "valTop1": 0.7468,
+      "valValueMse": 0.02904,
+      "variant": "sym-full-ew128"
+    },
+    {
+      "params": 156423,
+      "valTop1": 0.7791,
+      "valValueMse": 0.02607,
+      "variant": "higgins"
+    }
+  ],
+  "fullRecipe5000": [
+    {
+      "antisymmetryCorr": -0.9436281231892794,
+      "arch": null,
+      "er": {
+        "policy": 0.01188,
+        "search1": 0.01545,
+        "value": 0.01825
+      },
+      "mode": "plain",
+      "params": 156423,
+      "path": "capacity30k_rd_sweep/medium/seed0",
+      "valTop1": 0.8157280906364545,
+      "valValueMse": 0.013294333854292342
+    },
+    {
+      "antisymmetryCorr": -0.9999999999999915,
+      "arch": "sym-221-256-256-128",
+      "er": null,
+      "mode": "basis",
+      "params": 131619,
+      "path": "sym_medium_sweep/seed0",
+      "valTop1": 0.7000999666777741,
+      "valValueMse": 0.046243437257077406
+    },
+    {
+      "antisymmetryCorr": -0.9999999999999971,
+      "arch": "higgins-221-256-256-128",
+      "er": {
+        "policy": 0.017257,
+        "search1": 0.015233,
+        "value": 0.026783
+      },
+      "mode": "higgins",
+      "params": 156423,
+      "path": "hig_medium_sweep/seed0",
+      "valTop1": 0.7994001999333555,
+      "valValueMse": 0.02299153900114706
+    }
+  ],
+  "note": "F7-120: renk takasi antisimetrisi icin uc kurulumun karsilastirmasi. Ust blok 1500 adimlik teshis (medium, tohum 0); alt blok 5000 adimlik tam recete.",
+  "reportVersion": 1
+}

@@ -71,12 +71,21 @@ def train_profile(
     quiet: bool = False,
     policy_temperature: float = 0.0,
     select_temperature: bool = False,
+    symmetry: bool = False,
+    symmetry_mode: str = "basis",
+    checkpoint: Path | None = None,
+    checkpoint_every: int = 0,
+    resume: bool = False,
 ) -> tuple[Any, dict[str, Any], dict[str, Any]]:
     """Bir profili egitir; ``(model, report, checkpoint_state)`` dondurur.
 
     ``policy_temperature > 0`` ise R-04 liste bazli kaybi kullanilir; bu kip
     veri kumesinde aday basina equity (``cand_equity``) gerektirir.
     ``select_temperature`` ise T'yi dogrulama bolmesinde secer (R-04).
+    ``symmetry`` ise mimari antisimetri kullanilir (F7-116): renk takasi
+    kusuru **tanim geregi** sifirdir, egitim artirimi gerekmez.
+    ``symmetry_mode`` hangi antisimetrik kurulumu secistir (``basis`` veya
+    ``higgins``).
     """
     import torch  # noqa: PLC0415
 
@@ -95,6 +104,8 @@ def train_profile(
         output_version=2,
         profile=profile,
         rank_head=rank_weight > 0,
+        symmetry=symmetry,
+        symmetry_mode=symmetry_mode,
     )
 
     def progress(step: int, total: int, loss: float) -> None:
@@ -138,6 +149,9 @@ def train_profile(
         lr_final_ratio=lr_final_ratio,
         policy_temperature=policy_temperature,
         progress=progress,
+        checkpoint=checkpoint,
+        checkpoint_every=checkpoint_every,
+        resume=resume,
     )
     elapsed = time.time() - started
     if temperature_report is not None:
@@ -147,6 +161,8 @@ def train_profile(
             "profile": profile,
             "params": int(parameter_count(model)),
             "hidden": list(CAPACITY_PROFILES[profile]),
+            "symmetry": bool(symmetry),
+            "arch": model.arch,
             "device": device,
             "data": str(data),
             "elapsedSeconds": round(elapsed, 2),
@@ -157,19 +173,32 @@ def train_profile(
         "model": model.state_dict(),
         "profile": profile,
         "outputVersion": 2,
+        "symmetry": bool(symmetry),
         "capacityTrain": {k: v for k, v in report.items() if k != "history"},
     }
     return model, report, state
 
 
 def export_profile(
-    state: dict[str, Any], *, profile: str, out_path: Path, model_version: int
+    state: dict[str, Any],
+    *,
+    profile: str,
+    out_path: Path,
+    model_version: int,
+    symmetry: bool = False,
+    symmetry_mode: str = "basis",
 ) -> dict[str, Any]:
-    """Denetim noktasini ONNX'e yazar ve sayisal pariteyi dogrular."""
+    """Egitilmis durumu ONNX'e yazar ve parite kontrolu yapar."""
     import export_onnx  # noqa: PLC0415
     from model import CAPACITY_PROFILES, VECTOR_SIZE, build_model  # noqa: PLC0415
 
-    model = build_model(VECTOR_SIZE, output_version=2, profile=profile)
+    model = build_model(
+        VECTOR_SIZE,
+        output_version=2,
+        profile=profile,
+        symmetry=symmetry,
+        symmetry_mode=symmetry_mode,
+    )
     model.load_state_dict(_strip_rank_head(state["model"]))
     model.eval()
 
@@ -184,6 +213,8 @@ def export_profile(
     parity = export_onnx.parity_check(model, str(out_path), output_version=2)
     parity["profile"] = profile
     parity["hidden"] = list(CAPACITY_PROFILES[profile])
+    parity["symmetry"] = bool(symmetry)
+    parity["arch"] = model.arch
     parity["modelVersion"] = int(model_version)
     parity_path = Path(str(out_path) + ".parity.json")
     parity_path.write_text(json.dumps(parity, indent=2, sort_keys=True), encoding="utf-8")
@@ -658,9 +689,34 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--value-weight", type=float, default=0.5)
     run.add_argument("--dist-weight", type=float, default=0.0)
     run.add_argument("--rank-weight", type=float, default=0.0)
+    run.add_argument(
+        "--symmetry",
+        action="store_true",
+        help="mimari antisimetri (Higgins agirlik simetrisi, F7-116): renk takasi "
+        "kusuru tanim geregi sifir; egitim artirimi gerekmez",
+    )
+    run.add_argument(
+        "--symmetry-mode",
+        choices=["basis", "higgins"],
+        default="basis",
+        help="antisimetrik kurulum: 'higgins' = duz govde + cikti izdusumu "
+        "(duz modelle ayni ifade gucu, iki ileri gecis); 'basis' = V-/V+ izdusumlu "
+        "tek gecis (varsayilan)",
+    )
     run.add_argument("--val-fraction", type=float, default=0.1)
     run.add_argument("--patience", type=int, default=5)
     run.add_argument("--eval-every", type=int, default=500)
+    run.add_argument(
+        "--checkpoint-every",
+        type=int,
+        default=0,
+        help="her N adimda denetim noktasi yaz (0 = kapali; F7-118)",
+    )
+    run.add_argument(
+        "--resume",
+        action="store_true",
+        help="<out-dir>/train_checkpoint.pt varsa oradan devam et (F7-118)",
+    )
     run.add_argument("--weight-decay", type=float, default=1e-4)
     run.add_argument("--lr-schedule", default="cosine", choices=["none", "cosine"])
     run.add_argument("--lr-final-ratio", type=float, default=0.1)
@@ -683,6 +739,18 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS)
     run.add_argument("--plies", type=int, default=2)
     run.add_argument("--limit", type=int, default=None)
+    run.add_argument(
+        "--stride",
+        type=int,
+        default=1,
+        help="olcumde her N'inci vaka (faz temsili alt orneklem; korpus fazlara gore sirali)",
+    )
+    run.add_argument(
+        "--timeout",
+        type=float,
+        default=None,
+        help="gnubg hakem cagrisi basina saniye",
+    )
     run.add_argument("--gnubg", type=Path, default=None)
     run.add_argument("--json", type=Path, default=None)
     run.add_argument("--quiet", action="store_true")
@@ -763,9 +831,31 @@ def build_parser() -> argparse.ArgumentParser:
     swp.add_argument("--value-weight", type=float, default=0.5)
     swp.add_argument("--dist-weight", type=float, default=0.0)
     swp.add_argument("--rank-weight", type=float, default=0.0)
+    swp.add_argument(
+        "--symmetry",
+        action="store_true",
+        help="mimari antisimetri (Higgins agirlik simetrisi, F7-116)",
+    )
+    swp.add_argument(
+        "--symmetry-mode",
+        choices=["basis", "higgins"],
+        default="basis",
+        help="antisimetrik kurulum (varsayilan: basis)",
+    )
     swp.add_argument("--val-fraction", type=float, default=0.1)
     swp.add_argument("--patience", type=int, default=5)
     swp.add_argument("--eval-every", type=int, default=500)
+    swp.add_argument(
+        "--checkpoint-every",
+        type=int,
+        default=0,
+        help="her N adimda denetim noktasi yaz (0 = kapali; F7-118)",
+    )
+    swp.add_argument(
+        "--resume",
+        action="store_true",
+        help="profil klasorundeki train_checkpoint.pt varsa oradan devam et (F7-118)",
+    )
     swp.add_argument("--weight-decay", type=float, default=1e-4)
     swp.add_argument("--lr-schedule", default="cosine", choices=["none", "cosine"])
     swp.add_argument("--lr-final-ratio", type=float, default=0.1)
@@ -787,6 +877,18 @@ def build_parser() -> argparse.ArgumentParser:
     swp.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS)
     swp.add_argument("--plies", type=int, default=2)
     swp.add_argument("--limit", type=int, default=None)
+    swp.add_argument(
+        "--stride",
+        type=int,
+        default=1,
+        help="olcumde her N'inci vaka (faz temsili alt orneklem; korpus fazlara gore sirali)",
+    )
+    swp.add_argument(
+        "--timeout",
+        type=float,
+        default=None,
+        help="gnubg hakem cagrisi basina saniye",
+    )
     swp.add_argument("--gnubg", type=Path, default=None)
     swp.add_argument("--json", type=Path, default=None)
     swp.add_argument("--quiet", action="store_true")
@@ -836,6 +938,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
         quiet=args.quiet,
         policy_temperature=float(getattr(args, "policy_temperature", 0.0) or 0.0),
         select_temperature=bool(getattr(args, "select_temperature", False)),
+        symmetry=bool(getattr(args, "symmetry", False)),
+        symmetry_mode=str(getattr(args, "symmetry_mode", "basis") or "basis"),
+        checkpoint=out_dir / "train_checkpoint.pt",
+        checkpoint_every=int(getattr(args, "checkpoint_every", 0) or 0),
+        resume=bool(getattr(args, "resume", False)),
     )
 
     import torch  # noqa: PLC0415
@@ -848,7 +955,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     onnx_path = out_dir / "model.onnx"
     parity = export_profile(
-        state, profile=args.profile, out_path=onnx_path, model_version=args.model_version
+        state,
+        profile=args.profile,
+        out_path=onnx_path,
+        model_version=args.model_version,
+        symmetry=bool(getattr(args, "symmetry", False)),
+        symmetry_mode=str(getattr(args, "symmetry_mode", "basis") or "basis"),
     )
 
     measurement = None
@@ -861,6 +973,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
             plies=args.plies,
             limit=args.limit,
             quiet=args.quiet,
+            timeout=float(getattr(args, "timeout", 0.0) or 0.0) or None,
+            stride=int(getattr(args, "stride", 1) or 1),
         )
 
     row = summarize(report, measurement)

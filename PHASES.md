@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1508** | ~10 dk | ✅ 1508/1508 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **1993** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1552** | ~10 dk | ✅ 1552/1552 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **2037** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -5193,3 +5193,296 @@ ve alt kümeler tutarlı; olasılık satırı yoksa `None`. Test sayısı 1505 �
 **Sınır.** `hint` çıktısındaki olasılıklar **cubeless** ve **seçili ply**
 içindir; küp kararı için kullanılamaz. `eval` yolundaki `dists=True` ile aynı
 sayılar beklenir ama bu ayrı bir doğrulama ister (yapılmadı).
+
+## 44. Faz 7-S2 — `medium` / `large` / `xlarge` çok tohumlu karşılaştırma (R-D tarifiyle)
+
+**Neden.** §38 karşılaştırması **tek tohumla** koşuldu ve rapor bunu açık madde
+bıraktı: "`large`−`medium` farkı (%7,3) tohum gürültüsünden büyük olduğu
+**gösterilmedi**". R-E kuralı "tek tohum karar için yetmez" der.
+
+**Önceki tarama geçersiz.** İlk denemede tarama `policy-temperature 0,0` ve
+R-D etiketli olmayan `capacity30k` veri kümesiyle koşuldu. O koşuda
+`medium`→`xlarge` için `value` p=0,0092 ve `search1` p=0,0114 "anlamlı"
+çıkmıştı. Bu bir **tarif yanlılığıydı**: `xlarge` liste tabanlı KL kaybı
+olmadan eğitilince politika kafası zayıf kalıyor, `search1` de onu miras
+alıyordu. R-D tarifiyle (`policy-temperature 0,1` + `capacity30k_rd`) fark
+kayboldu. v1 raporu bu nedenle geçersiz kılındı.
+
+**Yöntem.** `ml/runs/capacity30k_rd/policy_30k_rd.npz` (30.006 pozisyon /
+664.778 aday, gnubg 2-ply etiketli), 3 profil × 3 tohum, 5000 adım, batch 64,
+lr 1e-3 cosine (son oran 0,1), wd 1e-4, patience 6, value 0,5 / dist 0,5 /
+**rank 0,0**, **policy-temperature 0,1**. Ölçüm: gnubg 2-ply hakem, **300 vaka,
+`--stride 3`** (contact 200 / bar 84 / race 16). `--limit` tek başına faz
+yanlıdır; bunun için `capacity_train.py`'nin `run`/`sweep` alt komutlarına
+`--stride` ve `--timeout` eklendi (testler 336–337).
+
+**Yeniden üretilebilirlik.** Yeni taramanın `large/seed0`'ı mevcut R-D
+`large/seed0` modeliyle **bit-bit aynı** (`valTop1` 0,8223925358213928;
+politika ER 0,011117; değer ER 0,017263; search1 ER 0,013930). Bu, tarifin
+doğru olduğunu ve mevcut ppg tabanının doğrudan karşılaştırılabilir olduğunu
+kanıtlar.
+
+**Sonuç (3 tohum ortalaması).**
+
+| Profil | Parametre | Politika ER | Değer ER | search1 ER | `valTop1` |
+|---|---|---|---|---|---|
+| `medium` | 156.423 | 0,012740 ± 0,001084 | 0,019375 ± 0,001959 | 0,014395 ± 0,001039 | 0,8130 |
+| `large` | 642.567 | 0,012511 ± 0,001246 | 0,018559 ± 0,001259 | 0,014373 ± 0,000751 | 0,8201 |
+| `xlarge` | 1.805.319 | 0,012217 ± 0,001046 | 0,018153 ± 0,000344 | 0,013859 ± 0,000549 | 0,8259 |
+
+Sıralama üç yolda da `medium` > `large` > `xlarge` (ER düşük = iyi) **ama
+farklar tohum gürültüsünün içinde**: profiller arası fark %1–6, tohumlar arası
+sd %8–15.
+
+**Eşleşmiş bootstrap (10.000 yeniden örnekleme).** Dokuz karşılaştırmanın
+(3 çift × 3 yol) **hiçbiri anlamlı değil**; en küçük p 0,1880
+(`medium`→`large` değer). Doğru tarifle kapasite farkı **ölçülemiyor**.
+
+**Karar gecikmesi** (C# `MatchBench decision-latency`, 30 pozisyon, CPU):
+
+| Profil | depth 1 p95 | depth 2 p95 |
+|---|---|---|
+| `medium` | 0,0667 s | 8,4087 s |
+| `large` | 0,2183 s | 11,5479 s |
+| `xlarge` | 0,5746 s | 32,0165 s |
+
+**Test 96 kararı.** İki bacak: (a) göreli değer-ER kazancı ≥ %15 **ve**
+(b) depth 2 p95 ≤ 2,0 s. (a) `medium`→`large` −%4,2 / `medium`→`xlarge` −%6,3 →
+**ikisi de düştü**. (b) `medium` (8,41 s) dahil **hiçbir profil geçmedi**.
+
+**Kazanan yok; `medium` üretim varsayılanı kalır.** Bu, §38'in `winner: null`
+sonucunu 3 tohumla **doğrular**. (b) bacağının hiçbir profilde sağlanmaması, o
+bacağın kapasite değil **donanım/bütçe uyumsuzluğu** olduğunu gösterir: 2,0 s
+sınırı bu makinede depth 2 için ulaşılamaz.
+
+**Doğruluk kazananı `xlarge`.** Üç yolda da en düşük ER ve en yüksek
+`valTop1`, ama hiçbir fark anlamlı değil. Yorum: "kapasite ölçeklemesi para
+etmiyor" değil, "**30 bin pozisyonda** para etmiyor" — 30k pozisyon 1,8M
+parametreyi doyurmuyor. Kapasiteyi büyütmenin önkoşulu veriyi büyütmektir.
+
+**ppg için seçilen model.** `ml/runs/capacity30k_rd_sweep/xlarge/seed0/model.onnx`.
+Seçim ölçütü **eğitim-zamanı** `valTop1` (0,8294 — dokuz modelin en yükseği),
+yani ER sonuçları görülmeden uygulanabilen bir kural. Tohum bazında ER farkları
+gürültü içinde; ER'a göre tohum seçmek seçim yanlılığı olurdu.
+
+**Antisimetri.** Dokuz modelin hepsi −0,9502…−0,9436; eşik |corr| ≥ 0,99.
+Kapasite bu kusuru **düzeltmiyor** — kusur mimaride.
+
+**Artefaktlar.** `ml/artifacts/stage_large_xlarge_multiseed.json` / `.md`;
+ppg koşusu bitince `ppg_xlarge_s0_2ply` artefaktı eklenecek.
+
+**Testler.** 336–337 (`test_capacity_profiles.py`). Test sayısı 1508 → **1510**;
+§6 toplamı 1993 → **1995**.
+
+## 45. Faz 7-S3 — Mimari antisimetri, ayri kup agi, denetim noktalari ve EVREN hazirligi (F7-116 – F7-119)
+
+**Neden.** §44 iki açık bıraktı: (1) renk takası kusuru dokuz modelin
+**hepsinde** var ve kapasite büyütmek düzeltmiyor; (2) `xlarge` doğruluk
+kazananı ama fark anlamsız, yani "30k pozisyon 1,8M parametreyi doyurmuyor".
+Kullanıcı üç mimari direktif verdi: antisimetriyi **mimari kısıtla** çöz
+(eğitim artırımı **değil**), küp kararlarını **ayrı ağla** öğren, ve her şeyi
+**EVREN GPU** platformunda sürdürülebilir hâle getir — EVREN pahalı olduğu için
+hazırlık hatasız olmalı.
+
+### 45.1 Higgins ağırlık simetrisi (F7-116)
+
+`T = flip_perspective` bir involusyondur (`T² = I`), bu yüzden 221 boyutlu giriş
+uzayı iki dik alt uzaya ayrılır: `V−` (109) ve `V+` (112). `Q_minus [221,109]` /
+`Q_plus [221,112]` sabit ortonormal tabanlar buffer olarak kayıtlı ve ONNX'e
+gömülü.
+
+- **Tek kol** `u = x @ Q_minus`: **bias'sız** doğrusal katmanlar + `tanh` →
+  `h(Tx) = −h(x)` **tam**.
+- **Çift kol** `s = x @ Q_plus`: serbest GELU MLP → `e(Tx) = e(x)`.
+- **Kafalar bias'sız**; `probs = softmax(cat([a+b, a−b]))` (`a` çift, `b` tek) →
+  `probs(Tx) = Π probs(x)`, equity `2b₀+4b₁+6b₂` **tam** tek.
+
+`GELU`/`SiLU` tek kolda **kullanılamaz**: `g(z) − g(−z) == z` olduğu için kol
+doğrusala çöker. `tanh` bu tuzağa düşmez ve TD-Gammon'un sigmoid ailesindendir.
+
+**Doğrulama.** Tabanlar ortonormal 6e−8, çapraz dik 1,3e−8, tamlık 6e−8; flip
+haritası `flip_perspective` ile fark **0,0**; değer/politika antisimetrisi
+3,35e−8; olasılık permütasyonu 5,96e−8. `medium` simetrik **131.619**
+parametre (düz V2 156.423, ~%16 azalma).
+
+**Kapı ilk kez geçti.** 300 adımlık duman testi: `corr = −1.0000`,
+`ER farkı = 0,0000 [0,0000; 0,0000]` → **GEÇTİ**. Dokuz düz model
+−0,9502…−0,9436 aralığındaydı. Kusur gerçekten mimarideydi.
+
+**Arayüz.** `build_model(..., symmetry=True)`; `capacity_train.py`
+`run`/`sweep` → `--symmetry`. ONNX sözleşmesi V2 ile **aynı** (iki çıktı), yani
+C# tarafında değişiklik gerekmez.
+
+### 45.2 Ayrı küp ağı (F7-117)
+
+F7-104 hamle kalitesinin küp kararına **transfer olmadığını** gösterdi; TD-Gammon
+da küpü öğrenmedi. `ml/cube_net.py`:
+
+- **Girdi**: 221'lik **pre-roll** vektör. Zar beklentisi ağın **içinde** öğrenilir;
+  `EquityCubeAdvisor.DiceAveraged`'in (Faz 6 §10.2) 21-zar maliyeti ortadan kalkar.
+- **Çıktı**: üç cubeful equity — `noDouble`, `doublePass`, `doubleTake`.
+- **Antisimetri**: üç çıktı da equity olduğu için `f(Tx) = −f(x)` **tanım gereği**
+  (`SymmetricBackbone` tek kol + bias'sız çıktı katmanı).
+- **Karar**: `shouldDouble = min(doublePass, doubleTake) > noDouble`. **`min`**,
+  çünkü rakip en kötü cevabı seçer; `doublePass` zaten `cubeValue`'a eşit olduğundan
+  `min` ikisini birlikte temsil eder (`cube_er.double_value` ile aynı).
+- **Etiket**: gnubg küp analizi; tahta × 4 maç bağlamı × 2 küp sahipliği = pozisyon
+  başına 8 vaka, böylece maç-farkındalık öğrenilir.
+
+**İlk gerçek koşu.** 1000 pozisyon → **8.000 vaka** etiketlendi (gnubg 2-ply,
+8 işçi). Dağılım: 6.658 `no-double` / 1.342 `double`; kabul oranı 0,7811;
+`noDouble` ortalaması 0,0424, `doubleTake` ortalaması −0,3781. Eğitim ve ölçüm
+sonuçları `ml/runs/cube/` altında.
+
+### 45.3 Denetim noktaları ve ppg sessiz ölümünün kök nedeni (F7-118)
+
+**Kök neden.** İki ppg koşusu (175/2200 ve 575/2200 çiftte) sessizce öldü.
+Sebep **PowerShell**'di: `$ErrorActionPreference = "Stop"` altında yerel bir
+komutun **stderr** çıktısı sonlandırıcı hata sayılır. `vs_gnubg.py` ilerlemeyi
+stderr'e yazar; boru hattı ilk ilerleme satırından hemen sonra öldü. Çözüm:
+`"Continue"` + `& python @cliArgs *>> $log` (`Tee-Object` değil). **EVREN
+hazırlığı için en önemli tek ders.**
+
+**ppg denetim noktası.** JSONL, çift başına bir satır, her satırdan sonra
+`flush()` + `os.fsync()`. Anahtar `{sürüm, model, path, gnubgPlies, seed,
+maxPlies}`; uyuşmazsa **hata verir** (iki koşu sessizce karışmaz). Çiftler
+sıradan bağımsız (`default_rng([seed, pair])`), yani devam **birebir** aynı
+sonucu verir.
+
+**Eğitim denetim noktası.** `train_policy_head(..., checkpoint, checkpoint_every,
+resume)`: adım, ağırlıklar, Adam, scheduler, geçmiş, en iyi durum ve **torch RNG
+durumu** kaydedilir; atomik yazım (`.tmp` + `os.replace`). `checkpoint_every = 0`
+tamamen kapatır. `capacity_train.py` → `--checkpoint-every` / `--resume`.
+
+### 45.4 EVREN ön kontrolü (F7-119)
+
+`ml/preflight.py` hiçbir şey eğitmez; PASS/FAIL tablosu basar, FAIL'de çıkış
+kodu 1. Kontroller: Python ≥ 3.10; paketler; torch CUDA derlemesi; GPU görünürlüğü;
+**gerçek GPU matmul**; `onnxruntime` `CUDAExecutionProvider`; gnubg (**WARN**);
+girdi dosyaları; ≥ 5 GB disk; yazma izni; ve **uçtan uca küçük sınama** (model kur →
+ileri → antisimetri → ONNX yaz → ONNX Runtime paritesi). Sınama gerçek
+`export_profile` yolunu kullanır, yani ihracat zincirindeki her değişiklik
+ön kontrolde yakalanır.
+
+**Yerel sonuç.** `sonuç: HAZIR` (GTX 1650 4 GB, torch 2.5.1+cu121). `onnxruntime`
+CPU sürümü olduğu için `--gpu` ile `onnxruntime:gpu` FAIL olur; EVREN'de
+`onnxruntime-gpu` kurulmalıdır. Kılavuz: `EVREN.md`.
+
+**Testler.** 338–341 (ppg denetim noktası), 342–349 (mimari simetri), 350–351
+(`--symmetry` aktarımı), 352–361 (küp ağı), 362–366 (eğitim denetim noktası),
+367–372 (ön kontrol). Test sayısı 1510 → **1534**; §6 toplamı 1995 → **2019**.
+
+## 46. Faz 7-S4 — Higgins çıktı izdüşümü: antisimetriyi ifade gücünü kaybetmeden çözmek
+
+§45'te mimari antisimetri (`BackgammonNetV3`, `V-`/`V+` izdüşümleri) kuruldu ve
+renk takası korelasyonu **ilk kez** tam olarak −1,0000 çıktı. Ancak aynı koşuda
+doğruluk belirgin biçimde düştü. Bu bölüm o düşüşün nedenini ölçer ve doğru
+kurulumu belirler.
+
+### 46.1 Teşhis: darboğaz izdüşümün kendisi
+
+`ml/runs/diag_sym.py` beş varyantı aynı reçeteyle (medium, 1500 adım, tohum 0,
+R-D listesi) karşılaştırdı:
+
+| Varyant | Parametre | valTop1 | valValueMse |
+|---|---:|---:|---:|
+| `plain` (V2) | 156 423 | **0,7827** | 0,01686 |
+| `sym-qminus-ew32` | 131 619 | 0,6614 | 0,05851 |
+| `sym-qminus-ew128` | 158 211 | 0,6668 | 0,05649 |
+| `sym-full-ew32` | 160 291 | 0,7527 | 0,02737 |
+| `sym-full-ew128` | 186 883 | 0,7468 | 0,02904 |
+
+Çift kolu genişletmek (ew32 → ew128) **hiçbir şey kazandırmıyor**. Tek kolu
+tam girdiye bağlamak 0,09 valTop1 geri getiriyor. Yani sorun bias'sızlık ya da
+`tanh` değil, **`Q_minus` izdüşümünün kendisi**.
+
+**Neden?** Tek kol `u = x @ Q_minus` (109 boyut) üzerinde çalışınca çift
+özelliklerden (pip sayacı, temas bayrağı, maç skoru) **tamamen kopuyor**. Oysa
+tek bir fonksiyonun bu özelliklere ihtiyacı var: örneğin `pip_farkı` çift bir
+özelliktir ama `pip_farkı × temas` tek bir fonksiyon üretir. İzdüşüm bu
+etkileşimi matematiksel olarak imkânsız kılıyor.
+
+### 46.2 `odd_full`'un çürütülmesi (önemli, yanlış yol)
+
+İlk çözüm denemesi tek kolu **tam 221 boyutlu** girdiye bağlamaktı (`odd_full`).
+Gerekçe: bias'sız `Linear` + tek `tanh` zaten `f(-x) = -f(x)` verir. Bu
+**matematiksel olarak yanlıştır** ve ölçümle çürütüldü:
+
+```
+net(x) + net(-x)  = 0.0        (doğru: negasyon altında tek)
+net(x) + net(Tx)  = 1.0369     (yanlış: T altında tek DEĞİL)
+```
+
+`T = flip_perspective` bir **permütasyon/isaret** dönüşümüdür, negasyon değil
+(`Tx ≠ -x`). `f(Tx) = -f(x)` yalnızca `T Q- = -Q-` sağlandığında, yani girdi
+`V-`'ye izdüşürüldüğünde garanti edilir. `odd_full` bu yüzden kaldırıldı;
+`test_375` artık bu tuzağı belgeliyor.
+
+### 46.3 Doğru çözüm: `HigginsNet` (çıktı izdüşümü)
+
+Higgins'in önerisi **ağırlık** simetrisi değil, **çıktı** simetrisidir: tek ağ,
+iki bakıştan değerlendirilir ve sonuçlar birleştirilir. `ml/model.py` içindeki
+`HigginsNet` bunu uygular. `T = flip_perspective`, `Π = (W L)(GW GL)(BW BL)`:
+
+* Tek çıktılar: `g(x) = (f(x) − f(Tx)) / 2` → `g(Tx) = −g(x)`.
+  Değer ve politika logit'i bu yolla üretilir.
+* Çift çıktı: `L(x) = (l(x) + Π l(Tx)) / 2` → `L(Tx) = Π L(x)`,
+  dolayısıyla `probs(Tx) = Π probs(x)`.
+
+Her ikisi de **tanım gereği** tamdır; eğitim artırımı gerekmez. Maliyet iki
+ileri geçiştir (kullanıcı değerlendirmesi: ONNX için ihmal edilebilir).
+
+**Ölçüm (medium, 1500 adım, tohum 0, aynı reçete):**
+
+| Varyant | Parametre | valTop1 | valValueMse | antisimetri |
+|---|---:|---:|---:|---:|
+| `plain` (V2) | 156 423 | 0,7827 | 0,01686 | — |
+| `basis` (`V-` izdüşümü) | 131 619 | 0,6614 | 0,05851 | tam |
+| `higgins` (çıktı izdüşümü) | 156 423 | **0,7791** | 0,02607 | **tam** |
+
+`higgins` düz modelle **istatistiksel olarak aynı** doğrulukta (0,7791 vs
+0,7827) ve antisimetrisi **tam** (logit artığı 0,0; `probs` permütasyon artığı
+0,0). `basis`'e göre +0,118 valTop1.
+
+`valValueMse`'nin 0,01686 → 0,02607 çıkması **beklenen ve istenen** bir
+sonuçtur: hedefin çift bileşeni artık atılıyor. O bileşen zaten kusurun
+kendisiydi.
+
+**ONNX paritesi.** `HigginsNet` ihracı çalışıyor: `maxAbsDeltaValue = 8,94e-08`,
+`maxAbsDeltaPolicyLogit = 4,47e-08`. C# tarafı değişmez (aynı iki çıktı, aynı
+adlar).
+
+### 46.4 Tam reçeteyle doğrulama (5000 adım, medium, tohum 0)
+
+| Ölçüm | plain (V2) | asis | higgins |
+|---|---:|---:|---:|
+| valTop1 | 0,8157 | 0,7001 | 0,7994 |
+| valValueMse | 0,01329 | — | 0,02299 |
+| ER politika | 0,01188 | — | 0,01726 |
+| ER değer | 0,01825 | — | 0,02678 |
+| ER search1 | 0,01545 | — | **0,01523** |
+| antisimetri `corr` | −0,9436 ❌ | −1,0000 ✅ | **−1,0000 ✅** |
+
+`higgins` antisimetri kapısını **geçen tek yüksek doğruluklu** kurulumdur.
+`plain` kapıyı düşürür (−0,9436); `basis` geçer ama valTop1'de 0,1156
+kaybeder. `higgins` o kaybın 0,0993'ünü geri kazanır ve **üretim yolu olan
+search1 ER'sinde düz modelden hafifçe iyidir** (0,01523 vs 0,01545).
+
+Politika ve değer ER'lerinin bir miktar yükselmesi beklenen bir sonuçtur:
+hedefin çift bileşeni atıldığı için 0-ply argmax daha az keskinleşir; buna
+karşılık 1-ply arama bu kaybı telafi eder. Üretimde oynanan yol search1'dir.
+
+### 46.5 Karar
+
+* Üretim varsayılanı **`symmetry_mode = "higgins"`** olur; `basis` korunur
+  (parametre tasarrufu isteyen senaryolar için) ama varsayılan değildir.
+* `odd_full` **kaldırıldı** (yanlış matematik).
+* `capacity_train.py` `run`/`sweep` artık `--symmetry-mode {basis,higgins}`
+  sunar; `train_profile` ve `export_profile` bu seçeneği taşır.
+
+Ayrıntılı tablo: `ml/artifacts/symmetry_modes.md`.
+
+**Testler.** 375 (`T` altında teklik ≠ negasyon altında teklik), 376
+(`HigginsNet` tam antisimetri), 377 (parametre sayısı düz V2 ile eşit),
+378 (bilinmeyen `symmetry_mode` reddi), 379 (`--symmetry-mode` aktarımı). Test sayısı 1545 → **1552**; §6 toplamı
+2030 → **2037**.

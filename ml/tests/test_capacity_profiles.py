@@ -740,3 +740,165 @@ def test_321_measure_profile_omits_stride_when_one(tmp_path, monkeypatch):
     assert len(calls) == 2
     for cmd in calls:
         assert "--stride" not in cmd
+
+def test_336_run_forwards_stride_and_timeout_to_measure(tmp_path, monkeypatch):
+    """``run``/``sweep`` olcumune --stride/--timeout gecmeli (F7-115)."""
+    seen = {}
+
+    def fake_train(*a, **kw):
+        return None, {"params": 1, "profile": "medium"}, {"w": 1}
+
+    def fake_export(
+        state, *, profile, out_path, model_version, symmetry=False, symmetry_mode="basis"
+    ):
+        return {"maxAbsDeltaValue": 0.0, "maxAbsDeltaPolicyLogit": 0.0}
+
+    def fake_measure(onnx_path, **kw):
+        seen.update(kw)
+        return None
+
+    monkeypatch.setattr(capacity_train, "train_profile", fake_train)
+    monkeypatch.setattr(capacity_train, "export_profile", fake_export)
+    monkeypatch.setattr(capacity_train, "measure_profile", fake_measure)
+
+    code = capacity_train.main(
+        [
+            "run",
+            "--data",
+            str(tmp_path / "d.npz"),
+            "--profile",
+            "medium",
+            "--out-dir",
+            str(tmp_path / "out"),
+            "--steps",
+            "1",
+            "--measure",
+            "--stride",
+            "2",
+            "--limit",
+            "500",
+            "--timeout",
+            "90",
+        ]
+    )
+    assert code == 0
+    assert seen["stride"] == 2
+    assert seen["limit"] == 500
+    assert seen["timeout"] == 90.0
+
+
+def test_337_sweep_parser_accepts_stride_and_timeout():
+    args = capacity_train.build_parser().parse_args(
+        [
+            "sweep",
+            "--data",
+            "d.npz",
+            "--profile",
+            "large",
+            "--out-dir",
+            "o",
+            "--stride",
+            "4",
+            "--timeout",
+            "60",
+        ]
+    )
+    assert args.stride == 4
+    assert args.timeout == 60.0
+    default = capacity_train.build_parser().parse_args(
+        ["sweep", "--data", "d.npz", "--profile", "large", "--out-dir", "o"]
+    )
+    assert default.stride == 1
+    assert default.timeout is None
+
+
+def test_350_run_and_sweep_accept_symmetry_flag():
+    """F7-116: ``--symmetry`` hem ``run`` hem ``sweep`` icin kabul edilir."""
+    parser = capacity_train.build_parser()
+    run = parser.parse_args(
+        ["run", "--data", "d.npz", "--profile", "medium", "--out-dir", "o", "--symmetry"]
+    )
+    assert run.symmetry is True
+    sweep = parser.parse_args(
+        ["sweep", "--data", "d.npz", "--profile", "medium", "--out-dir", "o", "--symmetry"]
+    )
+    assert sweep.symmetry is True
+    default = parser.parse_args(
+        ["run", "--data", "d.npz", "--profile", "medium", "--out-dir", "o"]
+    )
+    assert default.symmetry is False
+
+
+def test_351_run_forwards_symmetry_to_train_and_export(monkeypatch, tmp_path):
+    """``--symmetry`` egitime **ve** ihracata ayni sekilde iletilir."""
+    seen: dict[str, object] = {}
+
+    def fake_train(data, **kw):
+        seen["train"] = kw
+        return object(), {"profile": kw["profile"], "params": 1}, {"model": {}}
+
+    def fake_export(
+        state, *, profile, out_path, model_version, symmetry=False, symmetry_mode="basis"
+    ):
+        seen["export"] = symmetry
+        seen["exportMode"] = symmetry_mode
+        return {"maxAbsDeltaValue": 0.0, "maxAbsDeltaPolicyLogit": 0.0}
+
+    monkeypatch.setattr(capacity_train, "train_profile", fake_train)
+    monkeypatch.setattr(capacity_train, "export_profile", fake_export)
+
+    code = capacity_train.main(
+        [
+            "run",
+            "--data",
+            "d.npz",
+            "--profile",
+            "medium",
+            "--out-dir",
+            str(tmp_path),
+            "--symmetry",
+        ]
+    )
+    assert code == 0
+    assert seen["train"]["symmetry"] is True
+    assert seen["export"] is True
+    assert seen["train"]["symmetry_mode"] == "basis"
+    assert seen["exportMode"] == "basis"
+
+def test_379_run_forwards_symmetry_mode_to_train_and_export(monkeypatch, tmp_path):
+    """``--symmetry-mode higgins`` egitime **ve** ihracata ayni sekilde iletilir."""
+    seen: dict[str, object] = {}
+
+    def fake_train(data, **kw):
+        seen["train"] = kw
+        return object(), {"profile": kw["profile"], "params": 1}, {"model": {}}
+
+    def fake_export(
+        state, *, profile, out_path, model_version, symmetry=False, symmetry_mode="basis"
+    ):
+        seen["export"] = symmetry
+        seen["exportMode"] = symmetry_mode
+        return {"maxAbsDeltaValue": 0.0, "maxAbsDeltaPolicyLogit": 0.0}
+
+    monkeypatch.setattr(capacity_train, "train_profile", fake_train)
+    monkeypatch.setattr(capacity_train, "export_profile", fake_export)
+
+    code = capacity_train.main(
+        [
+            "run",
+            "--data",
+            "d.npz",
+            "--profile",
+            "medium",
+            "--out-dir",
+            str(tmp_path),
+            "--symmetry",
+            "--symmetry-mode",
+            "higgins",
+        ]
+    )
+    assert code == 0
+    assert seen["train"]["symmetry"] is True
+    assert seen["train"]["symmetry_mode"] == "higgins"
+    assert seen["export"] is True
+    assert seen["exportMode"] == "higgins"

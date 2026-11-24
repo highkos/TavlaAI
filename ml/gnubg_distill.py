@@ -40,6 +40,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import random
 import sys
 import time
@@ -807,6 +808,9 @@ def train_policy_head(
     lr_final_ratio: float = 0.1,
     policy_temperature: float = 0.0,
     progress: Callable[[int, int, float], None] | None = None,
+    checkpoint: Path | None = None,
+    checkpoint_every: int = 0,
+    resume: bool = False,
 ) -> dict[str, Any]:
     """Politika kafasini gnubg'nin en iyi hamlesine capraz-entropi ile egitir.
 
@@ -988,7 +992,57 @@ def train_policy_head(
     stale = 0
     stopped_early = False
 
-    for step in range(1, steps + 1):
+    # F7-118: adim duzeyinde denetim noktasi. EVREN gibi ucretli platformlarda
+    # bir kesinti tum kosuyu yakmamali. Kayit: adim, agirliklar, optimizer,
+    # scheduler, gecmis, en iyi durum ve torch RNG durumu.
+    start_step = 1
+    resumed_from = 0
+    if checkpoint is not None and resume and Path(checkpoint).exists():
+        saved = torch.load(str(checkpoint), map_location="cpu", weights_only=False)
+        model.load_state_dict(saved["model"])
+        opt.load_state_dict(saved["opt"])
+        if sched is not None and saved.get("sched") is not None:
+            sched.load_state_dict(saved["sched"])
+        history = list(saved.get("history") or [])
+        val_history = list(saved.get("valHistory") or [])
+        best_state = saved.get("bestState")
+        best_val = float(saved.get("bestVal", float("inf")))
+        best_step = int(saved.get("bestStep", 0))
+        stale = int(saved.get("stale", 0))
+        stopped_early = bool(saved.get("stoppedEarly", False))
+        if saved.get("torchRng") is not None:
+            torch.set_rng_state(saved["torchRng"])
+        resumed_from = int(saved.get("step", 0))
+        start_step = resumed_from + 1
+        model.to(device)
+        model.train()
+
+    def _save_checkpoint(step: int) -> None:
+        if checkpoint is None:
+            return
+        target = Path(checkpoint)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "version": 1,
+            "step": int(step),
+            "steps": int(steps),
+            "model": model.state_dict(),
+            "opt": opt.state_dict(),
+            "sched": sched.state_dict() if sched is not None else None,
+            "history": history,
+            "valHistory": val_history,
+            "bestState": best_state,
+            "bestVal": best_val,
+            "bestStep": best_step,
+            "stale": stale,
+            "stoppedEarly": stopped_early,
+            "torchRng": torch.get_rng_state(),
+        }
+        tmp = target.with_suffix(target.suffix + ".tmp")
+        torch.save(payload, str(tmp))
+        os.replace(str(tmp), str(target))
+
+    for step in range(start_step, steps + 1):
         idx = tr_idx_t[torch.randint(0, n_train, (batch,))]
         # Buyuk veri kumelerinde ``[N, L, 221]`` tensori GPU'ya sigmaz; partiler
         # CPU'da indekslenip cihaza tasinir (PCIe maliyeti adim basina ~24 MB).
@@ -1029,6 +1083,8 @@ def train_policy_head(
         history.append(float(loss.detach().to("cpu")))
         if progress:
             progress(step, steps, history[-1])
+        if checkpoint is not None and checkpoint_every > 0 and step % checkpoint_every == 0:
+            _save_checkpoint(step)
 
         if va_idx_t is not None and (step % max(1, eval_every) == 0 or step == steps):
             metrics = _evaluate(va_idx_t)
@@ -1049,6 +1105,9 @@ def train_policy_head(
     if best_state is not None:
         model.load_state_dict(best_state)
 
+    if checkpoint_every > 0:
+        _save_checkpoint(steps)
+
     train_metrics = _evaluate(tr_idx_t)
     val_metrics = _evaluate(va_idx_t) if va_idx_t is not None else None
     # ``_evaluate`` sonunda modeli tekrar egitim moduna alir; cagiran taraf
@@ -1058,6 +1117,7 @@ def train_policy_head(
     return {
         "steps": int(steps),
         "stepsRun": len(history),
+        "resumedFrom": int(resumed_from),
         "batch": int(batch),
         "lr": float(lr),
         "count": n,

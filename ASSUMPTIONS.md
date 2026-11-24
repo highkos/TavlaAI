@@ -6460,3 +6460,308 @@ ve alt kumeler tutarli; olasilik satiri yoksa `None`. Test sayisi 1505 ->
 **Sinir.** `hint` ciktisindaki olasiliklar **cubeless** ve **secili ply**
 icindir; kup karari icin kullanilamaz. `eval` yolundaki `dists=True` ile ayni
 sayilar beklenir ama bu ayri bir dogrulama ister (yapilmadi).
+
+## F7-115 - Faz 7-S2: medium/large/xlarge cok tohumlu karsilastirma (R-D tarifiyle) ve ppg tabani (2026-11-23)
+
+**Soru.** Faz 7-S kapasite karsilastirmasi **tek tohumla** kosulmustu ve raporun
+kendisi bunu acik madde birakti: "`large`-`medium` farki (%7,3) tohum
+gurultusunden buyuk oldugu **gosterilmedi**". R-E kurali "tek tohum karar icin
+yetmez" der. Bu kosu ayni veri ve hiperparametrelerle 3 tohum kullanir.
+
+**Onceki tarama gecersiz.** Ilk denemede tarama `policy-temperature 0,0` ve
+R-D etiketli olmayan `capacity30k` veri kumesiyle kosuldu. O kosuda
+`medium`->`xlarge` icin `value` p=0,0092 ve `search1` p=0,0114 "anlamli"
+cikmisti. Bu bir **tarif yanliligiydi**: `xlarge` liste tabanli KL kaybi
+olmadan egitilince politika kafasi zayif kaliyor, `search1` de onu miras
+aliyordu. R-D tarifiyle (`policy-temperature 0,1` + `capacity30k_rd`) fark
+kayboldu. v1 raporu bu nedenle gecersiz kilindi.
+
+**Veri ve tarif.** `ml/runs/capacity30k_rd/policy_30k_rd.npz` - 30.006
+pozisyon / 664.778 aday, gnubg 2-ply etiketli. 5000 adim, batch 64, lr 1e-3
+cosine (son oran 0,1), wd 1e-4, patience 6, eval 500, value 0,5 / dist 0,5 /
+**rank 0,0**, **policy-temperature 0,1**.
+
+**Yeniden uretilebilirlik.** Yeni taramanin `large/seed0`'i mevcut R-D
+`large/seed0` modeliyle **bit-bit ayni** (`valTop1` 0,8223925358213928;
+politika ER 0,011117; deger ER 0,017263; search1 ER 0,013930). Bu, tarifin
+dogru oldugunu ve mevcut ppg tabaninin dogrudan karsilastirilabilir oldugunu
+kanitlar.
+
+**Olcum.** gnubg 2-ply hakem, **300 vaka, `--stride 3`** (contact 200 / bar 84
+/ race 16; agirlik 0,556 / 0,371 / 0,073). `--limit` tek basina faz yanlidir
+(korpus contact -> bar -> race sirasinda); bunun icin `capacity_train.py`'nin
+`run` ve `sweep` alt komutlarina `--stride` ve `--timeout` eklendi
+(testler 336-337).
+
+**Sonuc (3 tohum ortalamasi).**
+
+| Profil | Parametre | Politika ER | Deger ER | search1 ER | valTop1 |
+|---|---|---|---|---|---|
+| `medium` | 156.423 | 0,012740 +- 0,001084 | 0,019375 +- 0,001959 | 0,014395 +- 0,001039 | 0,8130 |
+| `large` | 642.567 | 0,012511 +- 0,001246 | 0,018559 +- 0,001259 | 0,014373 +- 0,000751 | 0,8201 |
+| `xlarge` | 1.805.319 | 0,012217 +- 0,001046 | 0,018153 +- 0,000344 | 0,013859 +- 0,000549 | 0,8259 |
+
+Siralama uc yolda da `medium` > `large` > `xlarge` (ER dusuk = iyi) **ama
+farklar tohum gurultusunun icinde**: profiller arasi fark %1-6, tohumlar arasi
+sd %8-15.
+
+**Eslesmis bootstrap (10.000 yeniden ornekleme, pozisyon eslesmis).** Dokuz
+karsilastirmanin (3 cift x 3 yol) **hicbiri anlamli degil**; en kucuk p
+0,1880 (`medium`->`large` deger). Dogru tarifle kapasite farki
+**olculemiyor**.
+
+**Karar gecikmesi (C# `MatchBench decision-latency`, 30 pozisyon, CPU).**
+
+| Profil | depth 1 p95 | depth 2 p95 |
+|---|---|---|
+| `medium` | 0,0667 s | 8,4087 s |
+| `large` | 0,2183 s | 11,5479 s |
+| `xlarge` | 0,5746 s | 32,0165 s |
+
+**Test 96 iki bacak ister:** (a) goreli deger-ER kazanci >= %15 **ve**
+(b) depth 2 p95 <= 2,0 s.
+
+- (a): `medium`->`large` -%4,2, `medium`->`xlarge` -%6,3 -> **ikisi de DUSTU**.
+- (b): `medium` (8,41 s) dahil **hicbir profil gecmedi**.
+
+**Kati kural: kazanan yok; `medium` uretim varsayilani kalir.** Bu, Faz 7-S'in
+`winner: null` sonucunu 3 tohumla **dogrular**. (b) bacaginin hicbir profilde
+saglanmamasi, o bacagin bir kapasite degil **donanim/butce uyumsuzlugu**
+oldugunu gosterir: 2,0 s siniri bu makinede depth 2 icin ulasilamaz.
+
+**Dogruluk kazanani `xlarge`.** Uc yolda da en dusuk ER ve en yuksek
+`valTop1`, ama hicbir fark anlamli degil. Yorum: "kapasite olceklemesi para
+etmiyor" degil, "**30 bin pozisyonda** para etmiyor" - 30k pozisyon 1,8M
+parametreyi doyurmuyor. Kapasiteyi buyutmenin onkosulu veriyi buyutmektir.
+
+**ppg olcumu icin secilen model.** `ml/runs/capacity30k_rd_sweep/xlarge/seed0/
+model.onnx`. Secim olcutu **egitim-zamani** `valTop1` (0,8294 - dokuz modelin en
+yuksegi), yani ER sonuclari gorulmeden uygulanabilen bir kural. Tohum bazinda
+ER farklari zaten gurultu icinde; ER'a gore tohum secmek secim yanliligi
+olurdu.
+
+**Antisimetri.** 9 modelin hepsi -0,9502...-0,9436 araliginda; esik
+|corr| >= 0,99. Kapasite bu kusuru **duzeltmiyor** - kusur mimaride.
+
+**Artefaktlar.** `ml/artifacts/stage_large_xlarge_multiseed.json` / `.md`;
+ppg kosusu bitince `ppg_xlarge_s0_2ply` artefakti eklenecek.
+
+**Testler.** 336-337 (`test_capacity_profiles.py`): `run` `--stride`/`--timeout`
+degerlerini `measure_profile`'a aktarir; `sweep` parser'i ikisini de kabul eder.
+Test sayisi 1508 -> **1510**; §6 toplami 1993 -> **1995**.
+
+## F7-116 - Mimari antisimetri: Higgins agirlik simetrisi (2026-11-24)
+
+**Karar.** Renk takasi kusuru **egitim artirimiyla degil mimari kisitla**
+cozulur. Kullanici acikca "Egitim artirimi bu isi cozmez" dedi; olcum de bunu
+dogruluyor: dokuz kapasite modelinin hepsi `corr = -0,9502...-0,9436`
+araliginda kaldi, yani kapasite buyutmek kusuru duzeltmiyor.
+
+**Matematik.** `T = antisymmetry.flip_perspective` bir involusyondur
+(`T^2 = I`), bu yuzden 221 boyutlu giris uzayi iki dik alt uzaya ayrilir:
+`V-` (109 boyut, antisimetrik) ve `V+` (112 boyut, simetrik). `Q_minus
+[221,109]` ve `Q_plus [221,112]` sabit ortonormal tabanlardir (buffer olarak
+kayitli, ONNX icine gomulu).
+
+- **Tek (odd) kol** `u = x @ Q_minus` uzerinde calisir: **bias'siz** dogrusal
+  katmanlar + `tanh`. Sonuc `h(Tx) = -h(x)` **tam**.
+- **Cift (even) kol** `s = x @ Q_plus` uzerinde serbest GELU MLP'dir:
+  `e(Tx) = e(x)`.
+- **Cikti kafalari bias'siz.** `value = w.h`, `policy_logit = v.h`.
+- **Olasiliklar** `probs = softmax(cat([a+b, a-b]))`; `a` cift, `b` tek. Bu
+  `probs(Tx) = Pi probs(x)` verir (`Pi = (W L)(GW GL)(BW BL)`) ve equity
+  `2b0 + 4b1 + 6b2` **tam** tek olur.
+
+**Neden `tanh`, `GELU`/`SiLU` degil?** Herhangi bir `g` icin `g(z) - g(-z)`
+tektir, ama `GELU(z) = z*Phi(z)` ve `SiLU(z) = z*sigma(z)` icin
+`g(z) - g(-z) == z` cikar; yani bu aktivasyonlarla tek kol **dogrusala
+coker**. `tanh` bu tuzaga dusmez ve TD-Gammon'un sigmoid secimiyle ayni
+ailedendir.
+
+**Dogrulama.** `Q-`/`Q+` ortonormal 6e-8, capraz dik 1,3e-8, tamlik
+`Q-Q-^T + Q+Q+^T = I` 6e-8. `_flip_map` ile `flip_perspective` arasindaki fark
+**0,0**. Deger antisimetrisi 3,35e-8, politika 3,35e-8, olasilik permutasyonu
+5,96e-8, olasilik toplami 1,19e-7.
+
+**Parametre kazanci.** `medium` simetrik **131 619** parametre, duz V2
+**156 423** (ilk katman 221->109, 221->256 yerine). ~%16 azalma.
+
+**Kapi ilk kez gecti.** 300 adimlik duman testi (`ml/runs/sym_smoke/medium`):
+`corr = -1.0000 (kapi |corr| >= 0,99) -> GECTI`, `ER farki = 0,0000
+[0,0000; 0,0000] -> GECTI`, `karar: GECTI`. Dokuz duz modelin hepsi
+dusuyordu; kusur gercekten mimarideydi.
+
+**Arayuz.** `model.build_model(..., symmetry=True)`; `capacity_train.py`
+`run`/`sweep` alt komutlarinda `--symmetry`. `output_version = 1` ile
+birlikte kullanilamaz (hata verir). ONNX sozlesmesi V2 ile **ayni** (iki
+cikti: `probs [B,6]`, `logits [B,1]`), yani C# tarafinda degisiklik gerekmez.
+
+**Testler.** 342-349 (`test_model_symmetry.py`): tabanlar ortonormal/tam;
+flip haritasi `flip_perspective` ile ayni; involusyon; deger/politika/equity
+tam antisimetrik; tek kolda bias yok; V2'den az parametre; v1 ile red.
+350-351 (`test_capacity_profiles.py`): parser `--symmetry` kabul eder ve
+`train`/`export`'a aktarir.
+
+## F7-117 - Ayri kup agi (2026-11-24)
+
+**Karar.** Kup kararlari **ayri bir agla** ogrenilir. Gerekce: F7-104 hamle
+kalitesinin kup kararina **transfer olmadigini** gosterdi; TD-Gammon da kupu
+ogrenmedi. Dunya sampiyonu hedefi icin kup kararlari ayri ogrenilmeli.
+
+**Tasarim (`ml/cube_net.py`).**
+
+- **Girdi**: 221'lik vektor, **pre-roll** pozisyon (zar atilmamis). Zar
+  beklentisi agin **icinde** ogrenilir; disarida 21 zar x ~20 hamle gezmek
+  gerekmez. Bu, `EquityCubeAdvisor.DiceAveraged`'in (Faz 6 §10.2) maliyetinin
+  yerini alir.
+- **Cikti**: uc cubeful equity - `noDouble`, `doublePass`, `doubleTake`.
+- **Antisimetri**: uc cikti da equity oldugu icin bakis cevrilince **isaret
+  doner**. `SymmetricBackbone` tek kolu + bias'siz cikti katmani kullanilir;
+  `f(Tx) = -f(x)` **tanim geregi**.
+- **Karar**: `shouldDouble = min(doublePass, doubleTake) > noDouble`.
+  **`min`**, cunku rakip bize en kotu cevabi secer: kabul ederse
+  `doubleTake`, reddederse `cubeValue`. `doublePass` zaten `cubeValue`'a esit
+  oldugundan `min` ikisini birlikte temsil eder (`cube_er.double_value` ile
+  ayni). `shouldTake = doubleTake < cubeValue`.
+- **Etiket**: gnubg kup analizi (`cube_er.CubeSession.analyse`). Ayni tahta
+  farkli mac skorlari ve kup sahiplikleriyle caprazlanir (4 baglam x 2
+  sahiplik = pozisyon basina 8 vaka), boylece mac-farkindalik ogrenilir.
+- **Kabul/red etiketi** her vakada tanimli oldugu icin hedef equity'den
+  turetilir (`doubleTake < cubeValue`); gnubg bu alani yalnizca ciftlemek
+  dogruyken yazar.
+
+**Paralel etiketleme.** `--workers N`; her isci kendi gnubg surecini kurar,
+sonuclar **girdi sirasina** gore birlestirilir. Tek islemli kosuyla birebir
+ayni dosyayi uretir (dogrulandi).
+
+**CLI.** `label` / `train` / `measure`. `train` sonunda ONNX yazilir ve
+parite dogrulanir (`maxAbsDelta < 1e-5`).
+
+**Testler.** 352-361 (`test_cube_net.py`): tam antisimetri; tek kolda bias
+yok; `decide` min semantigi (esitlikte ciftlememe, `doubleTake >= cubeValue`
+iken kabul etmeme); yanlis ariza; veri seti gidis-donus; bilinmeyen surum
+reddi; egitim+ihracat+parite; olcum; parser; paralel etiketleme = seri
+etiketleme.
+
+## F7-118 - Egitim denetim noktasi ve ppg sessiz olumunun kok nedeni (2026-11-24)
+
+**ppg sessiz olumu - kok neden.** Iki kosu (175/2200 ve 575/2200 ciftte)
+sessizce oldu. Neden **PowerShell**'di: `$ErrorActionPreference = "Stop"`
+altinda yerel bir komutun **stderr** ciktisi sonlandirici hata sayilir.
+`vs_gnubg.py` ilerlemeyi stderr'e yazar; boru hatti ilk ilerleme satirindan
+hemen sonra oldu. Cozum: `$ErrorActionPreference = "Continue"` ve
+`& python @cliArgs *>> $log` (`Tee-Object` degil). **Bu, EVREN hazirligi icin
+en onemli tek ders.**
+
+**ppg denetim noktasi (`ml/vs_gnubg.py`).** JSONL, tamamlanan cift basina bir
+satir, her satirdan sonra `flush()` + `os.fsync()`. Anahtar
+`{checkpointVersion, model, path, gnubgPlies, seed, maxPlies}`. Anahtar
+uyusmazsa betik **hata verir** - iki farkli kosunun sonuclari sessizce
+karismaz. Yarim kalan son satir atlanir ve o cift yeniden oynanir. Ciftler
+sirandan bagimsizdir (zar `default_rng([seed, pair])`'den gelir), yani devam
+**birebir** ayni sonucu verir. Rapor `resumedPairs` ve `checkpoint` alanlarini
+kazandi; CLI `--checkpoint` / `--restart`.
+
+**Egitim denetim noktasi (`ml/gnubg_distill.train_policy_head`).** Yeni
+parametreler `checkpoint`, `checkpoint_every`, `resume`. Kayit: adim,
+agirliklar, Adam durumu, scheduler, gecmis, dogrulama gecmisi, en iyi durum,
+`stale`, `stoppedEarly` ve **torch RNG durumu**. Atomik yazim (`.tmp` +
+`os.replace`). `checkpoint_every = 0` denetim noktasini **tamamen** kapatir
+(son kayit dahil). Rapor `resumedFrom` alanini kazandi.
+`capacity_train.py` `run`/`sweep` alt komutlarinda `--checkpoint-every` ve
+`--resume`; `sweep` ayrıca `--skip-existing` ile profil duzeyinde devam eder.
+
+**Testler.** 338-341 (`test_vs_gnubg_checkpoint.py`): anahtar kosu kimligini
+kapsar; yarim satir atlanir; yabanci kosu reddedilir; devam birebir ayni
+sonucu verir ve isi tekrarlamaz. 362-366 (`test_train_checkpoint.py`): yazma
+ve devam; dosya yoksa sifirdan; `checkpoint_every = 0` hicbir sey yazmaz;
+devam agirliklari geri yukler; atomik yazim gecici dosya birakmaz.
+
+## F7-119 - EVREN on-kontrolu (2026-11-24)
+
+**Karar.** EVREN ucretli oldugu icin egitimden **once** ortam ve boru hatti
+dogrulanir. `ml/preflight.py` hicbir sey egitmez; PASS/FAIL tablosu basar ve
+herhangi bir FAIL'de cikis kodu `1` olur.
+
+**Kontroller.** Python >= 3.10; numpy/torch/onnx/onnxruntime ice aktarilabilir;
+torch CUDA ile derlenmis; GPU gorunuyor; **gercek GPU matmul** calisiyor
+(`is_available` tek basina yetmez); `onnxruntime` `CUDAExecutionProvider`
+sunuyor; gnubg (**WARN**, FAIL degil - egitim gnubg'siz calisir); girdi
+dosyalari; >= 5 GB bos disk; yazma izni; ve **uctan uca kucuk sinama**:
+model kur -> ileri gecis -> antisimetri -> ONNX yaz -> ONNX Runtime paritesi.
+
+**Neden uctan uca sinama?** "Egitim basladi, 3 saat sonra ihracatta patladi"
+durumunu onler. Sinama, gercek `export_profile` yolunu kullanir, yani ihracat
+zincirindeki her degisiklik on-kontrolde yakalanir.
+
+**Yerel sonuc.** Bu makinede `sonuc: HAZIR` (GTX 1650, 4 GB, torch 2.5.1+cu121,
+`onnxruntime` CPU - `CUDAExecutionProvider` yok, bu yuzden `--gpu` ile
+`onnxruntime:gpu` FAIL olur; EVREN'de `onnxruntime-gpu` kurulmalidir).
+
+**Kilavuz.** `EVREN.md`: ortam kurulumu, on-kontrol, denetim noktali egitim,
+cok tohumlu tarama, karsilastirma, antisimetri kapisi, ppg, kup agi, maliyet
+tablosu ve ariza giderme.
+
+**Testler.** 367-372 (`test_preflight.py`): PASS/FAIL/WARN isaretleri; temel
+kontroller raporda; olmayan veri dosyasi FAIL; gnubg yoksa yalnizca WARN;
+markdown her kontrolu yazar; CLI JSON+markdown yazar ve cikis kodu sonuca uyar.
+
+## F7-120 — Higgins cikti izdusumu: antisimetri + ifade gucu birlikte
+
+**Karar.** Renk takasi antisimetrisi **cikti izdusumu** ile cozulur
+(`HigginsNet`), `V-` izdusumlu mimari (`basis`) varsayilan olmaktan cikar.
+`odd_full` denemesi **yanlis matematik** oldugu icin kaldirildi.
+
+**Gerekce 1 — darbogaz izdusumun kendisi.** `ml/runs/diag_sym.py` bes varyanti
+ayni receteyle karsilastirdi (medium, 1500 adim, tohum 0): `plain` 0,7827;
+`sym-qminus-ew32` 0,6614; `sym-qminus-ew128` 0,6668; `sym-full-ew32` 0,7527;
+`sym-full-ew128` 0,7468. Cift kolu genisletmek hicbir sey kazandirmiyor; tek
+kolu tam girdiye baglamak 0,09 valTop1 geri getiriyor. Yani sorun bias'sizlik
+ya da `tanh` degil, `Q_minus` izdusumunun kendisi: tek kol cift ozelliklerden
+(pip, temas, mac skoru) tamamen kopuyor ve `pip_farki x temas` gibi tek
+etkilesimleri kuramiyor.
+
+**Gerekce 2 — `odd_full` matematiksel olarak yanlis.** Tek kolu tam 221 boyutlu
+girdiye baglamak yalnizca `f(-x) = -f(x)` verir. Antisimetri `f(Tx) = -f(x)`
+ister; `T = flip_perspective` bir permutasyon/isaret donusumudur, negasyon
+degil (`Tx != -x`). Olcum: `net(x) + net(-x) = 0.0` ama `net(x) + net(Tx) =
+1.0369`. `f(Tx) = -f(x)` yalnizca `T Q- = -Q-` saglandiginda, yani girdi
+`V-`'ye izdusuruldugunde garanti edilir.
+
+**Gerekce 3 — cikti izdusumu bedava antisimetri verir.** `T` icin
+`g(x) = (f(x) - f(Tx)) / 2` tanim geregi tektir; `L(x) = (l(x) + Pi l(Tx)) / 2`
+tanim geregi `L(Tx) = Pi L(x)` saglar. Ikisi de egitim artirimi gerektirmez.
+Maliyet iki ileri gecistir; ONNX cikariminda ihmal edilebilir.
+
+**Olcum.** medium, 1500 adim, tohum 0, ayni recete: `plain` valTop1 0,7827 /
+valValueMse 0,01686; `basis` 0,6614 / 0,05851; `higgins` **0,7791** / 0,02607.
+`higgins` duz modelle istatistiksel olarak ayni dogrulukta ve antisimetrisi
+**tam** (logit artigi 0,0; `probs` permutasyon artigi 0,0). `basis`'e gore
++0,118 valTop1. `valValueMse`'nin yukselmesi **beklenen**: hedefin cift
+bileseni artik atiliyor; o bilesen zaten kusurun kendisiydi.
+
+**Tam receteyle dogrulama (5000 adim, medium, tohum 0).** valTop1: plain
+0,8157 / basis 0,7001 / higgins 0,7994. ER politika: 0,01188 / — / 0,01726.
+ER deger: 0,01825 / — / 0,02678. ER search1: 0,01545 / — / **0,01523**.
+antisimetri `corr`: -0,9436 (plain, KAPI DUSER) / -1,0000 (basis, GECER) /
+**-1,0000 (higgins, GECER)**. Yani `higgins` antisimetri kapisini gecen tek
+yuksek-dogruluklu kurulumdur; basis'in 0,1156 valTop1 kaybinin 0,0993'unu geri
+kazanir ve **uretim yolu olan search1 ER'sinde duz modelden hafifce iyidir**.
+Politika/deger ER'lerinin bir miktar yukselmesi beklenir: hedefin cift bileseni
+atildigi icin 0-ply argmax daha az keskinlesir; 1-ply arama bu kaybi telafi
+eder.
+
+**ONNX.** `HigginsNet` ihraci calisiyor: `maxAbsDeltaValue = 8,94e-08`,
+`maxAbsDeltaPolicyLogit = 4,47e-08`. C# sozlesmesi degismez (ayni iki cikti,
+ayni adlar, `output_version = 2`).
+
+**API.** `build_model(..., symmetry=True, symmetry_mode="higgins"|"basis")`.
+`HigginsNet` parametre sayisi duz V2 ile **esittir** (ifade gucu ayni).
+`capacity_train.py run/sweep` `--symmetry-mode` sunar; `train_profile` ve
+`export_profile` tasir. `odd_full` parametresi kaldirildi.
+
+Ayrintili tablo: `ml/artifacts/symmetry_modes.md`.
+
+**Testler.** 375 (`T` altinda teklik != negasyon altinda teklik; `odd_full`
+tuzagi belgelenir), 376 (`HigginsNet` tam antisimetri), 377 (parametre sayisi
+duz V2 ile esit), 378 (bilinmeyen `symmetry_mode` reddi), 379 (`--symmetry-mode` aktarimi).

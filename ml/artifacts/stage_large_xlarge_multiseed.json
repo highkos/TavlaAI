@@ -1,0 +1,550 @@
+{
+ "reportVersion": 2,
+ "supersedes": "ml/artifacts/stage_large_xlarge_multiseed.json (v1, yanlis tarif)",
+ "title": "Faz 7-S2 - medium/large/xlarge cok tohumlu karsilastirma (R-D tarifiyle, duzeltilmis)",
+ "corpus": "ml/runs/capacity30k_rd/policy_30k_rd.npz",
+ "positions": 30006,
+ "candidates": 664778,
+ "referee": {
+  "command": "gnubg-cli",
+  "plies": 2,
+  "column": "cubeless equity"
+ },
+ "measurement": {
+  "cases": 300,
+  "stride": 3,
+  "phaseWeights": {
+   "bar": 0.370558,
+   "contact": 0.556423,
+   "race": 0.073018
+  },
+  "phaseCounts": {
+   "bar": 84,
+   "contact": 200,
+   "race": 16
+  }
+ },
+ "hyperparameters": {
+  "steps": 5000,
+  "batch": 64,
+  "lr": 0.001,
+  "lrSchedule": "cosine",
+  "lrFinalRatio": 0.1,
+  "weightDecay": 0.0001,
+  "patience": 6,
+  "evalEvery": 500,
+  "valFraction": 0.1,
+  "valueWeight": 0.5,
+  "distWeight": 0.5,
+  "rankWeight": 0.0,
+  "policyTemperature": 0.1,
+  "device": "cuda",
+  "note": "R-D tarifi: policy-temperature 0.1 (liste tabanli KL) + R-D etiketli veri kumesi."
+ },
+ "seeds": [
+  0,
+  1,
+  2
+ ],
+ "rows": [
+  {
+   "profile": "medium",
+   "seed": 0,
+   "params": 156423,
+   "hidden": [
+    256,
+    256,
+    128
+   ],
+   "valTop1": 0.8157280906364545,
+   "valValueMse": 0.013294333854292342,
+   "bestStep": 5000,
+   "stoppedEarly": false,
+   "policy": 0.01188,
+   "value": 0.01825,
+   "search1": 0.01545,
+   "corr": -0.9436281231892794,
+   "passed": false
+  },
+  {
+   "profile": "medium",
+   "seed": 1,
+   "params": 156423,
+   "hidden": [
+    256,
+    256,
+    128
+   ],
+   "valTop1": 0.8107297567477507,
+   "valValueMse": 0.01307359104495035,
+   "bestStep": 5000,
+   "stoppedEarly": false,
+   "policy": 0.012383,
+   "value": 0.018237,
+   "search1": 0.014363,
+   "corr": -0.9455798925783624,
+   "passed": false
+  },
+  {
+   "profile": "medium",
+   "seed": 2,
+   "params": 156423,
+   "hidden": [
+    256,
+    256,
+    128
+   ],
+   "valTop1": 0.8123958680439853,
+   "valValueMse": 0.01255407200003417,
+   "bestStep": 5000,
+   "stoppedEarly": false,
+   "policy": 0.013957,
+   "value": 0.021637,
+   "search1": 0.013373,
+   "corr": -0.947595045879967,
+   "passed": false
+  },
+  {
+   "profile": "large",
+   "seed": 0,
+   "params": 642567,
+   "hidden": [
+    512,
+    512,
+    512
+   ],
+   "valTop1": 0.8223925358213928,
+   "valValueMse": 0.013814481634426935,
+   "bestStep": 5000,
+   "stoppedEarly": false,
+   "policy": 0.011117,
+   "value": 0.017263,
+   "search1": 0.01393,
+   "corr": -0.9463520018356228,
+   "passed": false
+  },
+  {
+   "profile": "large",
+   "seed": 1,
+   "params": 642567,
+   "hidden": [
+    512,
+    512,
+    512
+   ],
+   "valTop1": 0.8180606464511829,
+   "valValueMse": 0.011977750240703775,
+   "bestStep": 5000,
+   "stoppedEarly": false,
+   "policy": 0.0129,
+   "value": 0.018637,
+   "search1": 0.01395,
+   "corr": -0.9482182069466728,
+   "passed": false
+  },
+  {
+   "profile": "large",
+   "seed": 2,
+   "params": 642567,
+   "hidden": [
+    512,
+    512,
+    512
+   ],
+   "valTop1": 0.8197267577474175,
+   "valValueMse": 0.01133776809312639,
+   "bestStep": 5000,
+   "stoppedEarly": false,
+   "policy": 0.013517,
+   "value": 0.019777,
+   "search1": 0.01524,
+   "corr": -0.9501612123031937,
+   "passed": false
+  },
+  {
+   "profile": "xlarge",
+   "seed": 0,
+   "params": 1805319,
+   "hidden": [
+    1024,
+    1024,
+    512
+   ],
+   "valTop1": 0.8293902032655781,
+   "valValueMse": 0.009979889793610103,
+   "bestStep": 4500,
+   "stoppedEarly": false,
+   "policy": 0.01273,
+   "value": 0.017977,
+   "search1": 0.013533,
+   "corr": -0.9441701818006127,
+   "passed": false
+  },
+  {
+   "profile": "xlarge",
+   "seed": 1,
+   "params": 1805319,
+   "hidden": [
+    1024,
+    1024,
+    512
+   ],
+   "valTop1": 0.8237254248583805,
+   "valValueMse": 0.011974495076516973,
+   "bestStep": 5000,
+   "stoppedEarly": false,
+   "policy": 0.011013,
+   "value": 0.01855,
+   "search1": 0.01355,
+   "corr": -0.9487183758681954,
+   "passed": false
+  },
+  {
+   "profile": "xlarge",
+   "seed": 2,
+   "params": 1805319,
+   "hidden": [
+    1024,
+    1024,
+    512
+   ],
+   "valTop1": 0.8247250916361213,
+   "valValueMse": 0.01139659753087281,
+   "bestStep": 5000,
+   "stoppedEarly": false,
+   "policy": 0.012907,
+   "value": 0.017933,
+   "search1": 0.014493,
+   "corr": -0.946358030701799,
+   "passed": false
+  }
+ ],
+ "summary": {
+  "medium": {
+   "policy": [
+    0.01274,
+    0.001083544646057559
+   ],
+   "value": [
+    0.019374666666666665,
+    0.0019592489207176647
+   ],
+   "search1": [
+    0.014395333333333333,
+    0.0010388774390337554
+   ],
+   "valTop1": [
+    0.8129512384760635,
+    0.0025450270437386495
+   ],
+   "corr": [
+    -0.9456010205492029,
+    0.0019835457397894885
+   ]
+  },
+  "large": {
+   "policy": [
+    0.012511333333333333,
+    0.0012463130960289764
+   ],
+   "value": [
+    0.018559,
+    0.0012588137272845409
+   ],
+   "search1": [
+    0.014373333333333333,
+    0.0007506219643291377
+   ],
+   "valTop1": [
+    0.8200599800066645,
+    0.002185084479940666
+   ],
+   "corr": [
+    -0.9482438070284964,
+    0.0019047342648529533
+   ]
+  },
+  "xlarge": {
+   "policy": [
+    0.012216666666666667,
+    0.001046155979447297
+   ],
+   "value": [
+    0.018153333333333334,
+    0.00034422715368392036
+   ],
+   "search1": [
+    0.013858666666666667,
+    0.0005494145368784248
+   ],
+   "valTop1": [
+    0.8259469065866933,
+    0.0030235827143876835
+   ],
+   "corr": [
+    -0.946415529456869,
+    0.0022746421475090305
+   ]
+  }
+ },
+ "pairedBootstrap": {
+  "medium_large": {
+   "anySignificant": false,
+   "seedCount": 3,
+   "rows": [
+    {
+     "alpha": 0.05,
+     "cases": 300,
+     "ciHigh": 0.0008055555555555555,
+     "ciLow": -0.0012611111111111109,
+     "control": 0.01273999999999999,
+     "diff": -0.00022888888888888883,
+     "pTwoSided": 0.6404,
+     "path": "policy",
+     "relative": -0.01796616082330369,
+     "resamples": 10000,
+     "seeds": 3,
+     "significant": false,
+     "treatment": 0.012511111111111101
+    },
+    {
+     "alpha": 0.05,
+     "cases": 300,
+     "ciHigh": 0.00039000000000000005,
+     "ciLow": -0.0020388888888888887,
+     "control": 0.019374444444444437,
+     "diff": -0.0008155555555555557,
+     "pTwoSided": 0.188,
+     "path": "value",
+     "relative": -0.04209439697195621,
+     "resamples": 10000,
+     "seeds": 3,
+     "significant": false,
+     "treatment": 0.018558888888888875
+    },
+    {
+     "alpha": 0.05,
+     "cases": 300,
+     "ciHigh": 0.0015933333333333335,
+     "ciLow": -0.0014711111111111112,
+     "control": 0.014395555555555543,
+     "diff": -2.2222222222222244e-05,
+     "pTwoSided": 0.9318,
+     "path": "search1",
+     "relative": -0.0015436863229391815,
+     "resamples": 10000,
+     "seeds": 3,
+     "significant": false,
+     "treatment": 0.014373333333333318
+    }
+   ]
+  },
+  "medium_xlarge": {
+   "anySignificant": false,
+   "seedCount": 3,
+   "rows": [
+    {
+     "alpha": 0.05,
+     "cases": 300,
+     "ciHigh": 0.0009022222222222223,
+     "ciLow": -0.0019655555555555555,
+     "control": 0.01273999999999999,
+     "diff": -0.0005233333333333332,
+     "pTwoSided": 0.46,
+     "path": "policy",
+     "relative": -0.04107796964939825,
+     "resamples": 10000,
+     "seeds": 3,
+     "significant": false,
+     "treatment": 0.012216666666666659
+    },
+    {
+     "alpha": 0.05,
+     "cases": 300,
+     "ciHigh": 0.0009855555555555555,
+     "ciLow": -0.004138888888888888,
+     "control": 0.019374444444444437,
+     "diff": -0.0012211111111111116,
+     "pTwoSided": 0.3564,
+     "path": "value",
+     "relative": -0.06302689682858295,
+     "resamples": 10000,
+     "seeds": 3,
+     "significant": false,
+     "treatment": 0.01815333333333332
+    },
+    {
+     "alpha": 0.05,
+     "cases": 300,
+     "ciHigh": 0.0009111111111111111,
+     "ciLow": -0.0020088888888888886,
+     "control": 0.014395555555555543,
+     "diff": -0.0005366666666666663,
+     "pTwoSided": 0.4626,
+     "path": "search1",
+     "relative": -0.03728002469898117,
+     "resamples": 10000,
+     "seeds": 3,
+     "significant": false,
+     "treatment": 0.013858888888888872
+    }
+   ]
+  },
+  "large_xlarge": {
+   "anySignificant": false,
+   "seedCount": 3,
+   "rows": [
+    {
+     "alpha": 0.05,
+     "cases": 300,
+     "ciHigh": 0.0007377777777777778,
+     "ciLow": -0.0013844444444444444,
+     "control": 0.012511111111111101,
+     "diff": -0.0002944444444444445,
+     "pTwoSided": 0.6054,
+     "path": "policy",
+     "relative": -0.023534635879218495,
+     "resamples": 10000,
+     "seeds": 3,
+     "significant": false,
+     "treatment": 0.012216666666666659
+    },
+    {
+     "alpha": 0.05,
+     "cases": 300,
+     "ciHigh": 0.001688888888888889,
+     "ciLow": -0.0032844444444444444,
+     "control": 0.018558888888888875,
+     "diff": -0.0004055555555555556,
+     "pTwoSided": 0.8206,
+     "path": "value",
+     "relative": -0.02185236185116448,
+     "resamples": 10000,
+     "seeds": 3,
+     "significant": false,
+     "treatment": 0.01815333333333332
+    },
+    {
+     "alpha": 0.05,
+     "cases": 300,
+     "ciHigh": 0.0006211111111111115,
+     "ciLow": -0.0016433333333333335,
+     "control": 0.014373333333333318,
+     "diff": -0.0005144444444444444,
+     "pTwoSided": 0.3696,
+     "path": "search1",
+     "relative": -0.035791589363017975,
+     "resamples": 10000,
+     "seeds": 3,
+     "significant": false,
+     "treatment": 0.013858888888888872
+    }
+   ]
+  }
+ },
+ "latency": {
+  "tool": "Backgammon.MatchBench decision-latency",
+  "positions": 30,
+  "device": "cpu",
+  "note": "Ayni mimariler (hidden katmanlari ayni); olcum onceki kosudan devralindi.",
+  "profiles": {
+   "medium": {
+    "params": 156423,
+    "hidden": [
+     256,
+     256,
+     256
+    ],
+    "depth1P95": 0.0667,
+    "depth2P95": 8.4087
+   },
+   "large": {
+    "params": 642567,
+    "hidden": [
+     512,
+     512,
+     512
+    ],
+    "depth1P95": 0.2183,
+    "depth2P95": 11.5479
+   },
+   "xlarge": {
+    "params": 1805319,
+    "hidden": [
+     1024,
+     1024,
+     512
+    ],
+    "depth1P95": 0.5746,
+    "depth2P95": 32.0165
+   }
+  }
+ },
+ "reproducibility": {
+  "claim": "Yeni tarama large/seed0, R-D large/seed0 ile bit-bit ayni.",
+  "valTop1": [
+   0.8223925358213928,
+   0.8223925358213928
+  ],
+  "policyEr": [
+   0.011117,
+   0.011117
+  ],
+  "valueEr": [
+   0.017263,
+   0.017263
+  ],
+  "search1Er": [
+   0.01393,
+   0.01393
+  ],
+  "identical": true
+ },
+ "decision": {
+  "rule": "Test 96: (a) goreli deger-ER kazanci >= %15 VE (b) depth 2 p95 <= 2.0 s",
+  "legA": {
+   "mediumToLarge": -0.0421,
+   "mediumToXlarge": -0.063,
+   "threshold": 0.15,
+   "passed": false
+  },
+  "legB": {
+   "medium": 8.4087,
+   "large": 11.5479,
+   "xlarge": 32.0165,
+   "budget": 2.0,
+   "passed": false
+  },
+  "strictWinner": null,
+  "accuracyWinner": "xlarge",
+  "accuracyWinnerNote": "Uc yolda da en dusuk ER ve en yuksek valTop1, ama hicbir fark anlamli degil (p >= 0.35).",
+  "productionDefault": "medium",
+  "ppgModel": "ml/runs/capacity30k_rd_sweep/xlarge/seed0/model.onnx",
+  "ppgModelRule": "Egitim-zamani valTop1 (0.8294 - dokuz modelin en yuksegi); ER sonuclari gorulmeden uygulanabilir.",
+  "depth2BudgetNote": "2.0 s siniri medium dahil hicbir profilde saglanmiyor: bacak (b) kapasite degil donanim/butce uyumsuzlugu."
+ },
+ "antisymmetry": {
+  "threshold": 0.99,
+  "observedRange": [
+   -0.9502,
+   -0.9436
+  ],
+  "passed": false,
+  "note": "Dokuz modelin hepsi dustu; kapasite bu kusuru duzeltmiyor."
+ },
+ "ppg": {
+  "status": "running",
+  "games": 4400,
+  "gnubgPlies": 2,
+  "path": "search1",
+  "seed": 2026,
+  "baseline": {
+   "model": "ml/runs/capacity_rd/large/seed0/model.onnx",
+   "games": 2000,
+   "ppg": -0.2445,
+   "ciLow": -0.3055,
+   "ciHigh": -0.1835,
+   "verdict": "daha-kotu"
+  }
+ }
+}

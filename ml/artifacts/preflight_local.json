@@ -1,0 +1,125 @@
+{
+  "checks": [
+    {
+      "detail": "3.10.11 (gerekli >= 3.10)",
+      "fatal": true,
+      "name": "python",
+      "ok": true
+    },
+    {
+      "detail": "2.2.6",
+      "fatal": true,
+      "name": "paket:numpy",
+      "ok": true
+    },
+    {
+      "detail": "2.5.1+cu121",
+      "fatal": true,
+      "name": "paket:torch",
+      "ok": true
+    },
+    {
+      "detail": "1.23.2",
+      "fatal": true,
+      "name": "paket:onnx",
+      "ok": true
+    },
+    {
+      "detail": "1.23.2",
+      "fatal": true,
+      "name": "paket:onnxruntime",
+      "ok": true
+    },
+    {
+      "detail": "cuda=12.1",
+      "fatal": false,
+      "name": "torch:cuda-derlemesi",
+      "ok": true
+    },
+    {
+      "detail": "kullanilabilir=True, aygit=1, ad=NVIDIA GeForce GTX 1650, bellek=4.0 GB",
+      "fatal": false,
+      "name": "torch:cuda",
+      "ok": true
+    },
+    {
+      "detail": "ok",
+      "fatal": true,
+      "name": "torch:gpu-matmul",
+      "ok": true
+    },
+    {
+      "detail": "AzureExecutionProvider,CPUExecutionProvider",
+      "fatal": true,
+      "name": "onnxruntime:cpu",
+      "ok": true
+    },
+    {
+      "detail": "CUDAExecutionProvider=False",
+      "fatal": false,
+      "name": "onnxruntime:gpu",
+      "ok": true
+    },
+    {
+      "detail": "F:\\Program Files (x86)\\gnubg\\gnubg-cli.exe",
+      "fatal": true,
+      "name": "gnubg",
+      "ok": true
+    },
+    {
+      "detail": "policy_30k_rd.npz (12.6 MB)",
+      "fatal": true,
+      "name": "veri:egitim",
+      "ok": true
+    },
+    {
+      "detail": "reference_corpus_v2.json (16.3 MB)",
+      "fatal": true,
+      "name": "veri:korpus",
+      "ok": true
+    },
+    {
+      "detail": "model.onnx (6.9 MB)",
+      "fatal": true,
+      "name": "model:ppg",
+      "ok": true
+    },
+    {
+      "detail": "bos=415.2 GB",
+      "fatal": true,
+      "name": "disk",
+      "ok": true
+    },
+    {
+      "detail": "ml\\runs",
+      "fatal": true,
+      "name": "yazma-izni",
+      "ok": true
+    },
+    {
+      "detail": "probs=(4, 6) logits=(4, 1) params=27235",
+      "fatal": true,
+      "name": "boru-hatti:ileri",
+      "ok": true
+    },
+    {
+      "detail": "|f(x)+f(Tx)|=4.47e-08",
+      "fatal": true,
+      "name": "boru-hatti:antisimetri",
+      "ok": true
+    },
+    {
+      "detail": "delta=1.79e-07, cikti=2",
+      "fatal": true,
+      "name": "boru-hatti:onnx",
+      "ok": true
+    }
+  ],
+  "device": "cpu",
+  "elapsedSeconds": 44.88,
+  "failed": [],
+  "ok": true,
+  "preflightVersion": 1,
+  "requireGpu": false,
+  "warned": []
+}

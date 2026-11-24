@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Callable, Sequence
@@ -52,9 +53,88 @@ BOOTSTRAP_RESAMPLES = 20000
 BOOTSTRAP_SEED = 20261125
 OUR_PATHS = ("policy", "value", "search1")
 
+#: Denetim noktasi (checkpoint) bicim surumu. Uzun ppg kosulari saatler surer ve
+#: tek bir surec cokmesi tum olcumu kaybettirir; bu yuzden her **cift**
+#: tamamlandiginda sonuc JSONL olarak diske yazilir ve kosu kaldigi yerden
+#: devam eder (F7-116).
+CHECKPOINT_VERSION = 1
+
 
 class MatchError(RuntimeError):
     """Mac olcumu yapilamadi."""
+
+
+def _checkpoint_key(
+    model_path: Path, path: str, gnubg_plies: int, seed: int, max_plies: int
+) -> dict[str, Any]:
+    """Denetim noktasinin hangi kosuya ait oldugunu belirleyen imza.
+
+    Farkli bir model/yol/tohum ile uretilmis kayitlarin sessizce karistirilmasini
+    engeller: imza uyusmazsa kosu **hata verir**, devam etmez.
+    """
+    return {
+        "checkpointVersion": CHECKPOINT_VERSION,
+        "model": str(model_path),
+        "path": str(path),
+        "gnubgPlies": int(gnubg_plies),
+        "seed": int(seed),
+        "maxPlies": int(max_plies),
+    }
+
+
+def _load_checkpoint(
+    checkpoint: Path, key: dict[str, Any]
+) -> dict[int, tuple[list[float], list[int], list[bool]]]:
+    """Var olan denetim noktasini okur; yarim yazilmis son satiri atlar."""
+    if not checkpoint.exists():
+        return {}
+    done: dict[int, tuple[list[float], list[int], list[bool]]] = {}
+    with checkpoint.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                # Surec yazarken oldu: son satir yarim olabilir, yeniden oynanir.
+                continue
+            if record.get("key") != key:
+                raise MatchError(
+                    "denetim noktasi farkli bir kosuya ait: %s\n  beklenen: %s\n  bulunan: %s"
+                    % (checkpoint, key, record.get("key"))
+                )
+            done[int(record["pair"])] = (
+                [float(v) for v in record["scores"]],
+                [int(v) for v in record["plies"]],
+                [bool(v) for v in record["finished"]],
+            )
+    return done
+
+
+def _append_checkpoint(
+    handle,
+    key: dict[str, Any],
+    pair: int,
+    result: tuple[list[float], list[int], list[bool]],
+) -> None:
+    """Bir ciftin sonucunu denetim noktasina ekler ve **diske indirir**."""
+    scores, plies, finished = result
+    handle.write(
+        json.dumps(
+            {
+                "key": key,
+                "pair": int(pair),
+                "scores": [float(v) for v in scores],
+                "plies": [int(v) for v in plies],
+                "finished": [bool(v) for v in finished],
+            },
+            ensure_ascii=False,
+        )
+        + "\n"
+    )
+    handle.flush()
+    os.fsync(handle.fileno())
 
 
 def _bootstrap_ci(values: np.ndarray, resamples: int, seed: int) -> tuple[float, float]:
@@ -248,8 +328,15 @@ def run_match(
     max_plies: int = DEFAULT_MAX_PLIES,
     workers: int = 1,
     progress: Callable[[str], None] | None = None,
+    checkpoint: Path | None = None,
+    restart: bool = False,
 ) -> dict[str, Any]:
-    """``games`` oyun (yarisi her renkten) oynar ve ppg olcer."""
+    """``games`` oyun (yarisi her renkten) oynar ve ppg olcer.
+
+    ``checkpoint`` verilirse her tamamlanan **cift** diske yazilir ve kosu
+    kaldigi yerden devam eder (F7-116). ``restart`` denetim noktasini yok
+    sayar ve sifirdan baslar.
+    """
     if games < 2 or games % 2 != 0:
         raise MatchError("games cift ve >= 2 olmali (renk takasi icin)")
     if path not in OUR_PATHS:
@@ -258,40 +345,77 @@ def run_match(
         raise MatchError("workers >= 1 olmali")
 
     pairs = games // 2
-    tasks = [(pair, seed) for pair in range(pairs)]
+    key = _checkpoint_key(Path(model_path), path, gnubg_plies, seed, max_plies)
+    done: dict[int, tuple[list[float], list[int], list[bool]]] = {}
+    if checkpoint is not None:
+        checkpoint = Path(checkpoint)
+        checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        if restart and checkpoint.exists():
+            checkpoint.unlink()
+        done = _load_checkpoint(checkpoint, key)
+        stale = [p for p in done if p >= pairs]
+        for p in stale:
+            del done[p]
+    resumed = len(done)
+    if progress and resumed:
+        progress("denetim noktasindan devam: %d/%d cift hazir" % (resumed, pairs))
 
-    if workers == 1:
-        exe = Path(gnubg) if gnubg else gnubg_er.find_gnubg()
-        session = gnubg_er.GnubgSession(exe, plies=gnubg_plies, timeout=300, persistent=True)
-        scorer = gnubg_er.OnnxScorer(Path(model_path))
-        our_choose = _our_chooser(scorer, path)
-        gnubg_choose = _gnubg_chooser(session, gnubg_plies)
-        try:
-            results = []
-            for index, task in enumerate(tasks, start=1):
-                results.append(
-                    _play_pair(task, our_choose, gnubg_choose, max_plies)
-                )
-                if progress and index % 25 == 0:
-                    done = [s for r in results for s in r[0]]
-                    progress("%d/%d cift, ppg %.4f" % (index, pairs, float(np.mean(done))))
-        finally:
-            session.close()
-    else:
-        import multiprocessing as mp  # noqa: PLC0415
+    tasks = [(pair, seed) for pair in range(pairs) if pair not in done]
+    results: list[tuple[list[float], list[int], list[bool]] | None] = [None] * pairs
+    for pair, value in done.items():
+        results[pair] = value
 
-        ctx = mp.get_context("spawn")
-        with ctx.Pool(
-            processes=workers,
-            initializer=_init_worker,
-            initargs=(str(model_path), path, str(gnubg) if gnubg else None, gnubg_plies, max_plies),
-        ) as pool:
-            results = []
-            for index, result in enumerate(pool.imap(_worker_play_pair, tasks), start=1):
-                results.append(result)
-                if progress and index % 25 == 0:
-                    done = [s for r in results for s in r[0]]
-                    progress("%d/%d cift, ppg %.4f" % (index, pairs, float(np.mean(done))))
+    handle = checkpoint.open("a", encoding="utf-8") if checkpoint is not None else None
+    try:
+        if workers == 1:
+            exe = Path(gnubg) if gnubg else gnubg_er.find_gnubg()
+            session = gnubg_er.GnubgSession(exe, plies=gnubg_plies, timeout=300, persistent=True)
+            scorer = gnubg_er.OnnxScorer(Path(model_path))
+            our_choose = _our_chooser(scorer, path)
+            gnubg_choose = _gnubg_chooser(session, gnubg_plies)
+            try:
+                for index, task in enumerate(tasks, start=1):
+                    result = _play_pair(task, our_choose, gnubg_choose, max_plies)
+                    results[task[0]] = result
+                    if handle is not None:
+                        _append_checkpoint(handle, key, task[0], result)
+                    if progress and index % 25 == 0:
+                        done_scores = [s for r in results if r for s in r[0]]
+                        progress(
+                            "%d/%d cift, ppg %.4f"
+                            % (resumed + index, pairs, float(np.mean(done_scores)))
+                        )
+            finally:
+                session.close()
+        else:
+            import multiprocessing as mp  # noqa: PLC0415
+
+            ctx = mp.get_context("spawn")
+            with ctx.Pool(
+                processes=workers,
+                initializer=_init_worker,
+                initargs=(str(model_path), path, str(gnubg) if gnubg else None, gnubg_plies, max_plies),
+            ) as pool:
+                for index, (task, result) in enumerate(
+                    zip(tasks, pool.imap(_worker_play_pair, tasks)), start=1
+                ):
+                    results[task[0]] = result
+                    if handle is not None:
+                        _append_checkpoint(handle, key, task[0], result)
+                    if progress and index % 25 == 0:
+                        done_scores = [s for r in results if r for s in r[0]]
+                        progress(
+                            "%d/%d cift, ppg %.4f"
+                            % (resumed + index, pairs, float(np.mean(done_scores)))
+                        )
+    finally:
+        if handle is not None:
+            handle.close()
+
+    missing = [i for i, r in enumerate(results) if r is None]
+    if missing:
+        raise MatchError("tamamlanmayan ciftler: %d adet" % len(missing))
+    results = [r for r in results if r is not None]
 
     scores: list[float] = []
     pair_diffs: list[float] = []
@@ -333,6 +457,8 @@ def run_match(
         "unfinished": unfinished,
         "unfinishedRate": unfinished / len(scores),
         "seed": int(seed),
+        "resumedPairs": int(resumed),
+        "checkpoint": str(checkpoint) if checkpoint is not None else None,
     }
 
 
@@ -363,6 +489,7 @@ def build_markdown(report: dict[str, Any]) -> str:
         "| Oyun basina ply | %.1f |" % report["meanPlies"],
         "| Bitmeyen oyun | %d (%.4f) |"
         % (report.get("unfinished", 0), report.get("unfinishedRate", 0.0)),
+        "| Denetim noktasindan gelen cift | %d |" % report.get("resumedPairs", 0),
         "",
         "**Yorum.** ppg > 0 ise model gnubg %d-ply'i yeniyor demektir. " % plies
         + "Eslestirilmis fark, ayni zar dizisinin iki renginin toplamidir; "
@@ -400,6 +527,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--out", default=MATCH_PATH)
     parser.add_argument("--markdown", default=MATCH_MD_PATH)
+    parser.add_argument(
+        "--checkpoint",
+        default=None,
+        help="JSONL denetim noktasi: her cift tamamlandiginda yazilir, kosu devam eder",
+    )
+    parser.add_argument(
+        "--restart",
+        action="store_true",
+        help="denetim noktasini yok say ve sifirdan basla",
+    )
     parser.add_argument("--quiet", action="store_true")
     return parser
 
@@ -417,6 +554,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         max_plies=args.max_plies,
         workers=args.workers,
         progress=progress,
+        checkpoint=Path(args.checkpoint) if args.checkpoint else None,
+        restart=args.restart,
     )
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
