@@ -6995,3 +6995,35 @@ yürürlükte.
 test geçti**. 30 adımlık `xlarge` denemesi: `valTop1 0,6433`,
 `parityMaxAbsDeltaPolicyLogit 1,5e-05` (Higgins simetrisi korunuyor),
 `trainCount 90 027`, `valCount 10 003`.
+
+---
+
+## F7-128 — Eğitim tek iş parçacığına kilitlenmişti
+
+**Belirti.** Bellek düzeltmesinden (F7-127) sonra bile `medium` 0,52 s/adım
+koşuyordu; 30k koşusunda aynı profil 0,24–0,35 s/adım idi. Süreç CPU'su
+duvar saatinin yalnızca **%50**'si kadardı (401 s CPU / ~800 s duvar).
+
+**Kök neden.** `run_train.ps1` başında `$env:OMP_NUM_THREADS = '1'` vardı.
+Bu değişken pytest determinizmi için konmuştu ama aynı betik eğitimi de
+başlattığı için torch'u **tek iş parçacığına** kilitliyordu. 12 mantıksal
+çekirdekli makinede 11 çekirdek boş duruyordu.
+
+**Ölçüm** (`xlarge`, Higgins, parti 64 × 150 aday, 5 adım ortalaması):
+
+| iş parçacığı | s/adım |
+|---|---|
+| 1 | 2,298 |
+| 6 (torch varsayılanı) | 0,916 |
+| 10 | **0,734** |
+
+**Düzeltme.** `OMP_NUM_THREADS = '10'` (12 mantıksal çekirdekte 2 çekirdek
+payı). Gerçek koşuda `medium` 0,52 → **0,13 s/adım**; süreç CPU'su duvar
+saatinin ~5,8 katı. 15 000 adım tohum başına ~33 dk; 9 koşu ~25 saatten
+**~7 saate** indi.
+
+**Karar kuralı değişmedi.** İş parçacığı sayısı yalnızca hızı etkiler; üç
+profil ve üç tohum için eşittir. `equivalence_verdict(..., 0,1115)` ve
+"tohum seçimi ER'ye bakmadan" aynen yürürlükte. Çok iş parçacıklı indirgeme
+sırası son bitlerde fark yaratabilir; bu, 0,1115'lik marjın yanında ihmal
+edilebilir gürültüdür.

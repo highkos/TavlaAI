@@ -5664,3 +5664,12 @@ yürürlükte. `--eval-every` üç profil ve üç tohum için eşit uygulanır.
 `test_distill_dist_k5.py` + `test_capacity_profiles.py` → **63 test geçti**.
 30 adımlık `xlarge` denemesi: `valTop1 0,6433`, `parityMaxAbsDeltaPolicyLogit
 1,5e-05` (Higgins simetrisi korunuyor), `trainCount 90 027`, `valCount 10 003`.
+
+### 49.5 İş parçacığı kilidi (F7-128)
+
+`run_train.ps1` içindeki `OMP_NUM_THREADS = '1'` (pytest determinizmi için
+konmuştu) eğitimi de tek iş parçacığına kilitliyordu. Ölçüm (`xlarge`, parti
+64 × 150): 1 thread 2,298 s/adım, 6 thread 0,916, 10 thread **0,734**.
+`'10'` yapıldı; gerçek koşuda `medium` 0,52 → **0,13 s/adım**, süreç CPU'su
+duvar saatinin ~5,8 katı. 9 koşu ~25 saatten **~7 saate** indi. Karar kuralı
+etkilenmez: iş parçacığı sayısı üç profil ve üç tohum için eşittir.
