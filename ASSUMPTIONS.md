@@ -6878,3 +6878,32 @@ Bu, 100k etiketlemesinden sonra tek gecelik bir koşudur.
 `--sym-stride/--sym-limit/--measure-timeout` bayraklarıyla uçtan uca denendi:
 `er_paths` 40 vaka, antisymmetry 4 vaka (ayrı örneklem), `capacity.json`
 güncellendi, çıkış 0.
+## F7-125 — Etiketlemede süreç başına maliyet ölçüldü (kalıcı oturum fırsatı)
+
+**Bulgu.** `label-policy` çağrısı pozisyon başına **~4,0 s** harcıyor. Ölçüm:
+1 pozisyon 6,9 s, 5 pozisyon 23 s ⇒ marjinal maliyet (23 − 6,9) / 4 = **4,0 s**;
+sabit açılış ~3 s. 30k koşusunun gerçek süresi bunu doğruluyor: 12 parça x
+2 500 pozisyon, 22:18:21 → 01:33 ⇒ 11 500 s / 2 500 = **4,6 s/pozisyon**.
+
+**Kök neden.** `HintReferee.__init__` `GnubgSession`'ı `persistent=True`
+**vermeden** kurar; `GnubgSession.run()` ise her çağrıda
+`subprocess.run([exe, "-t"], input=script)` ile **yeni bir gnubg süreci**
+başlatır. `gnubg_er` docstring'i bu farkı zaten yazıyor: süreç başlatma
+~0,45 s, kalıcı süreçte aynı iş ~0,01 s. Yani 4 s'nin büyük kısmı gnubg
+açılışı (ağırlık yükleme) ve süreç kurulumudur, 2-ply değerlendirme değil.
+
+**Karar — şimdi değiştirilmez.** Kalıcı yola geçmek `hint` için yeni bir
+senkronizasyon sentinel'i gerektirir: mevcut `_read_blocks` `show pipcount`
+bloklarını sayar, ama `hint` çıktısı o satırdan **sonra** gelir; sondaki
+sentinel olmadan okuma erken döner. Bu kod tabanında tam bu sınıf hata daha
+önce yaşandı (F7-90: ayna simetrisi ve değerlendirme önbelleği sessizce
+farklı sonuç verdi). 100k etiketlemesi **doğru** ve çalışıyor; 6,7 saati
+kurtarmak için etiketleri sessizce bozma riski alınmaz.
+
+**Planlanan etki.** Kalıcı oturumla pozisyon başına maliyet ~0,5 s'ye iner
+(8x). 1M pozisyonluk bir sonraki veri turunda bu, 4 gün yerine ~6 saat eder;
+o turdan **önce** uygulanmalı ve `hint` çıktısı mevcut tek-süreçli yolla
+birebir karşılaştırılarak doğrulanmalıdır.
+
+**Mevcut koşu tahmini.** 24 parça x 4 168 pozisyon, iki dalga x 12:
+dalga başına ~4,6 saat, toplam **~9,3 saat** (09:29:53 başlangıç ⇒ ~18:50).
