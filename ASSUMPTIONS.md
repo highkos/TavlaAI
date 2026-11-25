@@ -6846,3 +6846,35 @@ yerde durur, böylece rapor metni ile kod ayrışamaz.
 
 **Testler.** 383–388 (tohum seçimi), 389–396 (karar ve rapor), 397–400 (veri
 doğrulama), 401–404 (CLI ve sabit marj).
+## F7-124 — 100k eğitiminde adım sayısı çağrı-eşitliği (epoch matching)
+
+**Karar.** 100k koşusunda `--steps 5000` yerine **15000** kullanılır; tohum
+sayısı 5 yerine **3** (0,1,2) olur. Diğer tüm hiperparametreler R-D tarifiyle
+aynıdır (lr 1e-3, batch 64, value 0.5 / dist 0.5, cosine, higgins).
+
+**Gerekçe 1 — 5000 adım 100k'da 3.5 epoch eder.** 30k koşusunda `trainCount`
+27 005 ve 5000 adım x 64 = 320 000 örnek, yani **10.7 epoch**. 100k'da
+`trainCount` ~90 000 olacağından aynı 5000 adım yalnızca **3.5 epoch** görür.
+Bu, veri değişkenini eğitim süresiyle karıştırır ve "veri yardımcı olmadı"
+yanlış negatifini üretir. 10.7 epoch için 10.7 x 90 000 / 64 = **15 052 adım**
+gerekir; 15 000 seçildi.
+
+**Gerekçe 2 — 30k koşusu 5000 adımda doygun değildi.** `bestStep` değerleri
+4500, 5000, 5000 ve `stoppedEarly` üç tohumda da `False`. Yani 5000 adım
+sınırın tam kenarındaydı; 100k'da bu sınırı korumak modeli bilerek eksik
+eğitmek olurdu.
+
+**Gerekçe 3 — tohum sayısı 3'e iner, kural değişmez.** Karar kuralı (tohum
+seçimi yalnızca `valTop1`, m = 0,1115, üç dal) **aynen** korunur; tohum sayısı
+yalnızca hesaplama bütçesidir ve ER'ye bakılmadan önce sabitlenmiştir. Üç
+tohum, "en iyi valTop1" seçimi için anlamlı en küçük kümedir.
+
+**Maliyet.** Ölçülen gerçek hız 0,24–0,35 s/adım (30k xlarge, 5000 adım,
+1769 s). 15 000 adım ~1,2–1,5 saat/tohum; üç profil x üç tohum ~9–10 saat.
+Bu, 100k etiketlemesinden sonra tek gecelik bir koşudur.
+
+**Doğrulama.** `run_train.ps1` içinde `--steps 15000 --seeds 0,1,2`; betik
+`[Parser]::ParseFile` ile sözdizimi doğrulandı. Ölçüm yolu (`measure`) yeni
+`--sym-stride/--sym-limit/--measure-timeout` bayraklarıyla uçtan uca denendi:
+`er_paths` 40 vaka, antisymmetry 4 vaka (ayrı örneklem), `capacity.json`
+güncellendi, çıkış 0.
