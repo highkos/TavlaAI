@@ -5630,3 +5630,37 @@ Düzeltme sonrası yeniden birleştirme (yeniden etiketleme yok): `hasDist: true
 `test_239` yeni sözleşmeye göre yeniden yazıldı; 405–408 eklendi (doldurma,
 düşürme, NaN maskeleme, kayıpsız gidiş-dönüş). Toplam 1577 → **1592**;
 §6 toplamı 2062 → **2077**.
+
+---
+
+## 49. 100k eğitimi — bellek ve değerlendirme düzeltmeleri (F7-127)
+
+### 49.1 Bellek patlaması
+
+100k koşusunun ilk 8 dakikasında süreç 21,79 GB çalışma kümesine ulaştı, boş
+RAM 0,48 GB'a düştü, adım hızı 0,84 s/adım (30k'da 0,24–0,35). Kök neden
+`_pad_policy`'nin `(n, width, 221)` float32 dizisi: 100 030 × 581 × 221 × 4 =
+**51,4 GB** sanal ayırma. 30k'da aynı formül 11,7 GB üretiyordu.
+
+`_batch_tensors` artık partiyi düzensiz `flat`/`starts`/`counts` üzerinden
+kurar; parti başına ~33 MB. Ölçüm: çalışma kümesi 21,79 → **2,48 GB**, boş RAM
+0,48 → **18,4 GB**.
+
+### 49.2 Değerlendirme maliyeti
+
+`--eval-every 500` → **1000**. 100k doğrulama kümesi 10 003 pozisyon; 30 tur
+yerine 15 tur. 1000 adım = 64 000 örnek ≈ 0,7 epoch, `bestStep` çözünürlüğü
+için yeterli. Tohum başına ~20 dk, 9 koşuda ~3 saat tasarruf.
+
+### 49.3 Değişmeyenler
+
+`--steps 15000` (F7-124 epoch eşleşmesi), `--seeds 0,1,2`, üç profil,
+`--dist-weight 0,5`, `--symmetry-mode higgins`, karar kuralı
+`equivalence_verdict(..., 0,1115)` ve "tohum seçimi ER'ye bakmadan" aynen
+yürürlükte. `--eval-every` üç profil ve üç tohum için eşit uygulanır.
+
+### 49.4 Doğrulama
+
+`test_distill_dist_k5.py` + `test_capacity_profiles.py` → **63 test geçti**.
+30 adımlık `xlarge` denemesi: `valTop1 0,6433`, `parityMaxAbsDeltaPolicyLogit
+1,5e-05` (Higgins simetrisi korunuyor), `trainCount 90 027`, `valCount 10 003`.

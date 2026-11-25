@@ -900,9 +900,15 @@ def train_policy_head(
 
     torch.manual_seed(seed)
     n = len(dataset)
-    x, mask, width = _pad_policy(dataset)
+    # F7-127: duzensiz kumeyi **global genislige yastiklamak** 100k'da
+    # ``(100030, 581, 221)`` = ~51 GB sanal dizi aciyor ve makine takasa
+    # giriyordu. Parti artik dogrudan duzensiz diziden kurulur.
+    counts = np.diff(np.asarray(dataset.offsets, dtype=np.int64))
+    width = int(np.max(counts)) if n else 0
     if width <= 0:
         raise ValueError("aday kumesi bos")
+    flat = np.asarray(dataset.x, dtype=np.float32)
+    starts = np.asarray(dataset.offsets[:-1], dtype=np.int64)
 
     # Deterministik ayirma: ayni seed her zaman ayni dogrulama kumesini verir.
     n_val = int(round(n * val_fraction)) if val_fraction > 0 else 0
@@ -913,8 +919,6 @@ def train_policy_head(
     train_idx = np.sort(perm[n_val:]) if n_val else np.arange(n)
     n_train = int(train_idx.size)
 
-    xt = torch.from_numpy(x)
-    mt = torch.from_numpy(mask)
     bt = torch.from_numpy(np.asarray(dataset.best, dtype=np.int64))
     yt = torch.from_numpy(np.asarray(dataset.y, dtype=np.float32))
     dt = (
@@ -951,11 +955,21 @@ def train_policy_head(
         asabilir). Global genislige yastiklamak her adimi 10 kata kadar
         sisiriyordu; maske zaten dolgu satirlarini -1e9 ile etkisizlestirdigi
         icin partiyi kendi genisligine kirpmak sonucu degistirmez.
+
+        F7-127: parti, duzensiz ``flat``/``starts``/``counts`` uzerinden
+        kurulur; global yastiklanmis dizi hic olusturulmaz.
         """
-        m = mt[indices]
-        w = int(m.sum(dim=1).max().item()) if m.numel() else 0
-        w = max(1, min(w, width))
-        return xt[indices][:, :w].reshape(-1, 221), m[:, :w], w
+        idx_np = indices.detach().cpu().numpy()
+        c = counts[idx_np]
+        w = max(1, min(int(c.max()) if c.size else 0, width))
+        xb = np.zeros((idx_np.size, w, 221), dtype=np.float32)
+        mb = np.zeros((idx_np.size, w), dtype=bool)
+        for r, i in enumerate(idx_np):
+            s = int(starts[i])
+            k = int(counts[i])
+            xb[r, :k] = flat[s : s + k]
+            mb[r, :k] = True
+        return torch.from_numpy(xb).reshape(-1, 221), torch.from_numpy(mb), w
 
     def _policy_loss(
         logits: torch.Tensor, mb: torch.Tensor, eq: torch.Tensor | None, bb: torch.Tensor

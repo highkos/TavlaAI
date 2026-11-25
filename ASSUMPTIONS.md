@@ -6951,3 +6951,47 @@ gidiş-dönüş) ve güncellenen 239; ilgili dört dosyada **221 test geçti**.
 
 **Testler.** 405–408; `test_239` yeni sözleşmeye göre yeniden yazıldı.
 Toplam 1577 → **1592**.
+
+---
+
+## F7-127 — 100k eğitiminde bellek patlaması ve değerlendirme maliyeti
+
+**Belirti.** 100k koşusu başladıktan 8 dakika sonra eğitim süreci **21,79 GB**
+çalışma kümesine ulaştı; boş fiziksel RAM **0,48 GB**'a düştü. Adım hızı
+0,84 s/adım (30k'da 0,24–0,35 s/adım) — makine takasa girmişti.
+
+**Kök neden.** `train_policy_head` veri kümesini **global aday genişliğine**
+yastıklıyordu: `_pad_policy` → `np.zeros((n, width, 221), float32)`. 100k'da
+`n = 100 030`, `width = 581` ⇒ **51,4 GB** sanal dizi. Windows bunu pagefile
+üzerinden "başarıyla" ayırıyor, sonra her adımda sayfa hatası veriyor. 30k'da
+aynı formül 11,7 GB üretiyordu, yani sınırın altındaydı; 100k ile aşıldı.
+
+**Düzeltme.** `_batch_tensors` artık partiyi **doğrudan düzensiz diziden**
+kurar: `flat` (`(M, 221)` görünüm, kopya yok), `starts`, `counts`. Parti
+başına ayırma `64 × 581 × 221 × 4 ≈ 33 MB`. Global yastıklı dizi hiç
+oluşturulmaz. `_pad_policy` yalnızca `select_policy_temperature` için kalır
+(bu koşuda kullanılmıyor).
+
+**Ölçüm.** Aynı 100k veri kümesi, `xlarge`, 30 adım:
+
+| | önce | sonra |
+|---|---|---|
+| çalışma kümesi | 21,79 GB | **2,48 GB** |
+| boş fiziksel RAM | 0,48 GB | **18,4 GB** |
+
+**İkinci düzeltme — değerlendirme maliyeti.** 100k'da doğrulama kümesi
+10 003 pozisyon. `--eval-every 500` ile tohum başına 30 doğrulama turu
+yapılıyordu; ölçülen sabit maliyet ~934 s (30 adımlık koşu). `--eval-every
+1000` yapıldı: 1000 adım = 64 000 örnek ≈ 0,7 epoch, `bestStep` çözünürlüğü
+için fazlasıyla yeterli (30k koşusunda `bestStep` zaten 4500/5000/5000, yani
+doygunluk sınırında). Tohum başına ~20 dk, 9 koşuda ~3 saat tasarruf.
+
+**Karar kuralı değişmedi.** `--eval-every` bir tarif ayrıntısıdır, karar
+kuralının parçası değildir; üç profil ve üç tohum için **eşit** uygulanır.
+`equivalence_verdict(..., 0,1115)` ve "tohum seçimi ER'ye bakmadan" aynen
+yürürlükte.
+
+**Doğrulama.** `test_distill_dist_k5.py` + `test_capacity_profiles.py` → **63
+test geçti**. 30 adımlık `xlarge` denemesi: `valTop1 0,6433`,
+`parityMaxAbsDeltaPolicyLogit 1,5e-05` (Higgins simetrisi korunuyor),
+`trainCount 90 027`, `valCount 10 003`.
