@@ -443,7 +443,23 @@ class PolicyDataset:
         return self.x[int(self.offsets[i]) : int(self.offsets[i + 1])]
 
     def has_dist(self) -> bool:
-        return self.dist is not None and int(np.asarray(self.dist).shape[0]) == len(self)
+        """6 sinifli dagilim sutunu **kullanilabilir** mi (en az bir gecerli satir).
+
+        Etiketi alinamayan pozisyonlar ``nan`` satiriyla temsil edilir; sutun
+        bu yuzden tek bir eksik yuzunden tumden dusurulmez (F7-126).
+        """
+        if self.dist is None:
+            return False
+        arr = np.asarray(self.dist)
+        if arr.ndim != 2 or int(arr.shape[0]) != len(self):
+            return False
+        return bool(np.isfinite(arr).all(axis=1).any())
+
+    def dist_valid_mask(self) -> np.ndarray | None:
+        """``[N]`` bool: dagilim hedefi gecerli olan pozisyonlar."""
+        if not self.has_dist():
+            return None
+        return np.isfinite(np.asarray(self.dist, dtype=np.float32)).all(axis=1)
 
     def has_cand_equity(self) -> bool:
         """Aday basina equity sutunu dolu mu (liste bazli kayip icin gerekli)."""
@@ -505,6 +521,11 @@ class PolicyDataset:
             "min": float(np.min(y)),
             "max": float(np.max(y)),
             "hasDist": bool(self.has_dist()),
+            "distMissing": (
+                int((~self.dist_valid_mask()).sum())
+                if self.has_dist()
+                else int(len(self))
+            ),
             "hasCandEquity": bool(self.has_cand_equity()),
             "maskedCandidateRate": self.masked_candidate_rate(),
         }
@@ -657,15 +678,16 @@ def build_policy_dataset(
     y: list[float] = []
     dist: list[list[float]] = []
     cand_equity: list[float] = []
-    have_dist = True
     have_cand_equity = True
     for p in labeled:
         rows.extend(p.vectors)
         offsets.append(len(rows))
         best.append(int(p.best_index))
         y.append(float(p.best_equity))
+        # Eksik dagilim satiri ``nan`` ile yazilir ve egitimde maskelenir.
+        # Eskiden tek bir eksik satir **tum** sutunu dusuruyordu (F7-126).
         if p.best_dist is None:
-            have_dist = False
+            dist.append([float("nan")] * 6)
         else:
             dist.append([float(v) for v in p.best_dist])
         if p.candidate_equities is None or len(p.candidate_equities) != len(p.vectors):
@@ -674,13 +696,16 @@ def build_policy_dataset(
             cand_equity.extend(
                 float("nan") if v is None else float(v) for v in p.candidate_equities
             )
+    dist_arr = np.asarray(dist, dtype=np.float32) if dist else None
+    if dist_arr is not None and not np.isfinite(dist_arr).all(axis=1).any():
+        dist_arr = None  # hicbir satir gecerli degil: sutunu hic yazma
     return PolicyDataset(
         x=np.asarray(rows, dtype=np.float32),
         offsets=np.asarray(offsets, dtype=np.int64),
         best=np.asarray(best, dtype=np.int32),
         y=np.asarray(y, dtype=np.float32),
         meta=dict(meta or {}),
-        dist=np.asarray(dist, dtype=np.float32) if have_dist and dist else None,
+        dist=dist_arr,
         cand_equity=(
             np.asarray(cand_equity, dtype=np.float32)
             if have_cand_equity and cand_equity
@@ -737,13 +762,14 @@ def concat_policy_datasets(
 ) -> PolicyDataset:
     """Paralel etiketlenmis dilimleri tek kumede birlestirir.
 
-    Dilimler ayni ``dists`` ayarini kullanmalidir; karisik gelirse dagilim
-    sutunu **dusurulur** (sessizce yanlis KL hedefi uretmemek icin).
+    Dilimler ayni ``dists`` ayarini kullanmalidir. Bir dilimde dagilim sutunu
+    **hic** yoksa (eski bir kosudan geliyorsa) o dilimin satirlari ``nan`` ile
+    doldurulur ve egitimde maskelenir; sutun tumden dusurulmez (F7-126).
     """
     parts = [p for p in parts if len(p) > 0]
     if not parts:
         raise ValueError("birlestirilecek bos olmayan dilim yok")
-    has_dist = all(p.has_dist() for p in parts)
+    has_dist = any(p.has_dist() for p in parts)
     has_cand_equity = all(p.has_cand_equity() for p in parts)
     offsets = np.zeros(1, dtype=np.int64)
     xs: list[np.ndarray] = []
@@ -754,17 +780,20 @@ def concat_policy_datasets(
     merged_meta = dict(meta or {})
     merged_meta.setdefault("shards", len(parts))
     merged_meta.setdefault("shardLabeled", [int(len(p)) for p in parts])
+    dist_parts: list[np.ndarray] = []
+    if has_dist:
+        for p in parts:
+            if p.has_dist():
+                dist_parts.append(np.asarray(p.dist, dtype=np.float32))
+            else:
+                dist_parts.append(np.full((len(p), 6), np.nan, dtype=np.float32))
     return PolicyDataset(
         x=np.concatenate(xs, axis=0),
         offsets=offsets,
         best=np.concatenate([np.asarray(p.best, dtype=np.int32) for p in parts]),
         y=np.concatenate([np.asarray(p.y, dtype=np.float32) for p in parts]),
         meta=merged_meta,
-        dist=(
-            np.concatenate([np.asarray(p.dist, dtype=np.float32) for p in parts])
-            if has_dist
-            else None
-        ),
+        dist=np.concatenate(dist_parts, axis=0) if has_dist else None,
         cand_equity=(
             np.concatenate([np.asarray(p.cand_equity, dtype=np.float32) for p in parts])
             if has_cand_equity
@@ -891,6 +920,12 @@ def train_policy_head(
     dt = (
         torch.from_numpy(np.asarray(dataset.dist, dtype=np.float32))
         if dist_weight > 0
+        else None
+    )
+    # F7-126: dagilim etiketi alinamayan pozisyonlar KL teriminden cikarilir.
+    dvalid = (
+        torch.from_numpy(np.asarray(dataset.dist_valid_mask(), dtype=bool))
+        if dt is not None
         else None
     )
     # R-04: aday basina equity; etiketsiz aday ``nan`` (maskelenecek).
@@ -1061,12 +1096,17 @@ def train_policy_head(
         vloss = F.mse_loss(equity_of_probs(best_probs), yt[idx].to(device))
         loss = ce + value_weight * vloss
         if dt is not None:
-            target = dt[idx].to(device)
-            target = target / target.sum(dim=1, keepdim=True).clamp_min(1e-9)
-            kl = F.kl_div(
-                torch.log(best_probs.clamp_min(1e-9)), target, reduction="batchmean"
-            )
-            loss = loss + dist_weight * kl
+            ok = dvalid[idx].to(device)
+            if bool(ok.any()):
+                # ``nan`` satirlar once sifira cevrilir: aksi halde ``nan * 0``
+                # yine ``nan`` olur ve maskeleme kaybi zehirler (F7-126).
+                target = torch.nan_to_num(dt[idx].to(device), nan=0.0)
+                target = target / target.sum(dim=1, keepdim=True).clamp_min(1e-9)
+                rows = F.kl_div(
+                    torch.log(best_probs.clamp_min(1e-9)), target, reduction="none"
+                ).sum(dim=1)
+                kl = (rows * ok).sum() / ok.sum().clamp_min(1)
+                loss = loss + dist_weight * kl
         if rank_weight > 0:
             rank = out[2].reshape(batch, wb)
             pos = rank.gather(1, bb.view(-1, 1))

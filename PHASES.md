@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1577** | ~10 dk | ✅ 1577/1577 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **2062** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1592** | ~10 dk | ✅ 1592/1592 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **2077** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -5578,5 +5578,55 @@ marj `0.1115` varsayılandır ve test 404 ile sabitlenmiştir.
 reddi), 389–396 (karar: üç etiket, pozitif olmayan marj reddi, eksik GA reddi,
 taban karşılaştırması, Markdown içeriği), 397–400 (veri doğrulama: `offsets`
 sayımı, eksik dizi, kısa sayı, dosya yok), 401–404 (CLI: `select`, `report`,
-`check` çıkış kodu, sabit marj). Test sayısı 1552 → **1577**; §6 toplamı
-2037 → **2062**.
+`check` çıkış kodu, sabit marj). Test sayısı 1552 → **1592**; §6 toplamı
+2037 → **2077**.
+## 48. 100k etiketleme tamamlandı ve `dist` sütunu kurtarıldı (F7-126)
+
+### 48.1 Etiketleme sonucu
+
+24 dilim x 4 168 pozisyon, iki dalga x 12 süreç. Başlangıç 09:29:53, dalga 1
+bitiş 14:27:11, dalga 2 bitiş 18:58:16, birleştirme 18:58:42. Toplam **9 sa 29 dk**.
+
+| Ölçü | Değer |
+|---|---|
+| Pozisyon | **100 030** |
+| Aday | 2 239 253 (ort. 22,39, en çok 581) |
+| `hasDist` | **true** (`distMissing` 4 168, %4,2) |
+| `hasCandEquity` | true |
+| Maskelenen aday oranı | 0,6305 |
+| Equity ortalama / std | 0,2252 / 0,6025 |
+| Dilim başına süre | ~16 000 s (4,4 s/pozisyon) |
+
+### 48.2 Bulunan veri kaybı
+
+İlk birleştirme `hasDist: false` verdi. `shard_22`'de **tek** pozisyonun
+dağılım etiketi alınamamış; `build_policy_dataset` bu yüzden o dilimde sütunu
+hiç yazmamış; `concat_policy_datasets` de `all(...)` istediği için **100 030
+pozisyonun tamamı** dağılım hedefini kaybetmiş. Ayrıntı: F7-126.
+
+Düzeltme sonrası yeniden birleştirme (yeniden etiketleme yok): `hasDist: true`,
+`distMissing: 4 168`. `stage_100k.py check` → `ready: true`.
+
+### 48.3 Eğitim tarifi (koşudan önce sabit)
+
+| Alan | Değer | Gerekçe |
+|---|---|---|
+| Adım | **15 000** | 30k'da 5 000 adım = 10,7 epoch; 100k'da aynı epoch için 15 000 (F7-124) |
+| Tohum | 0, 1, 2 | hesaplama bütçesi; seçim yalnızca `valTop1` |
+| Batch / lr | 64 / 1e-3, cosine, final 0,1 | R-D tarifi |
+| Kayıplar | value 0,5 · dist 0,5 · policy T 0,1 | R-D tarifi |
+| Mimari | `--symmetry --symmetry-mode higgins` | F7-118 |
+| Ölçüm | `--stride 3 --limit 300`, antisimetri `--stride 10 --limit 120` | F7-121 |
+| Karar | m = 0,1115, üç dal | F7-117 |
+
+### 48.4 Karar kuralı (değişmedi)
+
+`equivalence_verdict(ppg, ci_low, ci_high, 0.1115)`:
+`ci_low > -0,1115` → `esdeger`; `ci_high < -0,1115` → `daha-kotu`; aksi
+`esdegerlik-kanitlanmadi`. Tohum seçimi ER'ye bakmadan yapılır.
+
+### 48.5 Testler
+
+`test_239` yeni sözleşmeye göre yeniden yazıldı; 405–408 eklendi (doldurma,
+düşürme, NaN maskeleme, kayıpsız gidiş-dönüş). Toplam 1577 → **1592**;
+§6 toplamı 2062 → **2077**.

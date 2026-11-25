@@ -6907,3 +6907,47 @@ birebir karşılaştırılarak doğrulanmalıdır.
 
 **Mevcut koşu tahmini.** 24 parça x 4 168 pozisyon, iki dalga x 12:
 dalga başına ~4,6 saat, toplam **~9,3 saat** (09:29:53 başlangıç ⇒ ~18:50).
+## F7-126 — Eksik dağılım satırı tüm `dist` sütununu düşürüyordu (veri kaybı)
+
+**Bulgu.** 100k birleştirmesi `hasDist: false` verdi. Neden: 24 dilimin
+**23'ünde** `dist` sütunu vardı, `shard_22`'de yoktu. `concat_policy_datasets`
+`all(p.has_dist())` istediği için **tek dilim yüzünden 100 030 pozisyonun
+tamamı** dağılım hedefini kaybetti.
+
+**Kök neden iki katmanlı.**
+1. `build_policy_dataset` içinde `have_dist` bayrağı, **tek bir** pozisyonun
+   `best_dist is None` olmasıyla `False` oluyordu; sütun o dilimde hiç
+   yazılmıyordu. `shard_22`'de tam olarak 1 pozisyonun dağılım etiketi
+   alınamamış (`skipped: 1`, neden "dagilim etiketi alinamadi").
+2. `concat_policy_datasets` karışık gelince sütunu **tümden** düşürüyordu.
+
+Yani 1 / 100 030 pozisyon, 100 030 pozisyonun hedefini yok etti. `dist_weight
+0.5` ile eğitim başlasaydı `train_policy_head` **hata verip duracaktı** (satır
+852), yani sessiz bozulma değil ama 9 saatlik koşunun boşa gitmesi olurdu.
+
+**Düzeltme.**
+- `build_policy_dataset`: eksik satır `nan` ile yazılır, sütun korunur. Hiçbir
+  satır geçerli değilse sütun hiç yazılmaz (eski davranış korunur).
+- `PolicyDataset.has_dist()` artık "sütun var **ve** en az bir geçerli satır"
+  demek; `dist_valid_mask()` geçerli satırları verir; `stats()` `distMissing`
+  raporlar.
+- `concat_policy_datasets`: `any(...)` kullanır; sütunu olmayan dilim `nan`
+  satırlarıyla doldurulur.
+- `train_policy_head`: KL terimi yalnızca geçerli satırlarda hesaplanır.
+  Hedef önce `torch.nan_to_num` ile sıfırlanır — aksi halde `nan * 0` yine
+  `nan` olur ve maskeleme kaybı zehirler (test 407 bunu yakaladı).
+
+**Kurtarılan veri.** `shard_22` yeniden etiketlenmeden (4,5 saat) mevcut
+dilimlerle birleştirildi: **100 030 pozisyon**, `hasDist: true`,
+`distMissing: 4 168` (%4,2). Kayıp yalnızca `shard_22`'nin dağılım sütunu;
+`cand_equity` ve `best` eksiksiz. KL terimi yardımcı sinyal olduğu için %4,2
+maskeleme kabul edilebilir; tam kurtarma için `shard_22`'nin yeniden
+etiketlenmesi yeterlidir (gelecek turda).
+
+**Doğrulama.** `merge.json`: `count 100030`, `hasDist true`, `distMissing 4168`,
+`hasCandEquity true`, `maskedCandidateRate 0,6305`. `stage_100k.py check` →
+`ready: true`. Testler 405–408 (doldurma, düşürme, NaN maskeleme, kayıpsız
+gidiş-dönüş) ve güncellenen 239; ilgili dört dosyada **221 test geçti**.
+
+**Testler.** 405–408; `test_239` yeni sözleşmeye göre yeniden yazıldı.
+Toplam 1577 → **1592**.

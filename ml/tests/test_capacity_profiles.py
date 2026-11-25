@@ -237,10 +237,14 @@ def test_concat_policy_datasets_roundtrip():
 
 
 def test_concat_drops_dist_when_shards_disagree():
+    """F7-126: sutun korunur, eksik dilim ``nan`` ile doldurulur."""
     a = _toy_dataset(n=3, width=2, dist=True)
     b = _toy_dataset(n=3, width=2, dist=False)
     merged = gnubg_distill.concat_policy_datasets([a, b])
-    assert not merged.has_dist()
+    assert merged.has_dist()
+    assert merged.dist.shape == (6, 6)
+    assert merged.dist_valid_mask().tolist() == [True] * 3 + [False] * 3
+    assert np.isnan(merged.dist[3:]).all()
 
 
 def test_concat_rejects_empty():

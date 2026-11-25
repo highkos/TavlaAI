@@ -101,7 +101,8 @@ def test_238_policy_dataset_has_dist_and_roundtrip(tmp_path):
     assert gd.load_policy_dataset(tmp_path / "plain.npz").has_dist() is False
 
 
-def test_239_build_policy_dataset_requires_dist_on_every_position():
+def test_239_build_policy_dataset_keeps_dist_column_with_nan_rows():
+    """F7-126: tek eksik satir **tum** dagilim sutununu dusurmemeli."""
     base = gd.PolicyPosition(
         vectors=[[0.0] * 221, [1.0] * 221],
         best_index=0,
@@ -127,7 +128,16 @@ def test_239_build_policy_dataset_requires_dist_on_every_position():
         best_dist=None,
     )
     mixed = gd.build_policy_dataset([base, partial])
-    assert mixed.has_dist() is False
+    assert mixed.has_dist() is True
+    assert mixed.dist.shape == (2, 6)
+    assert mixed.dist_valid_mask().tolist() == [True, False]
+    assert np.isnan(mixed.dist[1]).all()
+    assert mixed.stats()["distMissing"] == 1
+
+    # Hicbir satir gecerli degilse sutun hic yazilmaz.
+    none_valid = gd.build_policy_dataset([partial, partial])
+    assert none_valid.has_dist() is False
+    assert none_valid.dist is None
 
 
 def test_240_train_policy_head_rejects_dist_weight_without_dist():
@@ -154,3 +164,58 @@ def test_241_train_policy_head_learns_distribution():
     assert report["distWeight"] == pytest.approx(1.0)
     assert report["hasDist"] is True
     assert report["lastLoss"] < report["firstLoss"]
+
+
+# ----------------------------------------------------------------------
+# F7-126: eksik dagilim satiri sutunu dusurmemeli (Test 405-408)
+# ----------------------------------------------------------------------
+
+
+def test_405_concat_fills_nan_for_parts_without_dist():
+    """Bir dilimde sutun hic yoksa ``nan`` ile doldurulur, sutun dusurulmez."""
+    with_dist = _dataset(3)
+    without = _dataset(2, with_dist=False)
+    merged = gd.concat_policy_datasets([with_dist, without])
+    assert merged.has_dist() is True
+    assert merged.dist.shape == (5, 6)
+    assert merged.dist_valid_mask().tolist() == [True, True, True, False, False]
+    assert np.isnan(merged.dist[3:]).all()
+    assert merged.stats()["distMissing"] == 2
+
+
+def test_406_concat_drops_dist_when_no_part_has_it():
+    merged = gd.concat_policy_datasets(
+        [_dataset(2, with_dist=False), _dataset(3, with_dist=False)]
+    )
+    assert merged.has_dist() is False
+    assert merged.dist is None
+
+
+def test_407_train_policy_head_masks_nan_dist_rows():
+    """``nan`` hedefli satirlar KL terimine girmemeli (kayip ``nan`` olmamali)."""
+    torch = pytest.importorskip("torch")
+    from model import build_model
+
+    ds = _dataset(8)
+    ds.dist[2] = np.nan
+    ds.dist[5] = np.nan
+    assert ds.stats()["distMissing"] == 2
+
+    torch.manual_seed(0)
+    model = build_model(221, 32, 16, seed=0, output_version=2, profile="small")
+    report = gd.train_policy_head(
+        model, ds, steps=20, lr=1e-2, batch=8, seed=0, dist_weight=1.0
+    )
+    assert np.isfinite(report["lastLoss"])
+    assert report["hasDist"] is True
+
+
+def test_408_save_roundtrip_preserves_nan_dist_rows(tmp_path):
+    ds = _dataset(4)
+    ds.dist[1] = np.nan
+    path = tmp_path / "nan.npz"
+    gd.save_policy_dataset(ds, path)
+    back = gd.load_policy_dataset(path)
+    assert back.has_dist() is True
+    assert back.dist_valid_mask().tolist() == [True, False, True, True]
+    assert np.isnan(back.dist[1]).all()
