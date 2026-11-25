@@ -698,7 +698,7 @@ def test_319_er_paths_parser_accepts_stride():
 def test_320_measure_profile_forwards_stride_to_both_tools(tmp_path, monkeypatch):
     calls = []
 
-    def fake_run(cmd, quiet=False):
+    def fake_run(cmd, quiet=False, timeout=None):
         calls.append(list(cmd))
         return 0
 
@@ -723,7 +723,7 @@ def test_320_measure_profile_forwards_stride_to_both_tools(tmp_path, monkeypatch
 def test_321_measure_profile_omits_stride_when_one(tmp_path, monkeypatch):
     calls = []
 
-    def fake_run(cmd, quiet=False):
+    def fake_run(cmd, quiet=False, timeout=None):
         calls.append(list(cmd))
         return 0
 
@@ -902,3 +902,90 @@ def test_379_run_forwards_symmetry_mode_to_train_and_export(monkeypatch, tmp_pat
     assert seen["train"]["symmetry_mode"] == "higgins"
     assert seen["export"] is True
     assert seen["exportMode"] == "higgins"
+
+
+def test_380_run_forwards_measure_timeout_and_sym_sample(monkeypatch, tmp_path):
+    """F7-121: olcum alt surec zaman asimi ve ayri antisimetri orneklemi.
+
+    ``antisymmetry`` kapisi gnubg 2-ply'da vaka basina ~9.5 s surer; bu yuzden
+    ER olcumunden daha kucuk bir orneklemle kosulabilmelidir. Ayrica alt surec
+    zaman asimi, takilan bir gnubg'nin taramayi sure boyunca kilitlemesini
+    onler.
+    """
+    seen: dict[str, object] = {}
+
+    def fake_train(data, **kw):
+        return object(), {"profile": kw["profile"], "params": 1}, {"model": {}}
+
+    def fake_export(
+        state, *, profile, out_path, model_version, symmetry=False, symmetry_mode="basis"
+    ):
+        return {"maxAbsDeltaValue": 0.0, "maxAbsDeltaPolicyLogit": 0.0}
+
+    def fake_measure(onnx_path, **kw):
+        seen["measure"] = kw
+        return {"erPaths": None, "antisymmetry": None, "erExit": 0, "antisymmetryExit": 0}
+
+    monkeypatch.setattr(capacity_train, "train_profile", fake_train)
+    monkeypatch.setattr(capacity_train, "export_profile", fake_export)
+    monkeypatch.setattr(capacity_train, "measure_profile", fake_measure)
+
+    code = capacity_train.main(
+        [
+            "run",
+            "--data",
+            "d.npz",
+            "--profile",
+            "medium",
+            "--out-dir",
+            str(tmp_path),
+            "--measure",
+            "--measure-timeout",
+            "120",
+            "--sym-limit",
+            "12",
+            "--sym-stride",
+            "10",
+        ]
+    )
+    assert code == 0
+    assert seen["measure"]["measure_timeout"] == 120.0
+    assert seen["measure"]["sym_limit"] == 12
+    assert seen["measure"]["sym_stride"] == 10
+
+
+def test_381_measure_timeout_defaults_to_one_hour_and_zero_means_unbounded():
+    """Varsayilan 3600 s; ``0`` sinirsiz (``None``) demektir."""
+    parser = capacity_train.build_parser()
+    default = parser.parse_args(
+        ["run", "--data", "d.npz", "--profile", "medium", "--out-dir", "o"]
+    )
+    assert default.measure_timeout == 3600.0
+    assert default.sym_limit is None
+    assert default.sym_stride is None
+    off = parser.parse_args(
+        [
+            "run",
+            "--data",
+            "d.npz",
+            "--profile",
+            "medium",
+            "--out-dir",
+            "o",
+            "--measure-timeout",
+            "0",
+        ]
+    )
+    assert off.measure_timeout == 0.0
+
+
+def test_382_run_returns_124_when_measurement_subprocess_times_out(monkeypatch):
+    """Zaman asimi sessizce yutulmaz: kod 124 doner ve olcum ``None`` kalir."""
+    import subprocess as _sp
+
+    def boom(cmd, cwd=None, timeout=None):
+        raise _sp.TimeoutExpired(cmd, timeout or 0.0)
+
+    monkeypatch.setattr(capacity_train.subprocess, "run", boom)
+    code = capacity_train._run(["x"], quiet=True, timeout=5.0)
+    assert code == 124

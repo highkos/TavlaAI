@@ -221,10 +221,22 @@ def export_profile(
     return parity
 
 
-def _run(cmd: Sequence[str], *, quiet: bool) -> int:
+def _run(cmd: Sequence[str], *, quiet: bool, timeout: float | None = None) -> int:
+    """Alt sureci calistirir; ``timeout`` asilirsa 124 dondurur.
+
+    Zaman asimi bir guvenlik agidir: gnubg takilirsa olcum adimi taramayi
+    sure boyunca kilitleyip ucretli GPU saatini bosa harcamamalidir.
+    """
     if not quiet:
         print("$ " + " ".join(cmd), file=sys.stderr)
-    proc = subprocess.run(list(cmd), cwd=str(REPO_ROOT))
+    try:
+        proc = subprocess.run(list(cmd), cwd=str(REPO_ROOT), timeout=timeout)
+    except subprocess.TimeoutExpired:
+        print(
+            "zaman asimi (%.0f s): %s" % (timeout or 0.0, " ".join(cmd)),
+            file=sys.stderr,
+        )
+        return 124
     return int(proc.returncode)
 
 
@@ -240,8 +252,17 @@ def measure_profile(
     per_case: bool = True,
     timeout: float | None = None,
     stride: int = 1,
+    measure_timeout: float | None = None,
+    sym_limit: int | None = None,
+    sym_stride: int | None = None,
 ) -> dict[str, Any]:
-    """``er_paths`` ve ``antisymmetry`` olcumlerini calistirir."""
+    """``er_paths`` ve ``antisymmetry`` olcumlerini calistirir.
+
+    ``measure_timeout`` her alt surec icin ust sinirdir (saniye).
+    ``sym_limit``/``sym_stride`` antisimetri kapisini ayri ornekler: kapı
+    gnubg 2-ply'da vaka basina ~9.5 s surer, bu yuzden ER olcumunden daha
+    kucuk bir orneklemle kosulmasi normaldir.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     er_json = out_dir / "er_paths.json"
     er_md = out_dir / "er_paths.md"
@@ -274,7 +295,7 @@ def measure_profile(
         er_cmd += ["--timeout", str(int(timeout))]
     if quiet:
         er_cmd.append("--quiet")
-    er_code = _run(er_cmd, quiet=quiet)
+    er_code = _run(er_cmd, quiet=quiet, timeout=measure_timeout)
 
     sym_cmd = [
         sys.executable,
@@ -291,13 +312,15 @@ def measure_profile(
     ]
     if gnubg:
         sym_cmd += ["--gnubg", str(gnubg)]
-    if stride > 1:
-        sym_cmd += ["--stride", str(stride)]
-    if limit:
-        sym_cmd += ["--limit", str(limit)]
+    sym_stride_eff = int(sym_stride or stride)
+    sym_limit_eff = sym_limit if sym_limit is not None else limit
+    if sym_stride_eff > 1:
+        sym_cmd += ["--stride", str(sym_stride_eff)]
+    if sym_limit_eff:
+        sym_cmd += ["--limit", str(sym_limit_eff)]
     if timeout:
         sym_cmd += ["--timeout", str(int(timeout))]
-    sym_code = _run(sym_cmd, quiet=quiet)
+    sym_code = _run(sym_cmd, quiet=quiet, timeout=measure_timeout)
 
     result: dict[str, Any] = {
         "erPaths": None,
@@ -751,6 +774,24 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="gnubg hakem cagrisi basina saniye",
     )
+    run.add_argument(
+        "--measure-timeout",
+        type=float,
+        default=3600.0,
+        help="olcum alt sureci basina ust sinir saniye (0 = sinirsiz; F7-121)",
+    )
+    run.add_argument(
+        "--sym-limit",
+        type=int,
+        default=None,
+        help="antisimetri kapisi icin vaka sayisi (varsayilan: --limit)",
+    )
+    run.add_argument(
+        "--sym-stride",
+        type=int,
+        default=None,
+        help="antisimetri kapisi icin adim (varsayilan: --stride)",
+    )
     run.add_argument("--gnubg", type=Path, default=None)
     run.add_argument("--json", type=Path, default=None)
     run.add_argument("--quiet", action="store_true")
@@ -772,6 +813,24 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=None,
         help="gnubg hakem cagrisi basina saniye (varsayilan: er_paths/antisymmetry kendi degeri)",
+    )
+    mea.add_argument(
+        "--measure-timeout",
+        type=float,
+        default=3600.0,
+        help="olcum alt sureci basina ust sinir saniye (0 = sinirsiz; F7-121)",
+    )
+    mea.add_argument(
+        "--sym-limit",
+        type=int,
+        default=None,
+        help="antisimetri kapisi icin vaka sayisi (varsayilan: --limit)",
+    )
+    mea.add_argument(
+        "--sym-stride",
+        type=int,
+        default=None,
+        help="antisimetri kapisi icin adim (varsayilan: --stride)",
     )
     mea.add_argument("--gnubg", type=Path, default=None)
     mea.add_argument("--json", type=Path, default=None)
@@ -889,6 +948,24 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="gnubg hakem cagrisi basina saniye",
     )
+    swp.add_argument(
+        "--measure-timeout",
+        type=float,
+        default=3600.0,
+        help="olcum alt sureci basina ust sinir saniye (0 = sinirsiz; F7-121)",
+    )
+    swp.add_argument(
+        "--sym-limit",
+        type=int,
+        default=None,
+        help="antisimetri kapisi icin vaka sayisi (varsayilan: --limit)",
+    )
+    swp.add_argument(
+        "--sym-stride",
+        type=int,
+        default=None,
+        help="antisimetri kapisi icin adim (varsayilan: --stride)",
+    )
     swp.add_argument("--gnubg", type=Path, default=None)
     swp.add_argument("--json", type=Path, default=None)
     swp.add_argument("--quiet", action="store_true")
@@ -975,6 +1052,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
             quiet=args.quiet,
             timeout=float(getattr(args, "timeout", 0.0) or 0.0) or None,
             stride=int(getattr(args, "stride", 1) or 1),
+            measure_timeout=float(getattr(args, "measure_timeout", 0.0) or 0.0) or None,
+            sym_limit=getattr(args, "sym_limit", None),
+            sym_stride=getattr(args, "sym_stride", None),
         )
 
     row = summarize(report, measurement)
@@ -1050,6 +1130,9 @@ def _cmd_measure(args: argparse.Namespace) -> int:
             quiet=args.quiet,
             timeout=float(getattr(args, "timeout", 0.0) or 0.0) or None,
             stride=int(getattr(args, "stride", 1) or 1),
+            measure_timeout=float(getattr(args, "measure_timeout", 0.0) or 0.0) or None,
+            sym_limit=getattr(args, "sym_limit", None),
+            sym_stride=getattr(args, "sym_stride", None),
         )
     row = summarize(payload.get("train") or {}, measurement)
     row["parityMaxAbsDeltaValue"] = (payload.get("parity") or {}).get("maxAbsDeltaValue")

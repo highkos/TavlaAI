@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1552** | ~10 dk | ✅ 1552/1552 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **2037** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1555** | ~10 dk | ✅ 1555/1555 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **2040** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -5486,3 +5486,64 @@ Ayrıntılı tablo: `ml/artifacts/symmetry_modes.md`.
 (`HigginsNet` tam antisimetri), 377 (parametre sayısı düz V2 ile eşit),
 378 (bilinmeyen `symmetry_mode` reddi), 379 (`--symmetry-mode` aktarımı). Test sayısı 1545 → **1552**; §6 toplamı
 2030 → **2037**.
+## 47. Faz 7-S5 — 100k koşusu öncesi ölçüm yolu ve etiketleme dayanıklılığı
+
+100k veriyle xlarge tekrar denemesi (F7-117 karar ağacının "Hayır" dalı)
+başlatılmadan önce ölçüm ve veri üretim yolundaki iki gerçek kusur kapatıldı.
+Bunlar yeni özellik değil, ücretli GPU saatini ve saatlerce CPU emeğini koruyan
+düzeltmelerdir.
+
+### 47.1 Ölçüm alt süreçlerinde zaman aşımı (F7-121)
+
+`capacity_train.py` içindeki `_run()` `subprocess.run`'ı **zaman aşımı
+vermeden** çağırıyordu. Takılan tek bir gnubg çağrısı taramanın tamamını süre
+boyunca kilitler. Artık `_run(cmd, *, quiet, timeout=None)`:
+
+* `timeout` değerini `subprocess.run`'a geçirir,
+* `subprocess.TimeoutExpired` yakalar, stderr'e `zaman aşımı (N s): <cmd>` yazar,
+* **124** döndürür (POSIX `timeout(1)` geleneği).
+
+`--measure-timeout` varsayılanı **3600** s; `0` sınırsız demektir. Bayrak
+`run`, `measure` ve `sweep` alt komutlarında mevcuttur.
+
+### 47.2 Antisimetri kapısı için ayrı örneklem (F7-121)
+
+`measure_profile` antisimetri adımını ER adımıyla **aynı** `--stride`/`--limit`
+ile çağırıyordu. Ölçülen maliyet gnubg 2-ply'da **vaka başına ~9,5 s**
+(20 vaka, `--stride 10` → 190 s). `--stride 3 --limit 300` = 100 vaka =
+**~16 dk/tohum**; 15 koşuluk tarama için ~4 saat, yani eğitimin kendisinden
+pahalı. Bu, daha önce "takıldı" sanılan şeyin gerçek nedeniydi.
+
+`measure_profile` artık `sym_limit`/`sym_stride` alır; `--sym-limit` ve
+`--sym-stride` parserlara eklendi. Kapı için 12 vaka yeterlidir: `higgins` ve
+`basis` bu örneklemde `corr = −1,0000` veriyor (F7-120), yani kapı zaten kesin
+sonuçlu. **Eşik değiştirilmedi** (`CORR_MIN = 0,99`, `SUM_TOL = 0,001`);
+kapıyı gevşetmek yanlış modelleri geçirirdi.
+
+### 47.3 Etiketlemede dilim düzeyinde devam (F7-122)
+
+`ml/runs/capacity100k_rd/run_label.ps1` yeniden yazıldı:
+
+* **24 dilim × 4168 pozisyon** (100 032), 12'şerli **iki dalga**,
+* var olan `shard_<k>.npz` **atlanır**,
+* eksik dilim kalırsa betik **1** ile çıkar ve eksikleri `supervisor.log`'a yazar,
+* birleştirme yalnızca tüm dilimler hazır olduğunda çalışır.
+
+Dilim ayrıklığı doğrulandı: `_cmd_label_policy` her dilim için
+`seed = args.seed + shard_index` ve `count = ceil(positions / shards)` kullanır.
+Bir çöküşte kayıp en fazla bir dalga (~3 saat) olur; aynı komutu yeniden
+çalıştırmak yeterlidir.
+
+### 47.4 `EVREN.md` §9 düzeltmesi
+
+§9.2'deki örnek komut **geçersiz** bir bayrak kullanıyordu:
+`--profiles medium,large,xlarge`. `sweep` tek `--profile` alır
+(`choices=[small,medium,large,xlarge]`) ve çıktı klasörü `--out-dir`'dir.
+Bölüm üç ayrı `sweep` çağrısına (PowerShell döngüsü) çevrildi ve
+`--sym-stride 10 --sym-limit 120 --measure-timeout 3600` eklendi. §9.1 de
+24 dilimli, devam edebilir betiğe göre güncellendi.
+
+**Testler.** 380 (`run` `measure_timeout`/`sym_limit`/`sym_stride` aktarır),
+381 (varsayılanlar 3600,0 / None / None; `0` sınırsız), 382 (`_run`
+`TimeoutExpired` üzerine 124 döner). Test sayısı 1552 → **1555**; §6 toplamı
+2037 → **2040**.

@@ -262,30 +262,45 @@ veri 100k'ya cikarilip xlarge tekrar denenir.
 Etiketleme CPU'da ve gnubg ile yapilir; GPU'yu buna harcama. Betik hazir:
 
 ```powershell
-# 12 dilim x 8335 pozisyon = 100 020 pozisyon, gnubg 2-ply, --dists acik
-pwsh -File ml\runs\capacity100k_rd\run_label.ps1
+# 24 dilim x 4168 pozisyon = 100 032 pozisyon, gnubg 2-ply, --dists acik
+powershell -NoProfile -ExecutionPolicy Bypass -File ml\runs\capacity100k_rd\run_label.ps1
 ```
 
 Cikti: `ml\runs\capacity100k_rd\policy_100k_rd.npz` + `merge.json`.
-`merge.json` icindeki `stats.count` 100 020 olmali; `hasDist` ve
+`merge.json` icindeki `stats.count` ~100 032 olmali; `hasDist` ve
 `hasCandEquity` `true` olmali. Degilse egitime baslama.
 
-Yerel sure: 30k icin ~2.5 saat idi, 100k icin ~8-9 saat (12 paralel dilim).
+**Betik dilim duzeyinde devam edebilir.** 24 dilim 12'serli iki dalgada
+kosar; var olan `shard_<k>.npz` atlanir. Bir cokuste en fazla bir dalga
+(~3 saat) kaybedilir; ayni komutu yeniden calistirmak yeterlidir. Ilerleme
+`ml\runs\capacity100k_rd\supervisor.log` dosyasina yazilir.
+
+Yerel sure: 30k icin ~2.5 saat idi (9 dilim), 100k icin ~6-7 saat
+(24 dilim, 12 paralel, 12 mantiksal cekirdek).
 
 ### 9.2 Egitim (GPU)
 
+`sweep` **tek** `--profile` alir (virgullu liste yok). Uc profil icin uc kez
+kos; her biri kendi klasorune yazar.
+
 ```powershell
-python ml\capacity_train.py sweep `
-  --data ml\runs\capacity100k_rd\policy_100k_rd.npz `
-  --profiles medium,large,xlarge `
-  --seeds 0,1,2,3,4 `
-  --out ml\runs\capacity100k_rd_sweep `
-  --steps 5000 --lr 1e-3 --batch 256 `
-  --value-weight 0.5 --dist-weight 0.5 --policy-temperature 0.1 `
-  --weight-decay 1e-4 --lr-schedule cosine --lr-final-ratio 0.1 `
-  --symmetry --symmetry-mode higgins `
-  --checkpoint-every 500 --skip-existing `
-  --measure --corpus ml\artifacts\reference_corpus_v2.json --stride 3 --limit 300
+$common = @(
+  'ml\capacity_train.py','sweep',
+  '--data','ml\runs\capacity100k_rd\policy_100k_rd.npz',
+  '--seeds','0,1,2,3,4',
+  '--steps','5000','--lr','1e-3','--batch','256',
+  '--value-weight','0.5','--dist-weight','0.5','--policy-temperature','0.1',
+  '--weight-decay','1e-4','--lr-schedule','cosine','--lr-final-ratio','0.1',
+  '--symmetry','--symmetry-mode','higgins',
+  '--checkpoint-every','500','--skip-existing',
+  '--measure','--corpus','ml\artifacts\reference_corpus_v2.json',
+  '--stride','3','--limit','300',
+  '--sym-stride','10','--sym-limit','120',
+  '--measure-timeout','3600'
+)
+foreach ($p in 'medium','large','xlarge') {
+  python @common --profile $p --out-dir "ml\runs\capacity100k_rd_sweep\$p"
+}
 ```
 
 Notlar:
@@ -297,15 +312,13 @@ Notlar:
   duz model ise antisimetri kapisini dusuruyor (F7-120).
 * `--skip-existing` + `--checkpoint-every 500` ile kesilen kosu kaldigi
   yerden devam eder. GPU saati parayla alindigi icin bu iki bayrak acik.
-* `--measure` sonunda `antisymmetry.py` adimi kendi varsayilan korpusunu
-  kullanir ve `--corpus` kabul etmez. Takilirsa taramayi durdurup kapıyı
-  ayri kos:
-
-```powershell
-python ml\antisymmetry.py measure `
-  --model ml\runs\capacity100k_rd_sweep\xlarge\seed0\model.onnx `
-  --stride 10 --limit 120
-```
+* `--sym-stride 10 --sym-limit 120` (F7-121): antisimetri kapisi gnubg
+  2-ply'da vaka basina ~9.5 s surer. `--stride 3 --limit 300` ile 100 vaka
+  = ~16 dk **tohum basina**, 15 kosu = ~4 saat. Kapi icin 12 vaka yeterli
+  (corr tam -1.0000 cikiyor), bu yuzden ayri ve kucuk orneklem kullanilir.
+* `--measure-timeout 3600` (F7-121): her olcum alt sureci icin 1 saat ust
+  sinir. Takilan bir gnubg artik taramayi sure boyunca kilitleyemez; asimda
+  alt surec 124 ile doner ve `antisymmetryExit`/`erExit` alaninda gorunur.
 
 ### 9.3 Karar kurali (kosudan ONCE sabitlenir)
 

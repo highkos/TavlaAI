@@ -6765,3 +6765,56 @@ Ayrintili tablo: `ml/artifacts/symmetry_modes.md`.
 **Testler.** 375 (`T` altinda teklik != negasyon altinda teklik; `odd_full`
 tuzagi belgelenir), 376 (`HigginsNet` tam antisimetri), 377 (parametre sayisi
 duz V2 ile esit), 378 (bilinmeyen `symmetry_mode` reddi), 379 (`--symmetry-mode` aktarimi).
+## F7-121 — Olcum yolunda zaman asimi ve ayri antisimetri orneklemi
+
+**Karar.** `capacity_train.py` olcum alt surecleri icin **zaman asimi** ve
+antisimetri kapisi icin **ER olcumunden bagimsiz orneklem** zorunlu hale
+getirildi.
+
+**Sorun 1 — sinirsiz alt surec.** `_run()` `subprocess.run`'i zaman asimi
+vermeden cagiriyordu. Takilan tek bir gnubg cagrisi tum taramayi sure boyunca
+kilitler; ucretli GPU kosusunda bu dogrudan para kaybidir. Duzeltme:
+`_run(cmd, *, quiet, timeout=None)`; `subprocess.TimeoutExpired` yakalanir,
+stderr'e `zaman asimi (N s): <cmd>` yazilir ve **124** dondurulur (POSIX
+`timeout(1)` gelenegi). `--measure-timeout` varsayilan **3600** s; `0` sinirsiz
+demektir (`float(...) or None`).
+
+**Sorun 2 — kapi maliyeti ER olceginde.** `measure_profile` antisimetri
+adimini ER adimiyla **ayni** `--stride`/`--limit` ile cagiriyordu. Olculen
+maliyet: gnubg 2-ply'da **vaka basina ~9,5 s** (20 vaka, `--stride 10`,
+190 s). `--stride 3 --limit 300` = 100 vaka = **~16 dk/tohum**; 15 kosuluk
+tarama icin ~4 saat, yani egitimin kendisinden pahali. Duzeltme:
+`measure_profile` `sym_limit`/`sym_stride` alir; `--sym-limit`/`--sym-stride`
+`run`, `measure`, `sweep` parserlarina eklendi. Kapi icin 12 vaka yeterlidir:
+`higgins` ve `basis` bu orneklemde `corr = -1,0000` veriyor (F7-120), yani
+kapi zaten kesin sonuclu.
+
+**Neden esik dusurulmedi.** `CORR_MIN = 0,99` ve `SUM_TOL = 0,001`
+degistirilmedi. Kapiyi gevsetmek yanlis modelleri gecirirdi; dogru cozum
+orneklemi kucultmek, esigi degil.
+
+**Testler.** 380 (`run` `measure_timeout`/`sym_limit`/`sym_stride` aktarir),
+381 (varsayilanlar 3600,0 / None / None; `0` sinirsiz), 382 (`_run`
+`TimeoutExpired` uzerine 124 doner).
+
+## F7-122 — Etiketleme dilim duzeyinde devam edebilir
+
+**Karar.** 100k etiketleme betigi **24 dilim x 4168 pozisyon**, 12'serli iki
+dalga halinde kosar ve var olan `shard_<k>.npz` dosyalarini **atlar**.
+
+**Gerekce.** Onceki 12 dilimlik betik tek seferde kosuyordu; denetleyici
+surec oldugunde 12 dilimin tamami bosa gider. 30k kosusu ~2,5 saatte bitmisti,
+100k icin ~6-7 saat bekleniyor; bu surede bir cokuste tum emegin kaybolmasi
+kabul edilemez. Dilim sayisini 24'e cikarmak kaybi **en fazla bir dalgaya
+(~3 saat)** indirir; toplam is aynidir.
+
+**Dilim ayrikligi dogrulandi.** `_cmd_label_policy` her dilim icin
+`seed = args.seed + shard_index` ve
+`count = ceil(positions / shards)` kullanir. Farkli tohum => ayrik pozisyon
+kumesi; birlestirildiginde tek kosunun orneklemi kadar gecerli bir orneklem
+olur. 24 x 4168 = 100 032 pozisyon.
+
+**Davranis.** Ayni komutu yeniden calistirmak yeterlidir; tamamlanmis dilimler
+atlanir, eksikler uretilir, sonra `merge-policy` calisir. Eksik dilim kalirsa
+betik **1** ile cikar ve eksikleri `supervisor.log`'a yazar; birlesik veri
+sessizce eksik olmaz.
