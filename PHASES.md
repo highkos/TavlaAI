@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1555** | ~10 dk | ✅ 1555/1555 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **2040** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1577** | ~10 dk | ✅ 1577/1577 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **2062** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -5543,7 +5543,40 @@ Bölüm üç ayrı `sweep` çağrısına (PowerShell döngüsü) çevrildi ve
 `--sym-stride 10 --sym-limit 120 --measure-timeout 3600` eklendi. §9.1 de
 24 dilimli, devam edebilir betiğe göre güncellendi.
 
+### 47.5 100k aşaması sürücüsü (`ml/stage_100k.py`)
+
+3–5. adımlar tek bir araçla yürütülür; karar kuralı koda gömülüdür:
+
+```powershell
+# 1) veri hazır mı
+python ml\stage_100k.py check --data ml\runs\capacity100k_rd\policy_100k_rd.npz
+
+# 2) tohum seç — YALNIZCA valTop1, ER'ye bakılmaz
+python ml\stage_100k.py select `
+  --sweep ml\runs\capacity100k_rd_sweep\xlarge\sweep.json `
+  --out ml\runs\capacity100k_rd_sweep\selection.json
+
+# 3) ppg kararı + rapor
+python ml\stage_100k.py report `
+  --ppg ml\artifacts\ppg_xlarge_100k_s0_2ply.json `
+  --baseline ml\artifacts\ppg_rd_large_s0_2ply.json `
+  --selection ml\runs\capacity100k_rd_sweep\selection.json `
+  --out-json ml\artifacts\ppg_xlarge_100k.json `
+  --out-md ml\artifacts\stage_100k_report.md
+```
+
+`check` pozisyon sayısını `offsets` uzunluğundan alır; `x` **aday** dizisidir.
+Aday sayısını pozisyon sayısı sanmak eşik kontrolünü sessizce yanlış yapar
+(30k veride 664 778 vs 30 006). `select` eşitlikte küçük tohumu seçer, böylece
+seçim deterministiktir. `report` `equivalence_verdict`'i doğrudan çağırır;
+marj `0.1115` varsayılandır ve test 404 ile sabitlenmiştir.
+
 **Testler.** 380 (`run` `measure_timeout`/`sym_limit`/`sym_stride` aktarır),
 381 (varsayılanlar 3600,0 / None / None; `0` sınırsız), 382 (`_run`
-`TimeoutExpired` üzerine 124 döner). Test sayısı 1552 → **1555**; §6 toplamı
-2037 → **2040**.
+`TimeoutExpired` üzerine 124 döner), 383–388 (tohum seçimi: en yüksek
+`valTop1`, ER alanları yok sayılır, eşitlikte küçük tohum, boş/eksik sweep
+reddi), 389–396 (karar: üç etiket, pozitif olmayan marj reddi, eksik GA reddi,
+taban karşılaştırması, Markdown içeriği), 397–400 (veri doğrulama: `offsets`
+sayımı, eksik dizi, kısa sayı, dosya yok), 401–404 (CLI: `select`, `report`,
+`check` çıkış kodu, sabit marj). Test sayısı 1552 → **1577**; §6 toplamı
+2037 → **2062**.

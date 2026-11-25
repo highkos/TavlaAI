@@ -330,13 +330,36 @@ Notlar:
    * CI `-m` ile `+m` arasindaysa → esdeger; **medium'da kal** (daha ucuz).
    * CI `+m` altindaysa → xlarge daha kotu; medium'da kal, veri buyutmeyi durdur.
 
+Uc adim `ml\stage_100k.py` ile yapilir; karar kurali koda gomuludur.
+
 ```powershell
+# 1) veri hazir mi (pozisyon sayisi offsets'ten okunur, x aday dizisidir)
+python ml\stage_100k.py check --data ml\runs\capacity100k_rd\policy_100k_rd.npz
+
+# 2) tohum sec — YALNIZCA valTop1, ER'ye bakilmaz
+python ml\stage_100k.py select `
+  --sweep ml\runs\capacity100k_rd_sweep\xlarge\sweep.json `
+  --out ml\runs\capacity100k_rd_sweep\selection.json
+
+# 3) ppg olc (secim.json'daki tohumu --model yoluna koy)
 python ml\vs_gnubg.py `
   --model ml\runs\capacity100k_rd_sweep\xlarge\seed0\model.onnx `
   --path search1 --gnubg-plies 2 --games 4400 --workers 10 `
   --seed 2026 --checkpoint ml\runs\capacity100k_rd_sweep\ppg_xlarge.ckpt.jsonl `
   --out ml\artifacts\ppg_xlarge_100k_s0_2ply.json
+
+# 4) karar + rapor
+python ml\stage_100k.py report `
+  --ppg ml\artifacts\ppg_xlarge_100k_s0_2ply.json `
+  --baseline ml\artifacts\ppg_rd_large_s0_2ply.json `
+  --selection ml\runs\capacity100k_rd_sweep\selection.json `
+  --out-json ml\artifacts\ppg_xlarge_100k.json `
+  --out-md ml\artifacts\stage_100k_report.md
 ```
+
+`check` **1** ile cikarsa egitime baslama. `report` cikisi
+`ml\artifacts\stage_100k_report.md` dosyasidir; `verdict` alani karar agaci
+dalini da yazar.
 
 ### 9.4 GPU maliyet beklentisi
 

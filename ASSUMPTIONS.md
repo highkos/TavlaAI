@@ -6818,3 +6818,31 @@ olur. 24 x 4168 = 100 032 pozisyon.
 atlanir, eksikler uretilir, sonra `merge-policy` calisir. Eksik dilim kalirsa
 betik **1** ile cikar ve eksikleri `supervisor.log`'a yazar; birlesik veri
 sessizce eksik olmaz.
+## F7-123 — 100k aşaması sürücüsü: tohum seçimi, karar ve veri doğrulama
+
+**Karar.** 100k koşusunun 3–5. adımları `ml/stage_100k.py` içinde toplanır:
+`check` (veri hazır mı), `select` (tohum seçimi), `report` (ppg kararı + rapor).
+
+**Gerekçe 1 — tohum seçimi yanlılık üretir.** Tohum, ER'ye bakılarak
+seçilirse ER raporlanan değer iyimser olur. `select_seed` yalnızca `valTop1`
+okur; ER alanları satırda bulunsa bile kullanılmaz (test 384 bunu sabitler).
+Eşitlikte **küçük tohum** kazanır, böylece seçim deterministiktir.
+
+**Gerekçe 2 — pozisyon sayısı `x`'ten okunamaz.** `policy_*.npz` içinde `x`
+**aday** dizisidir (`(664778, 221)`), pozisyon sayısı `offsets` uzunluğunun bir
+eksiğidir (`30007 - 1 = 30006`). Aday sayısını pozisyon sayısı sanmak 100k
+eşik kontrolünü sessizce geçirir. `check_dataset` bu yüzden `offsets`'i
+kullanır ve `cand_equity` (snake_case) arar; `candEquity` yanlış anahtardır.
+
+**Gerekçe 3 — karar kuralı koda gömülü olmalı.** `report` doğrudan
+`ppg_measure.equivalence_verdict`'i çağırır; marj varsayılanı `0.1115` ve test
+404 ile sabitlenmiştir. Karar ağacının üç dalı `BRANCHES` sözlüğünde tek
+yerde durur, böylece rapor metni ile kod ayrışamaz.
+
+**Doğrulama.** Araç, F7-117'de yayımlanan sayılarla aynı sonucu üretir:
+`daha-kotu`, fark `-0,0178` ppg, fark SH `0,03768`, bir SE içinde, GA'lar
+örtüşüyor. 30k veri üzerinde `check` bilinen istatistikleri birebir verir
+(30 006 pozisyon, 664 778 aday, ortalama 22,15).
+
+**Testler.** 383–388 (tohum seçimi), 389–396 (karar ve rapor), 397–400 (veri
+doğrulama), 401–404 (CLI ve sabit marj).
