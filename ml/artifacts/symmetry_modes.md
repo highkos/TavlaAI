@@ -49,3 +49,31 @@ karsilik 1-ply arama bu kaybi telafi eder. Uretimde oynanan yol search1'dir.
 ONNX cikariminda bu ihmal edilebilir; C# sozlesmesi degismez (ayni iki cikti,
 ayni adlar, `output_version = 2`). ONNX paritesi: `maxAbsDeltaValue = 8,94e-08`,
 `maxAbsDeltaPolicyLogit = 4,47e-08`.
+
+## 5. "Parametre sayisini yariya indirir" iddiasinin denetimi
+
+Higgins'in agirlik simetrisi kisiti literaturde sikca "parametre sayisini
+yariya indirir" diye anilir. Bu projede olculdu ve **kismen** dogru cikti;
+hangi anlamda dogru oldugu onemli:
+
+| Yorum | Parametre | valTop1 (1500 adim) | Antisimetri |
+|---|---:|---:|---|
+| Iki ayri ag (x ve Tx icin bagimsiz govde) | 312 846 | — | tam |
+| `HigginsNet` (tek govde, iki gecis) | 156 423 | 0,7791 | tam |
+| `basis` (ilk katman `V-`'ye kisitli, tum ag tek) | 131 619 | 0,6614 | tam |
+
+* **Yariya indirme, iki-agi karsilastirmasina gore dogrudur.** Naif
+  antisimetrik kurulum girdiyi ve ters girdiyi iki ayri agdan gecirir; bu
+  parametreyi ikiye katlar. `HigginsNet` tek govdeyi iki kez degerlendirir,
+  yani 2x yerine 1x. Bu anlamda kisit gercekten parametreyi yariya indirir.
+* **`basis`'e gore yariya indirme yanlistir.** `basis` daha da az parametre
+  kullanir (131 619) ama valTop1'de 0,1177 kaybeder. Sebep: ilk katmani
+  `V-`'ye kisitlamak tek kolu pip, temas ve mac skoru gibi cift
+  ozelliklerden tamamen koparir.
+* **Duz modele gore yariya indirme yoktur.** `HigginsNet` duz modelle
+  **ayni** parametre sayisina sahiptir (156 423). Ifade gucunden hicbir sey
+  atilmaz; yalnizca cikti uzayinin istenmeyen cift bileseni atilir.
+
+Sonuc: kisitin dogru uygulanisi **cikti izdusumu**dur. Ilk katmani kisitlamak
+"daha cok simetri" getirir ama ogrenilebilirligi bozar. Yakinsama hizi da bu
+yuzden `basis`'te degil `HigginsNet`'te korunur.
