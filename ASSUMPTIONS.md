@@ -7027,3 +7027,78 @@ profil ve üç tohum için eşittir. `equivalence_verdict(..., 0,1115)` ve
 "tohum seçimi ER'ye bakmadan" aynen yürürlükte. Çok iş parçacıklı indirgeme
 sırası son bitlerde fark yaratabilir; bu, 0,1115'lik marjın yanında ihmal
 edilebilir gürültüdür.
+
+---
+
+## F7-129 — 100k veri ile xlarge: kapasite artışı veriyle sınırlı, karar `daha-kotu`
+
+**Belirti.** 30k veriyle xlarge, large'dan anlamlı farklı değildi (ppg −0,2623
+vs −0,2445). Hipotez: kapasite artışı **veriyle** sınırlı; 100k+ pozisyon
+gerekli. Bu kayıt o hipotezin doğrudan testidir.
+
+**Kurulum (koşudan önce sabitlendi).** 100 030 etiketli pozisyon
+(`ml/runs/capacity100k_rd/policy_100k_rd.npz`, `hasDist true`,
+`distMissing 4168` = %4,2). Üç profil × üç tohum, 15 000 adım (F7-124
+çağrı-eşitliği: 10,7 epoch), parti 64, Higgins simetrisi, `--eval-every 1000`
+(F7-127), `OMP_NUM_THREADS 10` (F7-128). Karar kuralı **koşudan önce**
+sabitlendi: tohum seçimi yalnız `valTop1` ile (ER'ye bakmadan), m = 0,1115 ppg,
+üç sonuç dalı.
+
+**Ölçüm 1 — search1 ER (gnubg 2-ply, 300 pozisyon, adım 3).**
+
+| Profil | tohum 0 | tohum 1 | tohum 2 | ortalama ± GA |
+|---|---|---|---|---|
+| medium | 0,012747 | 0,014050 | 0,013173 | 0,013323 ± 0,000384 |
+| large | 0,013047 | 0,013390 | 0,013523 | 0,013320 ± 0,000166 |
+| xlarge | 0,014397 | **0,011013** | 0,013313 | 0,012908 ± 0,000998 |
+
+30k tabanı (aynı tarif): medium 0,01545/0,01436/0,01337 · large
+0,01393/0,01395/0,01524 · xlarge 0,01353/0,01355/0,01449.
+
+**Bulgu 1 — veri gerçekten yardım etti.** Üç profilin hepsi 30k'dan iyi:
+medium 0,01439 → 0,01332 (−%7,4), large 0,01437 → 0,01332 (−%7,3), xlarge
+0,01386 → 0,01291 (−%6,9). Yani "100k gerekli" hipotezi **doğru**; veri
+artışı ölçülebilir kazanç veriyor.
+
+**Bulgu 2 — kapasite hâlâ fark yaratmıyor.** medium ile xlarge ortalamaları
+arasındaki fark 0,000415, xlarge'ın kendi tohum GA'sı ±0,000998. Fark GA'nın
+**yarısından küçük**. 30k'da da aynı sonuç alınmıştı. Kapasite ekseni
+kapanmıştır: 1,8M parametreli xlarge, 0,13M parametreli medium'dan
+istatistiksel olarak ayırt edilemiyor.
+
+**Bulgu 3 — 100k doymadı.** Dokuz koşunun hepsinde `stoppedEarly False`,
+`bestStep` 14 000–15 000 (yani 15 000 adımın sonunda). Erken durma yok;
+veri daha da artırılabilir. Ancak Bulgu 2 ışığında bu artışın **kapasiteye**
+değil, tarife (SL/uzmanlaşma) yapılmalıdır.
+
+**Ölçüm 2 — ppg (gnubg 2-ply, 4400 oyun = 2200 çift, tohum 2026).**
+Tohum seçimi: **tohum 1** (`valTop1 0,8311`, `bestStep 14 000`,
+`search1Er 0,011013`, `valueEr 0,018497`, `antisymmetryCorr −1,0000`).
+
+| Koşu | ppg | %95 GA | Oyun | Etiket |
+|---|---|---|---|---|
+| Taban (`capacity_rd/large/seed0`) | −0,2445 | [−0,3055; −0,1835] | 2000 | daha-kotu |
+| 100k xlarge (tohum 1) | **−0,1709** | [−0,2091; −0,1323] | 4400 | **daha-kotu** |
+
+Fark **+0,0736 ppg** (GA 0,0367), bir standart hatanın **dışında**, güven
+aralıkları **örtüşmüyor**. Yani 100k xlarge tabandan **gerçekten** daha iyi —
+ama hâlâ `−m = −0,1115` eşik değerinin altında.
+
+**Karar.** `equivalence_verdict(−0,1709, −0,2091, −0,1323, 0,1115)` →
+**`daha-kotu`**. Karar ağacı dalı: *medium'da kal, veri büyütmeyi durdur
+(xlarge daha kötü)*. Yani: **kapasite ekseni kapatıldı**, veri ekseni de
+tek başına hedefe götürmüyor. Faz 6'nın "gnubg 2-ply'ye ≥%50" hedefi için
+sıradaki kaldıraç kapasite veya veri değil, **tarif** (SL aşaması,
+uzmanlaşma, arama katmanı) ve **küp kararları**dır.
+
+**Doğrulama.** Tam süit: **1588 geçti, 1 bilinen hata**
+(`test_export_output_version::test_legacy_models_declare_version_one[model_path0]`
+— yerel `ml/runs/stage_d/onnx/model_v5.onnx` `output_version=2`), 3 atlandı.
+Toplam 1592, belgelenen sayıyla uyumlu.
+
+**Testler.** `test_stage_100k.py` (22), `test_distill_dist_k5.py` (11),
+`test_capacity_profiles.py` (52), `test_docs_consistency.py` (21) — hepsi yeşil.
+
+**Artefaktlar.** `ml/artifacts/ppg_xlarge_100k.json`,
+`ml/artifacts/ppg_xlarge_100k_s1_2ply.json` / `.md`,
+`ml/artifacts/stage_100k_report.md`.

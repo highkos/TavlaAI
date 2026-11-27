@@ -5673,3 +5673,58 @@ konmuştu) eğitimi de tek iş parçacığına kilitliyordu. Ölçüm (`xlarge`,
 `'10'` yapıldı; gerçek koşuda `medium` 0,52 → **0,13 s/adım**, süreç CPU'su
 duvar saatinin ~5,8 katı. 9 koşu ~25 saatten **~7 saate** indi. Karar kuralı
 etkilenmez: iş parçacığı sayısı üç profil ve üç tohum için eşittir.
+
+---
+
+## 50. Faz 7-RD kapanışı — 100k veri ile xlarge, karar `daha-kotu`
+
+### 50.1 Ne yapıldı
+
+100 030 etiketli pozisyon (24 shard, 9 sa 29 dk gnubg etiketleme) ile üç
+kapasite profili × üç tohum eğitildi (15 000 adım, Higgins simetrisi, küp ağı,
+`--dist-weight 0,5`). Tohum seçimi yalnız `valTop1` ile yapıldı (ER'ye
+bakmadan), sonra 4400 oyunluk ppg ölçümü koşuldu. Karar kuralı koşudan önce
+sabitlendi: m = 0,1115 ppg, üç sonuç dalı.
+
+### 50.2 search1 ER — veri yardım etti, kapasite etmedi
+
+| Profil | tohum 0 | tohum 1 | tohum 2 | ortalama ± GA | 30k ortalaması |
+|---|---|---|---|---|---|
+| medium | 0,012747 | 0,014050 | 0,013173 | 0,013323 ± 0,000384 | 0,01439 |
+| large | 0,013047 | 0,013390 | 0,013523 | 0,013320 ± 0,000166 | 0,01437 |
+| xlarge | 0,014397 | **0,011013** | 0,013313 | 0,012908 ± 0,000998 | 0,01386 |
+
+Üç profilin hepsi 30k'dan ~%7 daha iyi ⇒ **veri artışı gerçek kazanç**.
+medium ile xlarge arasındaki fark 0,000415, xlarge'ın tohum GA'sının
+(±0,000998) yarısından küçük ⇒ **kapasite ekseni kapalı**. Dokuz koşunun
+hepsinde `stoppedEarly False`, `bestStep` 14 000–15 000 ⇒ 100k **doymadı**.
+
+### 50.3 ppg — tabandan iyi, eşikten kötü
+
+Tohum 1 seçildi (`valTop1 0,8311`, `bestStep 14 000`, `search1Er 0,011013`,
+`valueEr 0,018497`, `antisymmetryCorr −1,0000`).
+
+| Koşu | ppg | %95 GA | Oyun | Etiket |
+|---|---|---|---|---|
+| Taban (`capacity_rd/large/seed0`) | −0,2445 | [−0,3055; −0,1835] | 2000 | daha-kotu |
+| 100k xlarge (tohum 1) | **−0,1709** | [−0,2091; −0,1323] | 4400 | **daha-kotu** |
+
+Fark **+0,0736 ppg** (GA 0,0367), bir standart hatanın dışında, güven
+aralıkları örtüşmüyor. `equivalence_verdict(−0,1709, −0,2091, −0,1323,
+0,1115)` → **`daha-kotu`**. Karar ağacı dalı: *medium'da kal, veri büyütmeyi
+durdur*.
+
+### 50.4 Sonuç — kaldıraç kapasite/veri değil, tarif
+
+Kapasite ekseni (30k ve 100k, iki bağımsız koşu) ve veri ekseni (tek başına
+100k) hedefe götürmüyor. Faz 6'nın "gnubg 2-ply'ye ≥%50" hedefi için sıradaki
+kaldıraç **tarif** (SL aşaması, uzmanlaşma, arama katmanı) ve **küp
+kararları**dır. Bu, Faz 8 yol haritasının (Adım A→F) gerekçesidir.
+
+### 50.5 Doğrulama
+
+Tam süit: **1588 geçti, 1 bilinen hata**
+(`test_export_output_version::test_legacy_models_declare_version_one[model_path0]`),
+3 atlandı; toplam 1592 belgelenen sayıyla uyumlu. Artefaktlar:
+`ml/artifacts/ppg_xlarge_100k.json`, `ppg_xlarge_100k_s1_2ply.json` / `.md`,
+`stage_100k_report.md`. Karar gerekçesi: `ASSUMPTIONS.md` F7-129.
