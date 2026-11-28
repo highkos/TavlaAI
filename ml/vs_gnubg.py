@@ -46,7 +46,10 @@ from tools import reference_gen as refgen  # noqa: E402
 MATCH_VERSION = 1
 MATCH_PATH = "ml/artifacts/vs_gnubg.json"
 MATCH_MD_PATH = "ml/artifacts/vs_gnubg.md"
-DEFAULT_MODEL = "ml/runs/stage_d_l2/onnx/model_v30.onnx"
+#: F8-02: varsayilan model **panelde en iyi** olan modeldir. Onceki varsayilan
+#: ``stage_d_l2/model_v30`` panelde 5x daha kotuydu (contact ER 0.0348 vs
+#: 0.0070), yani gecmis ppg olcumleri gercek en guclu modeli olcmuyordu.
+DEFAULT_MODEL = "ml/runs/capacity_rd/large/seed0/model.onnx"
 DEFAULT_GAMES = 2000
 DEFAULT_MAX_PLIES = 200
 BOOTSTRAP_RESAMPLES = 20000

@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1631** | ~10 dk | ✅ 1631/1631 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **2116** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1659** | ~10 dk | ✅ 1659/1659 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **2144** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -5842,3 +5842,62 @@ bgsage `contact.bm` / `race.bm` kullanıyor; bu dosyalar yerel kurulumda yok ve
 Envanter: 243 dosya, 55'i `F` kaydına, 10'u panel satırına bağlı, **alarm yok**.
 Artefaktlar: `ml/artifacts/benchmark_sets.json`, `model_benchmarks.json` / `.md`,
 `model_inventory.json` / `.md`. Gerekçe: `ASSUMPTIONS.md` F8-02.
+
+## 53. Faz 8 Görev 3 — gnubg korpustan SL ve serpiştirme düzeltmesi
+
+### 53.1 Ne yapıldı
+
+`ml/gnubg_distill.py`'ye `corpus-sl` modu eklendi: korpus dizinini
+(`contact.npz` / `race.npz` / `all.npz` + `manifest.json`) okur, her Net'i
+kendi epoch/alpha takvimiyle eğitir, `--init-from` ile warm-start **zorunlu**
+tutar (G2: şekil uyuşmazlığı rc 2, sessiz sıfırdan başlatma yok). Mevcut
+`train-policy` damıtma modu değişmedi.
+
+### 53.2 Sapma — gnubg `.bm` dosyaları kamuya açık değil
+
+`www.gnubg.org` (443 reddedildi), `ftp.gnu.org/gnu/gnubg/` (yalnız kurulum
+paketi + kaynak), `mormegil-cz/gnubg` (eğitim dosyası yok), GitHub kod araması
+`contact-train.bm` (0 sonuç). Yerine depodaki 100k gnubg-2-ply korpusu
+kullanıldı (100.030 pozisyon).
+
+### 53.3 Kök neden — sıralı müfredat felaket unutma yapıyor
+
+Korpusun **%98,2'si contact** (98.199), **%1,8'i race** (1.831). `contact` →
+`race` sırasıyla eğitim contact ER'yi 0,0072 → **0,0287** çıkarıyor (4 kat
+bozulma), eşleşme %77,2 → %63,8. bgsage'de ayrı Net'ler olduğu için orada bu
+sorun yok; tek paylaşılan ağda sıra yanlış desen.
+
+### 53.4 Düzeltme — `--mix` serpiştirilmiş müfredat
+
+Her epoch içinde Net'ler **küçükten büyüğe** eğitilir; epoch daima en büyük
+Net ile kapanır. Contact ER 0,0287 → **0,0077** (seed0), eşleşme %63,8 →
+%77,9. F8-03'ün kalıcı teknik kazanımı.
+
+### 53.5 Ölçüm — 3 tohum × 2 düzen
+
+| Model | contact ER | contact eşleşme | race ER | race eşleşme |
+|---|---|---|---|---|
+| **Taban** `capacity_rd/large/seed0` | **0,0070** | 77,2% | **0,0122** | 65,0% |
+| SL sıralı (3 tohum ort.) | 0,02914 | 63,3% | 0,02700 | 62,9% |
+| **SL serpiştirilmiş (3 tohum ort.)** | 0,009378 | 77,7% | 0,01315 | 63,0% |
+| Teşhis A — yalnız contact, 2 epoch | 0,007248 | **80,5%** | 0,013962 | 63,8% |
+| Teşhis B — yalnız contact, 1 epoch yumuşak | 0,009376 | 73,8% | 0,01480 | 61,3% |
+
+### 53.6 Karar — Görev 3 / Adım B kabul edilmez
+
+Karar kuralı koşudan önce sabitlendi: "contact ER'de tabandan anlamlı iyi".
+Serpiştirilmiş SL bunu sağlamıyor (0,0094 vs 0,0070); eşleşmede eşit
+(%77,7 vs %77,2). `DEFAULT_MODEL` F8-02'de `capacity_rd/large/seed0`'a
+çekilmişti, öyle kalıyor. `--mix` düzeltmesi korunuyor.
+
+**Elenen kaldıraçlar:** daha fazla SL epoch'u, daha yumuşak LR (teşhis B daha
+kötü), mevcut korpusta farklı Net sırası. **Kalan kaldıraçlar:** korpus
+çeşitliliği (yarış pozisyonları — `max_plies=40` verimi 2/400, `80` → 40/400),
+etiket derinliği (2-ply → 3-ply), mimari.
+
+### 53.7 Doğrulama
+
+`ml/tests/test_gnubg_distill.py` — **28 F8-03 testi**, hepsi yeşil. Damıtma
+paketi toplamı **241 test** yeşil. Tüm Python paketi **1659 test**.
+Artefaktlar: `ml/artifacts/stage_sl_report.md`, `model_benchmarks.json` / `.md`
+(6 yeni SL kaydı + 2 teşhis kaydı). Gerekçe: `ASSUMPTIONS.md` F8-03.

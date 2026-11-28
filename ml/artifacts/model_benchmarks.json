@@ -670,6 +670,542 @@
      }
     }
    }
+  },
+  {
+   "recordId": "ml/runs/corpus_sl_100k/seed0/model.onnx|ea4f1116e2798429|policy|2|2026-11-28T02:39:00Z",
+   "timestamp": "2026-11-28T02:39:00Z",
+   "model": {
+    "path": "ml/runs/corpus_sl_100k/seed0/model.onnx",
+    "sha256": "ea4f1116e27984299c43af438bc0d0158dbd692f88dc628af6b70bd1e9080723",
+    "sizeBytes": 2574866,
+    "outputVersion": 2
+   },
+   "criterion": "policy",
+   "plies": 2,
+   "benchVersion": 1,
+   "sets": {
+    "contact": {
+     "setHash": "a3382435bb320802e6b117a72a817bdabacc724214a8047417c72ee0bd2e9a93",
+     "count": 149,
+     "mean": 0.028705,
+     "median": 0.0,
+     "max": 0.554,
+     "exactMatchRate": 0.637584,
+     "skipped": [],
+     "perPlan": {
+      "attacking": {
+       "count": 40,
+       "mean": 0.03975,
+       "max": 0.352
+      },
+      "priming": {
+       "count": 40,
+       "mean": 0.0427,
+       "max": 0.554
+      },
+      "anchoring": {
+       "count": 40,
+       "mean": 0.012,
+       "max": 0.084
+      },
+      "backgame": {
+       "count": 29,
+       "mean": 0.017207,
+       "max": 0.133
+      }
+     }
+    },
+    "race": {
+     "setHash": "2cdc833a7e6838dc7314934a1ca375bf695adfdf616ecae28a682b25c8d1c674",
+     "count": 80,
+     "mean": 0.02895,
+     "median": 0.0,
+     "max": 0.564,
+     "exactMatchRate": 0.6375,
+     "skipped": [],
+     "perPlan": {
+      "purerace": {
+       "count": 40,
+       "mean": 0.010725,
+       "max": 0.19
+      },
+      "racing": {
+       "count": 40,
+       "mean": 0.047175,
+       "max": 0.564
+      }
+     }
+    }
+   }
+  },
+  {
+   "recordId": "ml/runs/corpus_sl_100k/seed1/model.onnx|b11c863d1a9077a4|policy|2|2026-11-28T02:48:07Z",
+   "timestamp": "2026-11-28T02:48:07Z",
+   "model": {
+    "path": "ml/runs/corpus_sl_100k/seed1/model.onnx",
+    "sha256": "b11c863d1a9077a461bc4aa88116b2fe5c62861c76ec327b236ce648e9cd6033",
+    "sizeBytes": 2574866,
+    "outputVersion": 2
+   },
+   "criterion": "policy",
+   "plies": 2,
+   "benchVersion": 1,
+   "sets": {
+    "contact": {
+     "setHash": "a3382435bb320802e6b117a72a817bdabacc724214a8047417c72ee0bd2e9a93",
+     "count": 149,
+     "mean": 0.031819,
+     "median": 0.0,
+     "max": 0.529,
+     "exactMatchRate": 0.630872,
+     "skipped": [],
+     "perPlan": {
+      "attacking": {
+       "count": 40,
+       "mean": 0.040225,
+       "max": 0.366
+      },
+      "priming": {
+       "count": 40,
+       "mean": 0.045225,
+       "max": 0.529
+      },
+      "anchoring": {
+       "count": 40,
+       "mean": 0.0216,
+       "max": 0.273
+      },
+      "backgame": {
+       "count": 29,
+       "mean": 0.015828,
+       "max": 0.133
+      }
+     }
+    },
+    "race": {
+     "setHash": "2cdc833a7e6838dc7314934a1ca375bf695adfdf616ecae28a682b25c8d1c674",
+     "count": 80,
+     "mean": 0.0313,
+     "median": 0.0,
+     "max": 0.564,
+     "exactMatchRate": 0.6,
+     "skipped": [],
+     "perPlan": {
+      "purerace": {
+       "count": 40,
+       "mean": 0.009525,
+       "max": 0.19
+      },
+      "racing": {
+       "count": 40,
+       "mean": 0.053075,
+       "max": 0.564
+      }
+     }
+    }
+   }
+  },
+  {
+   "recordId": "ml/runs/corpus_sl_100k/seed2/model.onnx|751e67d53df9e6a5|policy|2|2026-11-28T02:57:31Z",
+   "timestamp": "2026-11-28T02:57:31Z",
+   "model": {
+    "path": "ml/runs/corpus_sl_100k/seed2/model.onnx",
+    "sha256": "751e67d53df9e6a5028c49f2d63d53c958e1067304d126449ae796b3b4ac849e",
+    "sizeBytes": 2574866,
+    "outputVersion": 2
+   },
+   "criterion": "policy",
+   "plies": 2,
+   "benchVersion": 1,
+   "sets": {
+    "contact": {
+     "setHash": "a3382435bb320802e6b117a72a817bdabacc724214a8047417c72ee0bd2e9a93",
+     "count": 149,
+     "mean": 0.026899,
+     "median": 0.0,
+     "max": 0.529,
+     "exactMatchRate": 0.630872,
+     "skipped": [],
+     "perPlan": {
+      "attacking": {
+       "count": 40,
+       "mean": 0.02805,
+       "max": 0.366
+      },
+      "priming": {
+       "count": 40,
+       "mean": 0.035625,
+       "max": 0.529
+      },
+      "anchoring": {
+       "count": 40,
+       "mean": 0.016025,
+       "max": 0.132
+      },
+      "backgame": {
+       "count": 29,
+       "mean": 0.028276,
+       "max": 0.336
+      }
+     }
+    },
+    "race": {
+     "setHash": "2cdc833a7e6838dc7314934a1ca375bf695adfdf616ecae28a682b25c8d1c674",
+     "count": 80,
+     "mean": 0.02075,
+     "median": 0.0,
+     "max": 0.332,
+     "exactMatchRate": 0.65,
+     "skipped": [],
+     "perPlan": {
+      "purerace": {
+       "count": 40,
+       "mean": 0.008375,
+       "max": 0.153
+      },
+      "racing": {
+       "count": 40,
+       "mean": 0.033125,
+       "max": 0.332
+      }
+     }
+    }
+   }
+  },
+  {
+   "recordId": "ml/runs/corpus_sl_100k/diag_A_contact_only/model.onnx|74fb60b6dda7757c|policy|2|2026-11-28T03:23:07Z",
+   "timestamp": "2026-11-28T03:23:07Z",
+   "model": {
+    "path": "ml/runs/corpus_sl_100k/diag_A_contact_only/model.onnx",
+    "sha256": "74fb60b6dda7757cf07c417b75f5c8f8980412743ef45e505582fdf5759aa01c",
+    "sizeBytes": 2574866,
+    "outputVersion": 2
+   },
+   "criterion": "policy",
+   "plies": 2,
+   "benchVersion": 1,
+   "sets": {
+    "contact": {
+     "setHash": "a3382435bb320802e6b117a72a817bdabacc724214a8047417c72ee0bd2e9a93",
+     "count": 149,
+     "mean": 0.007248,
+     "median": 0.0,
+     "max": 0.203,
+     "exactMatchRate": 0.805369,
+     "skipped": [],
+     "perPlan": {
+      "attacking": {
+       "count": 40,
+       "mean": 0.017775,
+       "max": 0.203
+      },
+      "priming": {
+       "count": 40,
+       "mean": 0.0036,
+       "max": 0.071
+      },
+      "anchoring": {
+       "count": 40,
+       "mean": 0.004875,
+       "max": 0.077
+      },
+      "backgame": {
+       "count": 29,
+       "mean": 0.001034,
+       "max": 0.013
+      }
+     }
+    },
+    "race": {
+     "setHash": "2cdc833a7e6838dc7314934a1ca375bf695adfdf616ecae28a682b25c8d1c674",
+     "count": 80,
+     "mean": 0.013962,
+     "median": 0.0,
+     "max": 0.228,
+     "exactMatchRate": 0.6375,
+     "skipped": [],
+     "perPlan": {
+      "purerace": {
+       "count": 40,
+       "mean": 0.0139,
+       "max": 0.228
+      },
+      "racing": {
+       "count": 40,
+       "mean": 0.014025,
+       "max": 0.174
+      }
+     }
+    }
+   }
+  },
+  {
+   "recordId": "ml/runs/corpus_sl_100k/diag_B_contact_gentle/model.onnx|c3e62a70e943a9a1|policy|2|2026-11-28T03:38:55Z",
+   "timestamp": "2026-11-28T03:38:55Z",
+   "model": {
+    "path": "ml/runs/corpus_sl_100k/diag_B_contact_gentle/model.onnx",
+    "sha256": "c3e62a70e943a9a1ba488c434341daa6e2637e419c8e1f5f3d2e689b88aab91b",
+    "sizeBytes": 2574866,
+    "outputVersion": 2
+   },
+   "criterion": "policy",
+   "plies": 2,
+   "benchVersion": 1,
+   "sets": {
+    "contact": {
+     "setHash": "a3382435bb320802e6b117a72a817bdabacc724214a8047417c72ee0bd2e9a93",
+     "count": 149,
+     "mean": 0.009376,
+     "median": 0.0,
+     "max": 0.203,
+     "exactMatchRate": 0.738255,
+     "skipped": [],
+     "perPlan": {
+      "attacking": {
+       "count": 40,
+       "mean": 0.018225,
+       "max": 0.203
+      },
+      "priming": {
+       "count": 40,
+       "mean": 0.005075,
+       "max": 0.071
+      },
+      "anchoring": {
+       "count": 40,
+       "mean": 0.00635,
+       "max": 0.084
+      },
+      "backgame": {
+       "count": 29,
+       "mean": 0.007276,
+       "max": 0.089
+      }
+     }
+    },
+    "race": {
+     "setHash": "2cdc833a7e6838dc7314934a1ca375bf695adfdf616ecae28a682b25c8d1c674",
+     "count": 80,
+     "mean": 0.0148,
+     "median": 0.0,
+     "max": 0.237,
+     "exactMatchRate": 0.6125,
+     "skipped": [],
+     "perPlan": {
+      "purerace": {
+       "count": 40,
+       "mean": 0.0131,
+       "max": 0.228
+      },
+      "racing": {
+       "count": 40,
+       "mean": 0.0165,
+       "max": 0.237
+      }
+     }
+    }
+   }
+  },
+  {
+   "recordId": "ml/runs/corpus_sl_100k/mix_seed0/model.onnx|1ede0be8c7e08e68|policy|2|2026-11-28T04:01:28Z",
+   "timestamp": "2026-11-28T04:01:28Z",
+   "model": {
+    "path": "ml/runs/corpus_sl_100k/mix_seed0/model.onnx",
+    "sha256": "1ede0be8c7e08e685e3608b7e6acb7246d4baddc3d6221e9738bfc4bab244bb9",
+    "sizeBytes": 2574866,
+    "outputVersion": 2
+   },
+   "criterion": "policy",
+   "plies": 2,
+   "benchVersion": 1,
+   "sets": {
+    "contact": {
+     "setHash": "a3382435bb320802e6b117a72a817bdabacc724214a8047417c72ee0bd2e9a93",
+     "count": 149,
+     "mean": 0.007678,
+     "median": 0.0,
+     "max": 0.203,
+     "exactMatchRate": 0.778523,
+     "skipped": [],
+     "perPlan": {
+      "attacking": {
+       "count": 40,
+       "mean": 0.017775,
+       "max": 0.203
+      },
+      "priming": {
+       "count": 40,
+       "mean": 0.004175,
+       "max": 0.071
+      },
+      "anchoring": {
+       "count": 40,
+       "mean": 0.004575,
+       "max": 0.077
+      },
+      "backgame": {
+       "count": 29,
+       "mean": 0.002862,
+       "max": 0.053
+      }
+     }
+    },
+    "race": {
+     "setHash": "2cdc833a7e6838dc7314934a1ca375bf695adfdf616ecae28a682b25c8d1c674",
+     "count": 80,
+     "mean": 0.01315,
+     "median": 0.0,
+     "max": 0.228,
+     "exactMatchRate": 0.6375,
+     "skipped": [],
+     "perPlan": {
+      "purerace": {
+       "count": 40,
+       "mean": 0.013925,
+       "max": 0.228
+      },
+      "racing": {
+       "count": 40,
+       "mean": 0.012375,
+       "max": 0.174
+      }
+     }
+    }
+   }
+  },
+  {
+   "recordId": "ml/runs/corpus_sl_100k/mix_seed1/model.onnx|9e7eff58278db13b|policy|2|2026-11-28T04:23:41Z",
+   "timestamp": "2026-11-28T04:23:41Z",
+   "model": {
+    "path": "ml/runs/corpus_sl_100k/mix_seed1/model.onnx",
+    "sha256": "9e7eff58278db13bf77a4a143b551fb5f615391c089c1fc3f271a7bb08d45c78",
+    "sizeBytes": 2574866,
+    "outputVersion": 2
+   },
+   "criterion": "policy",
+   "plies": 2,
+   "benchVersion": 1,
+   "sets": {
+    "contact": {
+     "setHash": "a3382435bb320802e6b117a72a817bdabacc724214a8047417c72ee0bd2e9a93",
+     "count": 149,
+     "mean": 0.010624,
+     "median": 0.0,
+     "max": 0.327,
+     "exactMatchRate": 0.778523,
+     "skipped": [],
+     "perPlan": {
+      "attacking": {
+       "count": 40,
+       "mean": 0.01765,
+       "max": 0.203
+      },
+      "priming": {
+       "count": 40,
+       "mean": 0.01265,
+       "max": 0.327
+      },
+      "anchoring": {
+       "count": 40,
+       "mean": 0.0072,
+       "max": 0.084
+      },
+      "backgame": {
+       "count": 29,
+       "mean": 0.002862,
+       "max": 0.053
+      }
+     }
+    },
+    "race": {
+     "setHash": "2cdc833a7e6838dc7314934a1ca375bf695adfdf616ecae28a682b25c8d1c674",
+     "count": 80,
+     "mean": 0.011362,
+     "median": 0.0,
+     "max": 0.228,
+     "exactMatchRate": 0.6625,
+     "skipped": [],
+     "perPlan": {
+      "purerace": {
+       "count": 40,
+       "mean": 0.011475,
+       "max": 0.228
+      },
+      "racing": {
+       "count": 40,
+       "mean": 0.01125,
+       "max": 0.174
+      }
+     }
+    }
+   }
+  },
+  {
+   "recordId": "ml/runs/corpus_sl_100k/mix_seed2/model.onnx|bd1c7df233954935|policy|2|2026-11-28T04:45:39Z",
+   "timestamp": "2026-11-28T04:45:39Z",
+   "model": {
+    "path": "ml/runs/corpus_sl_100k/mix_seed2/model.onnx",
+    "sha256": "bd1c7df2339549358e38528339dcd4538814599da261c7f326c581e5433a022f",
+    "sizeBytes": 2574866,
+    "outputVersion": 2
+   },
+   "criterion": "policy",
+   "plies": 2,
+   "benchVersion": 1,
+   "sets": {
+    "contact": {
+     "setHash": "a3382435bb320802e6b117a72a817bdabacc724214a8047417c72ee0bd2e9a93",
+     "count": 149,
+     "mean": 0.009832,
+     "median": 0.0,
+     "max": 0.327,
+     "exactMatchRate": 0.771812,
+     "skipped": [],
+     "perPlan": {
+      "attacking": {
+       "count": 40,
+       "mean": 0.01685,
+       "max": 0.194
+      },
+      "priming": {
+       "count": 40,
+       "mean": 0.0123,
+       "max": 0.327
+      },
+      "anchoring": {
+       "count": 40,
+       "mean": 0.005475,
+       "max": 0.077
+      },
+      "backgame": {
+       "count": 29,
+       "mean": 0.002759,
+       "max": 0.05
+      }
+     }
+    },
+    "race": {
+     "setHash": "2cdc833a7e6838dc7314934a1ca375bf695adfdf616ecae28a682b25c8d1c674",
+     "count": 80,
+     "mean": 0.01495,
+     "median": 0.0,
+     "max": 0.228,
+     "exactMatchRate": 0.5875,
+     "skipped": [],
+     "perPlan": {
+      "purerace": {
+       "count": 40,
+       "mean": 0.015575,
+       "max": 0.228
+      },
+      "racing": {
+       "count": 40,
+       "mean": 0.014325,
+       "max": 0.174
+      }
+     }
+    }
+   }
   }
  ]
 }

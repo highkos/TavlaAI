@@ -7282,3 +7282,103 @@ alarmı.
 `ml/artifacts/model_benchmarks.json` / `.md` (10 kayıt),
 `ml/artifacts/model_inventory.json` / `.md` (243 dosya, 55'i F kaydına bağlı,
 10'u panel satırına bağlı, **alarm yok**).
+
+## F8-03 — gnubg korpustan SL: serpiştirme düzeltmesi ve negatif sonuç (Görev 3 / Adım B)
+
+**Belirti.** F8-02 paneli `gnubg_distill/model_gnubg`'yi panelin **en kötüsü**
+olarak ölçtü (contact ER 0,0548). Yani mevcut "gnubg politikasından damıtma"
+tarifi çalışmıyor. bgsage bu boşluğu gnubg'nin kendi eğitim veritabanlarından
+(`contact.bm` / `race.bm`) süpervizyonlu öğrenmeyle kapatıyor. Görev 3 bu
+hattı kurmayı istedi.
+
+**Sapma — `.bm` dosyaları kamuya açık değil.** Beş ayrı yol denendi:
+`www.gnubg.org` / `gnubg.org` (443 reddedildi, 80 zaman aşımı),
+`ftp.gnu.org/gnu/gnubg/` ve `ftpmirror.gnu.org/gnu/gnubg/` (yalnız kurulum
+paketi + kaynak arşivi), `mormegil-cz/gnubg` deposu (`.bm`/`.nn`/eğitim
+dosyası yok), GitHub kod araması `contact-train.bm` (0 sonuç). Yerel
+`F:\Program Files (x86)\gnubg\` altında yalnız `gnubg_os0.bd`, `gnubg_ts0.bd`,
+`gnubg.wd` var. **Yerine depodaki kendi 100k gnubg-2-ply etiketli korpusu
+kullanıldı** (`ml/runs/capacity100k_rd/policy_100k_rd.npz`, 100.030 pozisyon).
+
+**Yöntem — `corpus-sl` modu.** `ml/gnubg_distill.py`'ye eklendi; mevcut
+`train-policy` damıtma modu **değişmedi**. Parçalar:
+
+1. `sl_schedule(epochs, alpha_start, alpha_end)` — epoch başına **doğrusal**
+   iniş (bgsage deseni; kosinüs değil, çünkü epoch sayısı küçük).
+2. `split_by_contact(dataset)` — `PolicyDataset`'i `IS_CONTACT` nöronuyla
+   (indeks 204) ikiye böler. **Kritik:** `x` ragged `[M,221]`; nöron her
+   pozisyonun **ilk aday satırından** (`x[offsets[i], 204]`) okunur, `x[i,204]`
+   değil. Bu hata ilk turda `IndexError` verdi.
+3. `load_sl_corpus(corpus_dir, nets)` — `manifest.json` varsa okur, yoksa
+   `contact.npz`/`race.npz`'yi otomatik bulur, tek `all.npz` varsa böler.
+   `missing` **istenen** Net listesi üzerinden hesaplanır.
+4. `train_corpus_sl(...)` — per-Net epoch/alpha takvimi; `mix` parametresi
+   aşağıdaki düzeltmenin taşıyıcısı.
+5. `_cmd_corpus_sl` — `--init-from` argparse'ta `required=True`; profil/şekil
+   uyuşmazlığı **rc 2** ile reddedilir, sessizce sıfırdan başlatılmaz (G2).
+
+**Kök neden — sıralı müfredat tek paylaşılan ağda felaket unutma yapıyor.**
+İlk 3 tohumluk koşu `contact` → `race` sırasıyla eğitildi. Sonuç: contact ER
+0,0072 → **0,0287** (4 kat bozulma), eşleşme %77,2 → %63,8. Neden: korpusun
+**%98,2'si contact** (98.199 pozisyon), **%1,8'i race** (1.831 pozisyon).
+1.831 pozisyonluk `race` fazı, 98.199 pozisyonluk `contact` bilgisini eziyor.
+bgsage'de bu sorun yok çünkü orada **ayrı** Net'ler var; bizim tek ağımızda
+sıra yanlış desen.
+
+**Düzeltme — `--mix` (serpiştirilmiş müfredat).** Her epoch içinde Net'ler
+**küçükten büyüğe** eğitilir; epoch daima en büyük Net ile kapanır, yani küçük
+Net'in gradyanı bir sonraki epoch'ta yeniden çapalanır. Ölçüm: contact ER
+0,0287 → **0,0077** (seed0), eşleşme %63,8 → %77,9. Bu, F8-03'ün kalıcı
+teknik kazanımı.
+
+**Ölçüm — 3 tohum × 2 düzen, Faz 7 tarifiyle eşleştirilmiş.** `batch 64`,
+`value-weight 0,5`, `dist-weight 0,5`, `policy-temperature 0,1`,
+`weight-decay 1e-4`, `val-fraction 0,05`, `eval-every 400`, warm-start
+`capacity_rd/large/seed0/checkpoint.pt`.
+
+| Model | contact ER | contact eşleşme | race ER | race eşleşme |
+|---|---|---|---|---|
+| **Taban** `capacity_rd/large/seed0` | **0,0070** | 77,2% | **0,0122** | 65,0% |
+| SL sıralı seed0 | 0,028705 | 63,8% | 0,02895 | 63,8% |
+| SL sıralı seed1 | 0,031819 | 63,1% | 0,03130 | 60,0% |
+| SL sıralı seed2 | 0,026899 | 63,1% | 0,02075 | 65,0% |
+| **SL serpiştirilmiş seed0** | 0,007678 | **77,9%** | 0,01315 | 63,8% |
+| **SL serpiştirilmiş seed1** | 0,010624 | **77,9%** | **0,011362** | **66,3%** |
+| **SL serpiştirilmiş seed2** | 0,009832 | 77,2% | 0,01495 | 58,8% |
+| Teşhis A — yalnız contact, 2 epoch | 0,007248 | **80,5%** | 0,013962 | 63,8% |
+| Teşhis B — yalnız contact, 1 epoch yumuşak | 0,009376 | 73,8% | 0,01480 | 61,3% |
+
+Ortalamalar: sıralı contact ER **0,02914** (tabanın 4,2 katı kötü),
+serpiştirilmiş **0,009378** (tabanın 1,34 katı kötü).
+
+**Karar — Görev 3 / Adım B kabul edilmez, taban model korunur.** Karar kuralı
+koşudan önce sabitlendi: "contact ER'de tabandan anlamlı iyi". Serpiştirilmiş
+SL bunu sağlamıyor (0,0094 vs 0,0070); eşleşme oranında eşit (%77,9 vs %77,2).
+`DEFAULT_MODEL` F8-02'de `capacity_rd/large/seed0`'a çekilmişti, öyle kalıyor.
+`--mix` düzeltmesi **korunuyor** çünkü sıralı düzeni 4 kat bozuk bırakıyordu.
+
+**Bulgu — SL eşleşmeyi artırıyor, equity kaybını azaltmıyor.** Teşhis A
+(yalnız contact, 2 epoch) tabanla ER'de eşit (0,007248 vs 0,0070) ama
+eşleşmede belirgin iyi (%80,5 vs %77,2). Bu ayrışma, korpusun bilgi tavanının
+taban modelin seviyesinde olduğunun kanıtı: model gnubg'nin *hamlesini* daha
+sık biliyor ama *equity* olarak daha iyi hamle seçmiyor.
+
+**Elenen kaldıraçlar.** Bu sonuç üç şeyi eliyor: (a) daha fazla SL epoch'u,
+(b) daha yumuşak LR (teşhis B daha kötü: 0,009376), (c) mevcut 100k
+korpusunda farklı Net sırası. Kalan kaldıraçlar: **korpus çeşitliliği**
+(yarış pozisyonları — `random_positions(max_plies=40)` yarış verimi 2/400;
+`80` → 40/400), **etiket derinliği** (2-ply → 3-ply), **mimari**.
+
+**Testler.** `ml/tests/test_gnubg_distill.py` — **28 F8-03 testi**, hepsi
+yeşil. Kapsam: `sl_schedule` doğrusal iniş + geçersiz argüman reddi,
+`split_by_contact` nöron okuma + boş taraf, `load_sl_corpus` bildirim /
+otomatik bulma / `all.npz` bölme / Net filtresi / **BOM'lu bildirim**
+(PowerShell 5.1 `Set-Content -Encoding utf8` BOM yazar) / eksik dizin /
+bilinmeyen Net, `train_corpus_sl` kayıp düşüşü + boş küme + bozuk alpha +
+F7-126 maskeleme sözleşmesi + `--mix` serpiştirme sırası ve adım eşitliği,
+CLI warm-start ağırlık transferi + şekil uyuşmazlığı reddi + eksik checkpoint
+rc 2. Damıtma paketi toplamı **241 test** yeşil.
+
+**Artefaktlar.** `ml/artifacts/stage_sl_report.md`,
+`ml/artifacts/model_benchmarks.json` / `.md` (6 yeni SL kaydı + 2 teşhis
+kaydı). Koşu dizini `ml/runs/corpus_sl_100k/` (gitignore'da).

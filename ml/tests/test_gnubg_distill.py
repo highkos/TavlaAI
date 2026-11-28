@@ -1458,3 +1458,452 @@ def test_127l_parser_train_policy_temperature_flags() -> None:
     )
     assert args.policy_temperature == pytest.approx(0.2)
     assert args.select_temperature is True
+
+
+# ----------------------------------------------------------------------
+# F8-03: korpus SL (Adim B) - per-Net epoch/alpha takvimi
+# ----------------------------------------------------------------------
+
+
+def _sl_dataset(n_contact: int = 4, n_race: int = 4):
+    """Temas/yaris karisik kucuk bir ``PolicyDataset`` uretir."""
+    import tools.reference_gen as refgen
+
+    positions = [(list(refgen.START_BOARD), 1, [3, 4], 0, 0)] * (n_contact + n_race)
+    labeled, _ = gd.label_policy_positions(_PolicyReferee(), positions)
+    ds = gd.build_policy_dataset(labeled, meta={"kind": "policy"})
+    x = np.array(ds.x, dtype=np.float32, copy=True)
+    # Ilk n_contact pozisyon temas, kalanlar saf yaris. ``x`` duzensiz aday
+    # dizisidir; bayrak pozisyonun **tum** aday satirlarina yazilir.
+    starts = np.asarray(ds.offsets[:-1], dtype=np.int64)
+    stops = np.asarray(ds.offsets[1:], dtype=np.int64)
+    for i in range(len(ds)):
+        x[starts[i] : stops[i], gd.SL_CONTACT_NEURON] = 1.0 if i < n_contact else 0.0
+    return gd.PolicyDataset(
+        x=x,
+        offsets=ds.offsets,
+        best=ds.best,
+        y=ds.y,
+        meta=dict(ds.meta),
+        dist=ds.dist,
+        cand_equity=ds.cand_equity,
+    )
+
+
+def test_f803_constants() -> None:
+    assert gd.SL_NET_NAMES == ("contact", "race")
+    assert set(gd.SL_DEFAULT_EPOCHS) == set(gd.SL_NET_NAMES)
+    assert set(gd.SL_DEFAULT_ALPHA) == set(gd.SL_NET_NAMES)
+    assert gd.SL_MANIFEST_NAME == "manifest.json"
+    assert gd.SL_CONTACT_NEURON == 204
+
+
+def test_f803_sl_schedule_linear_decay() -> None:
+    sched = gd.sl_schedule(4, 1e-3, 1e-4)
+    assert [s["epoch"] for s in sched] == [1, 2, 3, 4]
+    assert sched[0]["alpha"] == pytest.approx(1e-3)
+    assert sched[-1]["alpha"] == pytest.approx(1e-4)
+    alphas = [s["alpha"] for s in sched]
+    assert all(a > b for a, b in zip(alphas, alphas[1:]))
+
+
+def test_f803_sl_schedule_single_epoch() -> None:
+    assert gd.sl_schedule(1, 5e-4, 1e-5) == [{"epoch": 1, "alpha": 5e-4}]
+
+
+def test_f803_sl_schedule_rejects_bad_args() -> None:
+    with pytest.raises(ValueError):
+        gd.sl_schedule(0, 1e-3, 1e-4)
+    with pytest.raises(ValueError):
+        gd.sl_schedule(3, 0.0, 1e-4)
+    with pytest.raises(ValueError):
+        gd.sl_schedule(3, 1e-3, 0.0)
+    with pytest.raises(ValueError):
+        gd.sl_schedule(3, 1e-4, 1e-3)
+
+
+def test_f803_split_by_contact_uses_neuron() -> None:
+    ds = _sl_dataset(4, 4)
+    split = gd.split_by_contact(ds)
+    assert set(split) == {"contact", "race"}
+    assert len(split["contact"]) == 4
+    assert len(split["race"]) == 4
+    assert (split["contact"].x[:, gd.SL_CONTACT_NEURON] > 0.5).all()
+    assert (split["race"].x[:, gd.SL_CONTACT_NEURON] <= 0.5).all()
+
+
+def test_f803_split_by_contact_drops_empty_net() -> None:
+    ds = _sl_dataset(4, 0)
+    split = gd.split_by_contact(ds)
+    assert set(split) == {"contact"}
+
+
+def test_f803_split_by_contact_empty_dataset() -> None:
+    assert gd.split_by_contact(gd.build_policy_dataset([])) == {}
+
+
+def test_f803_split_by_contact_rejects_short_vector() -> None:
+    ds = gd.PolicyDataset(
+        x=np.zeros((1, 10), dtype=np.float32),
+        offsets=np.array([0, 1], dtype=np.int64),
+        best=np.zeros(1, dtype=np.int32),
+        y=np.zeros(1, dtype=np.float32),
+    )
+    with pytest.raises(ValueError):
+        gd.split_by_contact(ds)
+
+
+def test_f803_load_sl_corpus_manifest(tmp_path: Path) -> None:
+    ds = _sl_dataset(4, 4)
+    split = gd.split_by_contact(ds)
+    gd.save_policy_dataset(split["contact"], tmp_path / "contact.npz")
+    gd.save_policy_dataset(split["race"], tmp_path / "race.npz")
+    (tmp_path / "manifest.json").write_text(
+        json.dumps(
+            {
+                "nets": {
+                    "contact": {"data": "contact.npz", "epochs": 2, "alpha": [1e-3, 5e-4]},
+                    "race": {"data": "race.npz", "epochs": 3, "alpha": [2e-3, 1e-4]},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    datasets, manifest = gd.load_sl_corpus(tmp_path)
+    assert manifest["source"] == "manifest"
+    assert manifest["missing"] == []
+    assert manifest["nets"]["contact"]["epochs"] == 2
+    assert manifest["nets"]["race"]["epochs"] == 3
+    assert manifest["nets"]["race"]["alpha"] == [2e-3, 1e-4]
+    assert len(datasets["contact"]) == 4
+    assert len(datasets["race"]) == 4
+
+
+def test_f803_load_sl_corpus_manifest_with_bom(tmp_path: Path) -> None:
+    """PowerShell 5.1 `Set-Content -Encoding utf8` BOM yazar; bildirim gecerli olmali."""
+    ds = _sl_dataset(2, 2)
+    split = gd.split_by_contact(ds)
+    gd.save_policy_dataset(split["contact"], tmp_path / "contact.npz")
+    gd.save_policy_dataset(split["race"], tmp_path / "race.npz")
+    payload = json.dumps({"nets": {"contact": {"data": "contact.npz", "epochs": 1}}})
+    (tmp_path / "manifest.json").write_bytes(b"\xef\xbb\xbf" + payload.encode("utf-8"))
+    datasets, manifest = gd.load_sl_corpus(tmp_path)
+    assert manifest["source"] == "manifest"
+    assert manifest["nets"]["contact"]["epochs"] == 1
+    assert len(datasets["contact"]) == 2
+
+
+def test_f803_load_sl_corpus_auto_discovers(tmp_path: Path) -> None:
+    ds = _sl_dataset(3, 3)
+    split = gd.split_by_contact(ds)
+    gd.save_policy_dataset(split["contact"], tmp_path / "contact.npz")
+    gd.save_policy_dataset(split["race"], tmp_path / "race.npz")
+    datasets, manifest = gd.load_sl_corpus(tmp_path)
+    assert manifest["source"] == "auto"
+    assert manifest["nets"]["contact"]["epochs"] == gd.SL_DEFAULT_EPOCHS["contact"]
+    assert manifest["nets"]["race"]["alpha"] == list(gd.SL_DEFAULT_ALPHA["race"])
+    assert set(datasets) == {"contact", "race"}
+
+
+def test_f803_load_sl_corpus_splits_all_npz(tmp_path: Path) -> None:
+    gd.save_policy_dataset(_sl_dataset(5, 5), tmp_path / "all.npz")
+    datasets, manifest = gd.load_sl_corpus(tmp_path)
+    assert manifest["nets"]["contact"]["data"] == "all.npz#contact"
+    assert len(datasets["contact"]) == 5
+    assert len(datasets["race"]) == 5
+
+
+def test_f803_load_sl_corpus_respects_nets_filter(tmp_path: Path) -> None:
+    ds = _sl_dataset(3, 3)
+    split = gd.split_by_contact(ds)
+    gd.save_policy_dataset(split["contact"], tmp_path / "contact.npz")
+    gd.save_policy_dataset(split["race"], tmp_path / "race.npz")
+    datasets, manifest = gd.load_sl_corpus(tmp_path, nets=["race"])
+    assert set(datasets) == {"race"}
+    assert manifest["missing"] == []
+
+
+def test_f803_load_sl_corpus_missing_dir(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        gd.load_sl_corpus(tmp_path / "yok")
+
+
+def test_f803_load_sl_corpus_no_nets(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        gd.load_sl_corpus(tmp_path)
+
+
+def test_f803_load_sl_corpus_rejects_unknown_net(tmp_path: Path) -> None:
+    with pytest.raises(ValueError):
+        gd.load_sl_corpus(tmp_path, nets=["bogus"])
+
+
+def test_f803_train_corpus_sl_reduces_loss() -> None:
+    from model import VECTOR_SIZE, build_model
+
+    ds = _sl_dataset(6, 6)
+    split = gd.split_by_contact(ds)
+    manifest = {
+        "source": "auto",
+        "nets": {
+            "contact": {"epochs": 2, "alpha": [1e-2, 5e-3]},
+            "race": {"epochs": 2, "alpha": [1e-2, 5e-3]},
+        },
+        "missing": [],
+    }
+    model = build_model(VECTOR_SIZE, 32, 16, seed=0, output_version=2)
+    report = gd.train_corpus_sl(model, split, manifest, batch=4, seed=0)
+    assert report["order"] == ["contact", "race"]
+    assert report["totalPositions"] == 12
+    assert report["totalSteps"] > 0
+    assert set(report["nets"]) == {"contact", "race"}
+    for name in ("contact", "race"):
+        hist = report["nets"][name]["history"]
+        assert [h["epoch"] for h in hist] == [1, 2]
+        assert hist[0]["alpha"] == pytest.approx(1e-2)
+        assert hist[-1]["alpha"] == pytest.approx(5e-3)
+        assert hist[-1]["lastLoss"] < hist[0]["lastLoss"]
+
+
+def test_f803_train_corpus_sl_mix_interleaves_nets() -> None:
+    """``mix=True``: her epoch icinde Net'ler kucukten buyuge, epoch en buyuk Net ile kapanir."""
+    from model import VECTOR_SIZE, build_model
+
+    ds = _sl_dataset(6, 2)
+    split = gd.split_by_contact(ds)
+    manifest = {
+        "source": "auto",
+        "nets": {
+            "contact": {"epochs": 2, "alpha": [1e-2, 5e-3]},
+            "race": {"epochs": 2, "alpha": [1e-2, 5e-3]},
+        },
+        "missing": [],
+    }
+    model = build_model(VECTOR_SIZE, 32, 16, seed=0, output_version=2)
+    report = gd.train_corpus_sl(model, split, manifest, batch=4, seed=0, mix=True)
+    assert report["mix"] is True
+    assert report["order"] == ["contact", "race"]
+    assert report["totalPositions"] == 8
+    # Iki Net de iki epoch gorur; serpistirme sirali kosuyla ayni adim sayisini verir.
+    for name in ("contact", "race"):
+        assert [h["epoch"] for h in report["nets"][name]["history"]] == [1, 2]
+    sequential = gd.train_corpus_sl(
+        build_model(VECTOR_SIZE, 32, 16, seed=0, output_version=2),
+        split,
+        manifest,
+        batch=4,
+        seed=0,
+    )
+    assert report["totalSteps"] == sequential["totalSteps"]
+
+
+def test_f803_train_corpus_sl_mix_ends_epoch_with_largest_net() -> None:
+    """Kucuk Net once egitilir; boylece epoch'un son gradyani buyuk Net'ten gelir."""
+    from model import VECTOR_SIZE, build_model
+
+    ds = _sl_dataset(6, 2)
+    split = gd.split_by_contact(ds)
+    seen: list[tuple[int, str]] = []
+    manifest = {
+        "nets": {
+            "contact": {"epochs": 2, "alpha": [1e-2, 5e-3]},
+            "race": {"epochs": 2, "alpha": [1e-2, 5e-3]},
+        },
+        "missing": [],
+    }
+    model = build_model(VECTOR_SIZE, 32, 16, seed=0, output_version=2)
+    gd.train_corpus_sl(
+        model,
+        split,
+        manifest,
+        batch=4,
+        seed=0,
+        mix=True,
+        progress=lambda name, epoch, step, loss: seen.append((epoch, name)),
+    )
+    # Adim bazli geri cagri; ardisik tekrarlari tekillestirip birim sirasini al.
+    units: list[tuple[int, str]] = []
+    for item in seen:
+        if not units or units[-1] != item:
+            units.append(item)
+    assert units == [(1, "race"), (1, "contact"), (2, "race"), (2, "contact")]
+
+
+def test_f803_train_corpus_sl_rejects_empty() -> None:
+    from model import VECTOR_SIZE, build_model
+
+    model = build_model(VECTOR_SIZE, 32, 16, seed=0, output_version=2)
+    with pytest.raises(ValueError):
+        gd.train_corpus_sl(model, {}, {"nets": {}})
+
+
+def test_f803_train_corpus_sl_rejects_bad_alpha() -> None:
+    from model import VECTOR_SIZE, build_model
+
+    ds = _sl_dataset(3, 3)
+    split = gd.split_by_contact(ds)
+    manifest = {"nets": {"contact": {"epochs": 1, "alpha": [1e-3]}}, "missing": []}
+    model = build_model(VECTOR_SIZE, 32, 16, seed=0, output_version=2)
+    with pytest.raises(ValueError):
+        gd.train_corpus_sl(model, split, manifest, order=["contact"], batch=4)
+
+
+def test_f803_train_corpus_sl_keeps_masking_contract() -> None:
+    """F7-126: ``nan`` satirli dagilim hedefi KL terimini zehirlemez."""
+    from model import VECTOR_SIZE, build_model
+
+    ds = _sl_dataset(4, 4)
+    dist = np.zeros((len(ds), 6), dtype=np.float32)
+    dist[:, 0] = 1.0
+    dist[0, :] = np.nan
+    ds = gd.PolicyDataset(
+        x=ds.x,
+        offsets=ds.offsets,
+        best=ds.best,
+        y=ds.y,
+        meta=dict(ds.meta),
+        dist=dist,
+        cand_equity=ds.cand_equity,
+    )
+    split = gd.split_by_contact(ds)
+    manifest = {
+        "nets": {"contact": {"epochs": 1, "alpha": [1e-2, 1e-2]}},
+        "missing": [],
+    }
+    model = build_model(VECTOR_SIZE, 32, 16, seed=0, output_version=2)
+    report = gd.train_corpus_sl(
+        model, split, manifest, order=["contact"], batch=4, dist_weight=0.5
+    )
+    assert np.isfinite(report["nets"]["contact"]["lastLoss"])
+
+
+def test_f803_parser_corpus_sl_defaults() -> None:
+    args = gd.build_parser().parse_args(
+        ["corpus-sl", "--corpus-dir", "c", "--init-from", "i.pt", "--out", "o.pt"]
+    )
+    assert args.nets == "contact,race"
+    assert args.order is None
+    assert args.dist_weight == 0.0
+    assert args.policy_temperature == 0.0
+
+
+def test_f803_parser_corpus_sl_requires_warm_start() -> None:
+    """G2: ``--init-from`` zorunlu; eksikse argparse reddeder."""
+    with pytest.raises(SystemExit):
+        gd.build_parser().parse_args(["corpus-sl", "--corpus-dir", "c", "--out", "o.pt"])
+
+
+def test_f803_cli_corpus_sl_missing_ckpt_returns_two(tmp_path: Path) -> None:
+    rc = gd.main(
+        [
+            "corpus-sl",
+            "--corpus-dir",
+            str(tmp_path),
+            "--init-from",
+            str(tmp_path / "yok.pt"),
+            "--out",
+            str(tmp_path / "o.pt"),
+            "--quiet",
+        ]
+    )
+    assert rc == 2
+
+
+def test_f803_cli_corpus_sl_missing_corpus_returns_two(tmp_path: Path) -> None:
+    import torch
+    from model import VECTOR_SIZE, build_model
+
+    model = build_model(VECTOR_SIZE, 32, 16, seed=0, output_version=2)
+    ckpt = tmp_path / "init.pt"
+    torch.save({"model": model.state_dict(), "profile": "small"}, str(ckpt))
+    rc = gd.main(
+        [
+            "corpus-sl",
+            "--corpus-dir",
+            str(tmp_path / "yok"),
+            "--init-from",
+            str(ckpt),
+            "--out",
+            str(tmp_path / "o.pt"),
+            "--quiet",
+        ]
+    )
+    assert rc == 2
+
+
+def test_f803_cli_corpus_sl_warm_start_transfers_weights(tmp_path: Path) -> None:
+    """Warm-start agirliklari korunur ve egitim onlari **degistirir**."""
+    import torch
+    from model import VECTOR_SIZE, build_model
+
+    ds = _sl_dataset(4, 4)
+    split = gd.split_by_contact(ds)
+    gd.save_policy_dataset(split["contact"], tmp_path / "contact.npz")
+    gd.save_policy_dataset(split["race"], tmp_path / "race.npz")
+    (tmp_path / "manifest.json").write_text(
+        json.dumps(
+            {
+                "nets": {
+                    "contact": {"epochs": 1, "alpha": [1e-2, 1e-2]},
+                    "race": {"epochs": 1, "alpha": [1e-2, 1e-2]},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    model = build_model(VECTOR_SIZE, 0, 0, seed=0, output_version=2, profile="small")
+    ckpt = tmp_path / "init.pt"
+    torch.save({"model": model.state_dict(), "profile": "small"}, str(ckpt))
+    before = {k: v.clone() for k, v in model.state_dict().items()}
+
+    out = tmp_path / "out.pt"
+    rc = gd.main(
+        [
+            "corpus-sl",
+            "--corpus-dir",
+            str(tmp_path),
+            "--init-from",
+            str(ckpt),
+            "--out",
+            str(out),
+            "--batch",
+            "4",
+            "--quiet",
+        ]
+    )
+    assert rc == 0
+    assert out.is_file()
+    state = torch.load(str(out), map_location="cpu", weights_only=False)
+    assert state["profile"] == "small"
+    assert state["corpusSl"]["initMode"] == "checkpoint"
+    assert state["corpusSl"]["order"] == ["contact", "race"]
+    after = state["model"]
+    changed = [k for k in before if not torch.equal(before[k], after[k])]
+    assert changed, "warm-start agirliklari hic degismedi"
+
+
+def test_f803_cli_corpus_sl_rejects_profile_mismatch(tmp_path: Path) -> None:
+    """G2: sekil uyusmazligi sessiz sifirdan baslangica donusmez."""
+    import torch
+    from model import VECTOR_SIZE, build_model
+
+    ds = _sl_dataset(3, 3)
+    split = gd.split_by_contact(ds)
+    gd.save_policy_dataset(split["contact"], tmp_path / "contact.npz")
+    gd.save_policy_dataset(split["race"], tmp_path / "race.npz")
+    model = build_model(VECTOR_SIZE, 32, 16, seed=0, output_version=2)
+    ckpt = tmp_path / "init.pt"
+    torch.save({"model": model.state_dict(), "profile": "xlarge"}, str(ckpt))
+    rc = gd.main(
+        [
+            "corpus-sl",
+            "--corpus-dir",
+            str(tmp_path),
+            "--init-from",
+            str(ckpt),
+            "--out",
+            str(tmp_path / "o.pt"),
+            "--quiet",
+        ]
+    )
+    assert rc == 2

@@ -3282,13 +3282,13 @@ aynı şey değildir.
 ### 51.5 Doğrulama
 
 ```
-ml/tests                     1631/1631  (3 yavaş/koşullu test atlanır)
+ml/tests                     1659/1659  (3 yavaş/koşullu test atlanır)
 Backgammon.Tests             297/297
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
 ```
 
-Toplam **2116**.
+Toplam **2144**.
 `test_capacity_bench.py` 48, `test_export_ckpt.py` 12) ve `StageBDataQualityTests` (9)
 ekledi. B3 kararı dört dosya daha ekledi: `test_distill.py` (34), `test_calibrate.py` (32),
 `test_critical.py` içindeki 20 marj testi ve `ProductionDepthTests` (10).
@@ -3759,3 +3759,61 @@ olarak yakalıyor.
 `ml/tests/test_benchmarks.py` 12 test (436–447), hepsi yeşil. Envanter:
 243 dosya, 55'i `F` kaydına, 10'u panel satırına bağlı, alarm yok.
 Gerekçe: `ASSUMPTIONS.md` F8-01 / F8-02, `PHASES.md` §51 / §52.
+
+## 60. Faz 8 — gnubg korpustan SL ve serpiştirilmiş müfredat
+
+Görev 3, bgsage'in süpervizyonlu öğrenme bacağını kurmayı istedi. bgsage
+gnubg'nin kendi eğitim veritabanlarını (`contact.bm` / `race.bm`) kullanıyor;
+bu dosyalar **kamuya açık değil** (gnubg.org reddediyor, GNU FTP'de yalnız
+kurulum paketi var, GitHub'da eğitim dosyası yok). Yerine depodaki 100k
+gnubg-2-ply etiketli korpus kullanıldı.
+
+### 60.1 `corpus-sl` modu
+
+`ml/gnubg_distill.py` içinde beş parça:
+
+1. **`sl_schedule`** — epoch başına **doğrusal** alpha inişi (bgsage deseni;
+   kosinüs değil, çünkü epoch sayısı küçük).
+2. **`split_by_contact`** — `PolicyDataset`'i `IS_CONTACT` nöronuyla (indeks
+   204) böler. `x` ragged `[M,221]` olduğu için nöron her pozisyonun **ilk
+   aday satırından** (`x[offsets[i], 204]`) okunur.
+3. **`load_sl_corpus`** — `manifest.json` (BOM'lu da olur) → otomatik
+   `contact.npz`/`race.npz` → tek `all.npz` bölme sırasıyla dener.
+4. **`train_corpus_sl`** — per-Net epoch/alpha takvimi; `mix` parametresi
+   aşağıdaki düzeltmeyi taşır.
+5. **`_cmd_corpus_sl`** — `--init-from` zorunlu; şekil uyuşmazlığı **rc 2**
+   (G2: sessiz sıfırdan başlatma yok).
+
+### 60.2 Serpiştirilmiş müfredat (`--mix`)
+
+Korpusun **%98,2'si contact** (98.199), **%1,8'i race** (1.831). Sıralı
+müfredat (`contact` bitince `race`) tek paylaşılan ağda **felaket unutmaya**
+yol açıyor: contact ER 0,0072 → 0,0287, eşleşme %77,2 → %63,8. bgsage'de ayrı
+Net'ler olduğu için orada bu sorun yok.
+
+`--mix` her epoch içinde Net'leri **küçükten büyüğe** eğitir; epoch daima en
+büyük Net ile kapanır, yani küçük Net'in gradyanı bir sonraki epoch'ta yeniden
+çapalanır. Contact ER 0,0287 → **0,0077**, eşleşme %63,8 → %77,9.
+
+### 60.3 Sonuç — negatif
+
+| Model | contact ER | contact eşleşme | race ER | race eşleşme |
+|---|---|---|---|---|
+| **Taban** `capacity_rd/large/seed0` | **0,0070** | 77,2% | **0,0122** | 65,0% |
+| SL sıralı (3 tohum ort.) | 0,02914 | 63,3% | 0,02700 | 62,9% |
+| SL serpiştirilmiş (3 tohum ort.) | 0,009378 | 77,7% | 0,01315 | 63,0% |
+| Teşhis A — yalnız contact, 2 epoch | 0,007248 | **80,5%** | 0,013962 | 63,8% |
+
+Serpiştirilmiş SL tabanı **geçmiyor** (0,0094 vs 0,0070); eşleşmede eşit.
+Teşhis A ilginç: ER'de eşit ama eşleşmede belirgin iyi (%80,5 vs %77,2) ⇒
+korpus SL'i gnubg'nin *hamlesini* daha sık biliyor ama *equity* olarak daha
+iyi hamle seçmiyor. Korpusun bilgi tavanı taban modelin seviyesinde.
+
+**Karar:** Görev 3 / Adım B kabul edilmez; `DEFAULT_MODEL`
+(`capacity_rd/large/seed0`) korunur, `--mix` düzeltmesi korunur. Elenen
+kaldıraçlar: daha fazla SL epoch'u, daha yumuşak LR, farklı Net sırası. Kalan:
+korpus çeşitliliği (yarış pozisyonları), etiket derinliği (3-ply), mimari.
+
+**Doğrulama.** `ml/tests/test_gnubg_distill.py` — 28 F8-03 testi, hepsi yeşil;
+damıtma paketi 241 test; tüm Python paketi 1659 test. Gerekçe:
+`ASSUMPTIONS.md` F8-03, `PHASES.md` §53, `ml/artifacts/stage_sl_report.md`.

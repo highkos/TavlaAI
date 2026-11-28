@@ -1292,6 +1292,290 @@ def select_policy_temperature(
 
 
 # ----------------------------------------------------------------------
+# F8-03: korpus SL (Adim B) - bgsage "run_sl_training.py" deseni
+# ----------------------------------------------------------------------
+
+#: bgsage per-Net ayrimi: temas ve saf yaris ayri aglarda egitilir.
+SL_NET_NAMES: tuple[str, ...] = ("contact", "race")
+
+#: Per-Net varsayilan epoch sayisi (bgsage Ek A: contact daha buyuk korpus).
+SL_DEFAULT_EPOCHS: dict[str, int] = {"contact": 6, "race": 10}
+
+#: Per-Net varsayilan ogrenme orani takvimi ``(alpha_baslangic, alpha_son)``.
+SL_DEFAULT_ALPHA: dict[str, tuple[float, float]] = {
+    "contact": (1e-3, 1e-4),
+    "race": (2e-3, 2e-4),
+}
+
+#: Korpus dizininde aranan bildirim dosyasi.
+SL_MANIFEST_NAME = "manifest.json"
+
+#: ``gnubg_er.IS_CONTACT`` noronunun 221 vektordeki indeksi.
+SL_CONTACT_NEURON = 204
+
+
+def sl_schedule(
+    epochs: int, alpha_start: float, alpha_end: float
+) -> list[dict[str, float]]:
+    """Per-Net epoch/alpha takvimi (bgsage deseni).
+
+    Her epoch icin ogrenme orani ``alpha_start``dan ``alpha_end``e **dogrusal**
+    iner. bgsage kosinus yerine bu basit takvimi kullanir; epoch sayisi kucuk
+    oldugu icin (6-12) fark olcumsuzdur ve dogrusal takvim tekrar uretilebilir.
+    """
+    if epochs <= 0:
+        raise ValueError("epochs > 0 olmali")
+    if alpha_start <= 0 or alpha_end <= 0:
+        raise ValueError("alpha degerleri > 0 olmali")
+    if alpha_end > alpha_start:
+        raise ValueError("alpha_end <= alpha_start olmali (takvim iner)")
+    if epochs == 1:
+        return [{"epoch": 1, "alpha": float(alpha_start)}]
+    step = (alpha_start - alpha_end) / float(epochs - 1)
+    return [
+        {"epoch": i + 1, "alpha": float(alpha_start - step * i)} for i in range(epochs)
+    ]
+
+
+def split_by_contact(dataset: PolicyDataset) -> dict[str, PolicyDataset]:
+    """Politika veri kumesini ``contact`` / ``race`` alt kumelerine ayirir.
+
+    Ayrim **vektorun kendisinden** yapilir: ``gnubg_er.vectorize`` 204.
+    noronda ``is_contact`` bayragini tasir, dolayisiyla tahta yeniden
+    kurulmaz. Bos alt kume sonuc sozlugune **girmez** (cagiran taraf eksik
+    Net'i raporlar).
+    """
+    if len(dataset) == 0:
+        return {}
+    x = np.asarray(dataset.x, dtype=np.float32)
+    if x.ndim != 2 or int(x.shape[1]) <= SL_CONTACT_NEURON:
+        raise ValueError("vektor genisligi 221 olmali (IS_CONTACT noronu yok)")
+    # ``x`` duzensiz aday dizisidir ([M, 221]); pozisyon basina **ilk** aday
+    # satiri temsilcidir (bayrak pozisyonun kendisine aittir).
+    starts = np.asarray(dataset.offsets[:-1], dtype=np.int64)
+    flags = x[starts, SL_CONTACT_NEURON] > 0.5
+    out: dict[str, PolicyDataset] = {}
+    for name, mask in (("contact", flags), ("race", ~flags)):
+        idx = np.flatnonzero(mask)
+        if idx.size:
+            out[name] = dataset.subset(idx.tolist())
+    return out
+
+
+def load_sl_corpus(
+    corpus_dir: Path, *, nets: Sequence[str] | None = None
+) -> tuple[dict[str, PolicyDataset], dict[str, Any]]:
+    """Korpus dizinini okur ve per-Net veri kumelerini dondurur.
+
+    Beklenen duzen (bgsage ``run_sl_training.py`` veri dizini)::
+
+        <corpus_dir>/
+          manifest.json     # opsiyonel: {"nets": {"contact": {...}, ...}}
+          contact.npz       # ``label-policy`` ciktisi
+          race.npz
+
+    ``manifest.json`` yoksa ``*.npz`` dosyalari adlarindan turetilir ve
+    varsayilan epoch/alpha takvimi kullanilir. Tek bir ``all.npz`` varsa
+    ``split_by_contact`` ile ikiye ayrilir.
+    """
+    root = Path(corpus_dir)
+    if not root.is_dir():
+        raise FileNotFoundError("korpus dizini yok: " + str(root))
+    wanted = tuple(nets) if nets else SL_NET_NAMES
+    for name in wanted:
+        if name not in SL_NET_NAMES:
+            raise ValueError("bilinmeyen Net: " + repr(name))
+
+    manifest: dict[str, Any] = {"dir": str(root), "nets": {}}
+    manifest_path = root / SL_MANIFEST_NAME
+    if manifest_path.is_file():
+        # utf-8-sig: Windows araclari (PowerShell 5.1 `Set-Content -Encoding utf8`)
+        # BOM yazar; BOM'lu bildirim gecerli sayilir.
+        raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+        if not isinstance(raw, dict):
+            raise ValueError("manifest.json bir nesne olmali")
+        manifest["source"] = "manifest"
+        declared = raw.get("nets") or {}
+        if not isinstance(declared, dict):
+            raise ValueError("manifest.json 'nets' bir nesne olmali")
+    else:
+        manifest["source"] = "auto"
+        declared = {}
+
+    datasets: dict[str, PolicyDataset] = {}
+    for name in wanted:
+        entry = declared.get(name) or {}
+        rel = entry.get("data") if isinstance(entry, dict) else None
+        path = root / (rel or (name + ".npz"))
+        if path.is_file():
+            datasets[name] = load_policy_dataset(path)
+            manifest["nets"][name] = {
+                "data": path.name,
+                "count": int(len(datasets[name])),
+                "epochs": int(entry.get("epochs", SL_DEFAULT_EPOCHS[name])),
+                "alpha": list(entry.get("alpha", SL_DEFAULT_ALPHA[name])),
+            }
+            continue
+        # Tek dosya duzeni: all.npz -> temas/yaris ayrimi.
+        single = root / "all.npz"
+        if single.is_file():
+            if "all" not in datasets:
+                datasets["all"] = load_policy_dataset(single)
+            split = split_by_contact(datasets["all"])
+            if name in split:
+                datasets[name] = split[name]
+                manifest["nets"][name] = {
+                    "data": single.name + "#" + name,
+                    "count": int(len(split[name])),
+                    "epochs": int(entry.get("epochs", SL_DEFAULT_EPOCHS[name])),
+                    "alpha": list(entry.get("alpha", SL_DEFAULT_ALPHA[name])),
+                }
+    if not manifest["nets"]:
+        raise FileNotFoundError(
+            "korpus dizininde kullanilabilir Net yok (contact.npz / race.npz / all.npz): "
+            + str(root)
+        )
+    manifest["missing"] = [n for n in wanted if n not in manifest["nets"]]
+    return datasets, manifest
+
+
+def train_corpus_sl(
+    model,
+    datasets: dict[str, PolicyDataset],
+    manifest: dict[str, Any],
+    *,
+    order: Sequence[str] | None = None,
+    batch: int = DEFAULT_BATCH,
+    device: str = "cpu",
+    seed: int = 0,
+    value_weight: float = DEFAULT_VALUE_WEIGHT,
+    dist_weight: float = 0.0,
+    val_fraction: float = 0.0,
+    patience: int = 0,
+    eval_every: int = 500,
+    weight_decay: float = 0.0,
+    policy_temperature: float = 0.0,
+    mix: bool = False,
+    progress: Callable[[str, int, int, float], None] | None = None,
+) -> dict[str, Any]:
+    """Per-Net SL asamasi: her Net kendi epoch/alpha takvimiyle egitilir.
+
+    Tek monolotik agimiz oldugu icin bgsage'in ayri Net'leri burada bir
+    **mufredat** olarak uygulanir. Iki duzen var:
+
+    - ``mix=False`` (varsayilan, **sirali**): ``contact`` tamamen bitince
+      agirliklar ``race`` epoch'larina tasinir. gnubg/bgsage'in *ayri* Net'leri
+      icin dogru desen; tek paylasilan agda ise kucuk Net'in son fazi buyuk
+      Net'in ogrendigini siler (F8-03'te olculdu: yalniz ``contact`` 0,0072,
+      ardindan ``race`` fazi 0,0287 — **feci unutma**).
+    - ``mix=True`` (**serpistirilmis**): her epoch icinde Net'ler kucukten
+      buyuge dogru sirayla egitilir; epoch daima en buyuk Net ile kapanir, yani
+      kucuk Net'in gradyani bir sonraki epoch'ta yeniden capalanir. Tek
+      paylasilan ag icin dogru desen.
+    """
+    if not datasets:
+        raise ValueError("SL icin veri kumesi yok")
+    seq = [n for n in (order or SL_NET_NAMES) if n in datasets]
+    if not seq:
+        raise ValueError("SL icin istenen Net'lerin hicbiri yuklenmedi")
+
+    plans: dict[str, dict[str, Any]] = {}
+    for name in seq:
+        entry = (manifest.get("nets") or {}).get(name) or {}
+        epochs = int(entry.get("epochs", SL_DEFAULT_EPOCHS[name]))
+        alpha = entry.get("alpha", SL_DEFAULT_ALPHA[name])
+        if not isinstance(alpha, (list, tuple)) or len(alpha) != 2:
+            raise ValueError("alpha iki elemanli olmali: " + repr(alpha))
+        plans[name] = {
+            "epochs": epochs,
+            "alpha": [float(alpha[0]), float(alpha[1])],
+            "schedule": sl_schedule(epochs, float(alpha[0]), float(alpha[1])),
+        }
+
+    if mix:
+        # Kucukten buyuge: epoch'un son gradyani en buyuk Net'ten gelsin.
+        max_epochs = max(p["epochs"] for p in plans.values())
+        units: list[tuple[int, str, dict[str, float]]] = []
+        for epoch in range(1, max_epochs + 1):
+            for name in sorted(seq, key=lambda n: (len(datasets[n]), n)):
+                schedule = plans[name]["schedule"]
+                if epoch <= len(schedule):
+                    units.append((epoch, name, schedule[epoch - 1]))
+    else:
+        units = []
+        for name in seq:
+            for item in plans[name]["schedule"]:
+                units.append((int(item["epoch"]), name, item))
+
+    nets_report: dict[str, Any] = {}
+    total_steps = 0
+    for epoch, name, item in units:
+        dataset = datasets[name]
+        steps = max(1, int(round(len(dataset) / max(1, batch))))
+        report = train_policy_head(
+            model,
+            dataset,
+            steps=steps,
+            lr=float(item["alpha"]),
+            batch=batch,
+            device=device,
+            seed=seed + epoch,
+            value_weight=value_weight,
+            dist_weight=dist_weight,
+            val_fraction=val_fraction,
+            patience=patience,
+            eval_every=eval_every,
+            weight_decay=weight_decay,
+            policy_temperature=policy_temperature,
+            progress=(
+                None
+                if progress is None
+                else (
+                    lambda step, total, loss, _n=name, _e=epoch: progress(
+                        _n, _e, step, loss
+                    )
+                )
+            ),
+        )
+        total_steps += steps
+        entry = nets_report.setdefault(
+            name,
+            {
+                "count": int(len(dataset)),
+                "epochs": plans[name]["epochs"],
+                "alpha": list(plans[name]["alpha"]),
+                "history": [],
+            },
+        )
+        entry["history"].append(
+            {
+                "epoch": epoch,
+                "alpha": float(item["alpha"]),
+                "steps": steps,
+                "lastLoss": float(report["lastLoss"]),
+                "top1": float(report["top1"]),
+                "valTop1": report.get("valTop1"),
+                "valLoss": report.get("valLoss"),
+            }
+        )
+
+    for name, entry in nets_report.items():
+        entry["lastLoss"] = entry["history"][-1]["lastLoss"]
+        entry["top1"] = entry["history"][-1]["top1"]
+        entry["valTop1"] = entry["history"][-1]["valTop1"]
+
+    return {
+        "nets": nets_report,
+        "order": seq,
+        "mix": bool(mix),
+        "totalSteps": total_steps,
+        "totalPositions": int(sum(v["count"] for v in nets_report.values())),
+        "manifestSource": manifest.get("source"),
+        "missingNets": list(manifest.get("missing") or []),
+    }
+
+
+# ----------------------------------------------------------------------
 # Eslesmis test
 # ----------------------------------------------------------------------
 
@@ -1903,6 +2187,51 @@ def build_parser() -> argparse.ArgumentParser:
     tp.add_argument("--json", type=Path, default=None)
     tp.add_argument("--quiet", action="store_true")
 
+    cs = sub.add_parser(
+        "corpus-sl",
+        help="korpus SL asamasi: per-Net (contact/race) epoch/alpha takvimi (F8-03)",
+    )
+    cs.add_argument(
+        "--corpus-dir",
+        type=Path,
+        required=True,
+        help="korpus dizini (contact.npz / race.npz / all.npz + opsiyonel manifest.json)",
+    )
+    cs.add_argument(
+        "--init-from",
+        type=Path,
+        required=True,
+        help="warm-start checkpoint (G2: sifirdan baslangic reddedilir)",
+    )
+    cs.add_argument("--out", type=Path, required=True, help="cikti checkpoint")
+    cs.add_argument(
+        "--nets",
+        default=",".join(SL_NET_NAMES),
+        help="egitilecek Net'ler, virgulle ayrilmis (varsayilan: contact,race)",
+    )
+    cs.add_argument(
+        "--order",
+        default=None,
+        help="mufredat sirasi (varsayilan: --nets sirasi)",
+    )
+    cs.add_argument("--batch", type=int, default=DEFAULT_BATCH)
+    cs.add_argument("--value-weight", type=float, default=DEFAULT_VALUE_WEIGHT)
+    cs.add_argument("--dist-weight", type=float, default=0.0)
+    cs.add_argument("--val-fraction", type=float, default=0.0)
+    cs.add_argument("--patience", type=int, default=0)
+    cs.add_argument("--eval-every", type=int, default=500)
+    cs.add_argument("--weight-decay", type=float, default=0.0)
+    cs.add_argument("--policy-temperature", type=float, default=0.0)
+    cs.add_argument(
+        "--mix",
+        action="store_true",
+        help="Net'leri epoch icinde serpistir (tek paylasilan ag icin onerilen; F8-03)",
+    )
+    cs.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
+    cs.add_argument("--seed", type=int, default=0)
+    cs.add_argument("--json", type=Path, default=None)
+    cs.add_argument("--quiet", action="store_true")
+
     return p
 
 
@@ -2367,6 +2696,103 @@ def _cmd_train_policy(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_corpus_sl(args: argparse.Namespace) -> int:
+    """Korpus SL asamasi (F8-03 / Adim B).
+
+    G2 kurali: ``--init-from`` **zorunlu**dur ve checkpoint profili ile
+    ``--profile`` uyusmazsa kosu **reddedilir** (sessiz sifirdan baslangic yok).
+    """
+    import torch  # noqa: PLC0415
+    from model import CAPACITY_PROFILES, DEFAULT_PROFILE, VECTOR_SIZE, build_model  # noqa: PLC0415
+
+    init = Path(args.init_from)
+    if not init.is_file():
+        print("[hata] warm-start checkpoint yok: " + str(init), file=sys.stderr)
+        return 2
+    nets = [n.strip() for n in str(args.nets).split(",") if n.strip()]
+    if not nets:
+        print("[hata] --nets bos", file=sys.stderr)
+        return 2
+    try:
+        datasets, manifest = load_sl_corpus(args.corpus_dir, nets=nets)
+    except (FileNotFoundError, ValueError) as exc:
+        print("[hata] " + str(exc), file=sys.stderr)
+        return 2
+
+    state = torch.load(str(init), map_location=args.device, weights_only=False)
+    profile = state.get("profile") or DEFAULT_PROFILE
+    if profile not in CAPACITY_PROFILES:
+        print("[hata] bilinmeyen profil: " + repr(profile), file=sys.stderr)
+        return 2
+    h1, h2 = CAPACITY_PROFILES[profile][:2]
+    model = build_model(VECTOR_SIZE, h1, h2, seed=0, output_version=2, profile=profile)
+    try:
+        model.load_state_dict(state["model"])
+    except RuntimeError as exc:
+        # G2: sifirdan baslangic reddedilir; sekil uyusmazligi sessizce yutulmaz.
+        print(
+            "[hata] warm-start agirliklari profile uymuyor (%s): %s" % (profile, exc),
+            file=sys.stderr,
+        )
+        return 2
+
+    def progress(net: str, epoch: int, step: int, loss: float) -> None:
+        if args.quiet:
+            return
+        if step % 200 == 0:
+            print("[%s e%d %d] loss=%.6f" % (net, epoch, step, loss), file=sys.stderr)
+
+    order = None
+    if args.order:
+        order = [n.strip() for n in str(args.order).split(",") if n.strip()]
+    report = train_corpus_sl(
+        model,
+        datasets,
+        manifest,
+        order=order,
+        batch=args.batch,
+        device=args.device,
+        seed=args.seed,
+        value_weight=args.value_weight,
+        dist_weight=args.dist_weight,
+        val_fraction=args.val_fraction,
+        patience=args.patience,
+        eval_every=args.eval_every,
+        weight_decay=args.weight_decay,
+        policy_temperature=args.policy_temperature,
+        mix=bool(args.mix),
+        progress=progress,
+    )
+    report["profile"] = profile
+    report["initMode"] = "checkpoint"
+    report["initFrom"] = str(init)
+    report["corpusDir"] = str(args.corpus_dir)
+    report["manifest"] = manifest
+
+    out_state = dict(state)
+    out_state["model"] = model.state_dict()
+    out_state["profile"] = profile
+    out_state["corpusSl"] = {k: v for k, v in report.items() if k != "manifest"}
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(out_state, str(args.out))
+
+    if args.json is not None:
+        args.json.parent.mkdir(parents=True, exist_ok=True)
+        args.json.write_text(
+            json.dumps(report, indent=2, sort_keys=True), encoding="utf-8"
+        )
+    if not args.quiet:
+        parts = [
+            "%s(n=%d,top1=%.4f)" % (n, v["count"], v["top1"])
+            for n, v in report["nets"].items()
+        ]
+        print(
+            "profil=%s baslangic=checkpoint netler=%s adim=%d -> %s"
+            % (profile, " ".join(parts), report["totalSteps"], args.out)
+        )
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "label":
@@ -2381,6 +2807,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_merge_policy(args)
     if args.command == "train-policy":
         return _cmd_train_policy(args)
+    if args.command == "corpus-sl":
+        return _cmd_corpus_sl(args)
     return 2
 
 
