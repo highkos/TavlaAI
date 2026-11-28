@@ -265,6 +265,7 @@ def play_game(
     gnubg_choose: Callable[[dict[str, Any]], int],
     max_plies: int = DEFAULT_MAX_PLIES,
     allow_unfinished: bool = False,
+    on_roll: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Tek bir kupsuz para oyunu oynar; **bizim** bakisimizdan puan doner.
 
@@ -273,6 +274,11 @@ def play_game(
     bitmeyen oyun uretebildigi goruldu (politika kafasi tek basina donguye
     girebiliyor); mac kosusunun tamamen dusmesi yerine bu oyunlar **sayilir
     ve raporlanir**. Varsayilan ``False``: sessiz dusme yok.
+
+    ``on_roll``: **F8-01**. Her zar olayinda (hamle secilmeden **once**, zorunlu
+    pas dahil) cagrilir; ``case`` sozlugunu alir. Sans-duzeltmesi
+    (``ml/luck_adjust.py``) bu kancaya baglanir. ``None`` iken ek maliyet
+    **sifirdir**; mevcut davranis bit-ozdes kalir.
     """
     board = list(refgen.START_BOARD)
     white_off = black_off = 0
@@ -284,6 +290,8 @@ def play_game(
             raise MatchError("zar dizisi bitti (max_plies cok kucuk)")
         dice = dice_seq[ply]
         case = _case(board, turn, dice, white_off, black_off)
+        if on_roll is not None:
+            on_roll(case)
         if not case["afterStates"]:
             turn = -turn
             plies += 1

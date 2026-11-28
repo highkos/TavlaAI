@@ -7102,3 +7102,183 @@ Toplam 1592, belgelenen sayıyla uyumlu.
 **Artefaktlar.** `ml/artifacts/ppg_xlarge_100k.json`,
 `ml/artifacts/ppg_xlarge_100k_s1_2ply.json` / `.md`,
 `ml/artifacts/stage_100k_report.md`.
+## F8-01 — Şans-düzeltmeli H2H (Adım A1): 2,10× GA indirimi, 4× çubuğu karşılanmadı
+
+**Belirti.** Faz 7'nin ppg ölçümleri 2000–4400 oyunla ±0,03–0,04 GA veriyor;
+`m = 0,1115` eşik değeri için bu GA, eşiğin üçte biri kadar. bgsage (Open Sage)
+aynı sorunu **şans-düzeltmesi** ile çözüyor: her çiftte (aynı zarlar, renk
+değişimi) şansı ayrı ayrı hesaplayıp skordan düşüyor, böylece zar gürültüsü
+ölçümden çıkıyor. Faz 8 §4 Adım A1 bu mekanizmayı istiyor; kabul ölçütü
+**GA en az 4× küçülmeli**.
+
+**Yöntem.** `ml/luck_adjust.py`. Her zarda, o zarı oynadıktan sonraki
+`afterState`'ler üzerinde bir **referans** değerlendirici çalıştırılıyor ve
+zardan önceki değerle farkı "şans" olarak biriktiriliyor:
+
+    luck = Σ_rolls [ V_ref(after roll) − V_ref(before roll) ]
+
+Oyuncunun şansı ile rakibin şansı işaret olarak zıt olduğundan çift toplamı
+sıfıra yakınsar; kalan fark gerçek beceri farkıdır. Düzeltilmiş skor
+`score − β·(luck_me − luck_opp)`, β = 1 teorik değer, `β*` regresyonla
+kestirilip raporlanıyor. Çift bazında kümeleme (pair-clustered) GA ve
+bootstrap GA birlikte veriliyor.
+
+**Referans gücü merdiveni (100 oyun = 50 çift, xlarge tohum 1, gnubg 2-ply).**
+
+| Referans | ppg | ham GA | düzeltilmiş GA | GA faktörü | ρ | s/çift |
+|---|---|---|---|---|---|---|
+| `value` (kendi değer kafası) | −0,4300 | 0,13016 | 0,06200 | **2,10×** | 0,8801 | 49,8 |
+| `policy` (kendi politika kafası) | — | — | — | **0,85×** | — | ~50 |
+| `self` (kendine karşı) | 0,0000 | — | — | dejenere | — | ~50 |
+| `search1` (1-ply arama) | — | — | — | ölçülemedi | — | 1868 |
+
+`value` referansıyla: ρ = 0,8801, R = 4,408, β* = 1,0447, varyans oranı
+4,41, **GA %52,4 azaldı → 2,10×**. Ham ppg −0,4300 [−0,685; −0,175],
+düzeltilmiş −0,2721 [−0,394; −0,151]. İki güven aralığı örtüşüyor ama
+düzeltilmiş aralık **yarıya** indi.
+
+**Bulgu 1 — 4× çubuğu karşılanmadı.** 2,10× < 4×. bgsage 6–8× bildiriyor.
+Fark referans gücünden geliyor: bizim değer kafası, oyunun şans bileşenini
+gnubg 2-ply kadar iyi ayıramıyor. ρ = 0,88 zaten yüksek; GA'yı 4× indirmek
+için ρ ≈ 0,97 gerekir (GA faktörü ≈ 1/√(1−ρ²)).
+
+**Bulgu 2 — politika kafası referans olarak işe yaramıyor.** 0,85× yani
+düzeltme **GA'yı büyütüyor**. Politika kafası şansı değil hamle tercihini
+modelliyor; zar etkisini değerlendirmek için yanlış araç. `REFERENCE_PATHS`
+içinde tutuluyor ama varsayılan değil.
+
+**Bulgu 3 — kendine karşı oyun dejenere.** Tam 0,0000 çıktı: deterministik
+model + renk-değişimli çiftler → her iki taraf birebir aynı oynuyor, şans
+tam simetrik. Bu bir **doğruluk testi** olarak değerli (düzeltme gerçekten
+sıfır veriyor) ama referans olarak kullanılamaz.
+
+**Bulgu 4 — `search1` referansı pratikte koşulamıyor.** 1868 s/çift, yani
+`value`'nun **37 katı**. 60 oyunluk tanı koşusu 1,5 saatte **0 çift**
+tamamladı (10 işçi × ~2400 s CPU). 30 çift ≈ 15,6 saat. Bu maliyetle
+rutin ölçüm aracı olamaz; koşu durduruldu ve sonuç **ölçülemedi** olarak
+kaydedildi. Daha güçlü referans gerekiyorsa doğru yol `search1` değil,
+gnubg'nin kendi değerlendirmesi (`eval_afterstates`, 21 ms/tahta) üzerinden
+bir referanstır — bu Faz 8'in sonraki adımına bırakıldı.
+
+**Karar.** A1 mekanizması **çalışıyor ve doğru** (dejenere durumda tam 0,
+β* ≈ 1,04 teorik β = 1'i doğruluyor, GA %52 azalıyor). Ancak **kabul ölçütü
+karşılanmadı**: 2,10× < 4×. Bu, ölçüm aracının değil referansın sınırıdır.
+A1 yine de faydalı: bundan sonraki ppg ölçümleri **yarı GA** ile yapılabilir,
+yani aynı oyun sayısıyla iki kat kesinlik. Karar kuralı (`m = 0,1115`,
+üç dal) değişmedi.
+
+**Yan bulgu — `%95` biçim hatası.** `build_markdown` içinde `"%95"` yazılmıştı;
+Python bunu biçim belirteci sanıp `ValueError` atıyordu. `"%%95"` yapıldı.
+Test 424 de totolojik bir assert içeriyordu (kendini doğruluyordu), gerçek
+kontrole çevrildi.
+
+**Yan bulgu — `on_roll` kancası.** `ml/vs_gnubg.py`'ye `on_roll` geri-çağrısı
+eklendi (8 satır). Şans muhasebesi oyun döngüsünün içine girmeden, dışarıdan
+gözlemci olarak bağlanıyor; `vs_gnubg`'nin mevcut davranışı değişmiyor.
+
+**Testler.** `ml/tests/test_luck_adjust.py` — **27 test (409–435)**, hepsi
+yeşil. Kapsam: `roll_table` üç referans yolu, `roll_correction` işaret ve
+simetri, `LuckTracker` birikimi, dejenere kendine-karşı sıfır sonucu,
+`summarize` β*/ρ/varyans oranı/GA formülleri, bootstrap GA, `%95` biçimi,
+CLI argümanları, `--ref-path` doğrulaması, checkpoint devam.
+
+**Artefaktlar.** `ml/artifacts/luck_adjust_pilot.json` / `.md`,
+`ml/artifacts/luck_adjust_pilot_pol.json`, `ml/artifacts/luck_adjust_pilot_self.json`.
+## F8-02 — Plan etiketli kıyaslama paneli ve model envanteri (Görev 2)
+
+**Belirti.** Faz 7'ye kadar güç iddiaları tek bir 50 pozisyonluk ER setiyle ve
+tek bir sayıyla yapılıyordu. İki sorun: (1) **plan körlüğü** — bgsage'in kendi
+kırılımı (purerace 0,02 / racing 0,25 / attacking 0,20 / priming 0,32 /
+anchoring 0,32) tek ortalamada kayboluyor, hangi planda zayıf olduğumuz
+bilinmiyor; (2) **izlenebilirlik kaybı** — `ml/runs/` gitignore'da olduğu için
+bir ONNX silindiğinde hiçbir uyarı çıkmıyordu (kırmızı çizgi G9).
+
+**Yöntem — `ml/benchmarks.py`.** Dört parça:
+
+1. **Plan sınıflandırıcısı** (`classify_plan`). bgsage'in taksonomisi pip/punto
+   kurallarıyla yeniden kuruldu (kod kopyalanmadı, MPL-2.0 dosya alınmadı —
+   Faz 8 §9). Öncelik sırası sabit: `purerace` (temas yok) → `backgame`
+   (≥3 anchor, veya ≥2 anchor + ≥7 arka pul + ≥200 pip) → `priming`
+   (4–12 bölgesinde ≥4'lük prime **ve** rakibin arkasında pulu var) →
+   `attacking` (rakip evimde blot / barda **ve** ≥3 ev punto) → `anchoring`
+   (≥1 anchor ve pip > rakip pip + 10) → `racing` (temas bölgesindeki toplam
+   pul ≤ 10) → `attacking` (genel temas).
+2. **Deterministik set üretimi** (`build_sets`). Plan başına 40 pozisyon,
+   tohum 20261127, seçim `_case_key` (board+turn+zar+off sha256) ile
+   sıralanır ⇒ aynı girdi **bayt bayt aynı** dosyayı verir. Plan dolmazsa
+   eksik `shortfall` alanına yazılır, sessizce küçültülmez.
+3. **Yalnızca ekleme günlüğü** (`append_benchmark`). Aynı `recordId` ikinci kez
+   yazılırsa `BenchmarkError`. Her kayıt model sha256'sı + set hash'i + ölçüm
+   parametrelerini taşır; set hash'i değişirse satırlar karşılaştırılamaz.
+4. **Model envanteri** (`build_inventory`). `ml/runs` + `ml/artifacts` altındaki
+   her ONNX için yol, sha256, boyut, çıktı sözleşmesi, onu üreten `F7-xx`/
+   `F8-xx` kaydı ve panel satırı. Panelde ölçülmüş ama diskte olmayan model
+   **alarm** üretir.
+
+**Sapma — gnubg `.bm` dosyaları yok.** bgsage `contact.bm` / `race.bm` kullanıyor.
+Bu dosyalar yerel gnubg kurulumunda yok ve üç GitHub ham URL'si de 404 verdi.
+Panel bu yüzden depodaki iki korpustan üretildi: `corpus2_records.json` (3075
+vaka) + `reference_corpus_v1.json` (200 vaka). Sonuç: **229 vaka**, plan
+dağılımı `purerace 40 / racing 40 / attacking 40 / priming 40 / anchoring 40 /
+backgame 29`, `shortfall {"backgame": 11}`. Set hash'leri: `contact
+a3382435…`, `race 2cdc833a…`, `all 3bfbbae4…`. İkinci üretim bayt bayt aynı
+(`Get-FileHash` ile doğrulandı).
+
+**Ölçüm — 10 model, gnubg 2-ply, `policy` ölçütü.**
+
+| Model | contact ER | contact eşleşme | race ER | race eşleşme |
+|---|---|---|---|---|
+| `capacity_rd/large/seed0` (Faz 7 tabanı) | **0,0070** | 77,2% | **0,0122** | 65,0% |
+| `capacity100k_rd_sweep/xlarge/seed1` | 0,0075 | **80,5%** | 0,0151 | 60,0% |
+| `capacity100k_rd_sweep/medium/seed1` | 0,0081 | 77,2% | 0,0140 | 62,5% |
+| `capacity30k_rd_sweep/xlarge/seed1` | 0,0085 | 75,8% | 0,0129 | 63,7% |
+| `capacity100k_rd_sweep/xlarge/seed0` | 0,0098 | 76,5% | 0,0226 | 56,2% |
+| `capacity100k_rd_sweep/large/seed1` | 0,0105 | 77,2% | 0,0162 | 58,8% |
+| `k5_dist/model_kl05` | 0,0189 | 69,8% | 0,0355 | 55,0% |
+| `stage_d_l2/model_v30` (**varsayılan model**) | 0,0348 | 60,4% | 0,0388 | 57,5% |
+| `stage_d_l2/model_v1` | 0,0512 | 52,3% | 0,0453 | 52,5% |
+| `gnubg_distill/model_gnubg` | 0,0548 | 53,0% | 0,0479 | 51,2% |
+
+**Bulgu 1 — panel ile search1 ER sıralaması çelişiyor.** F7-129'da 100k xlarge
+(tohum 1) search1 ER'de tabandan iyiydi (0,011013 vs 0,013047) ve ppg'de de
++0,0736 kazanmıştı. Panelde ise **taban modeli (`capacity_rd/large/seed0`)
+hem contact hem race setinde en iyi**. Fark ölçüm ekseninden geliyor: search1
+ER tek pozisyonun 1-ply aramayla seçilmiş hamlesini ölçer, panel ise gnubg
+2-ply'ye göre **hamle kaybını** ölçer. İkisi aynı şeyi ölçmüyor. Bu, panelin
+varlık sebebidir: tek sayıyla "daha iyi" iddiası kurulamaz (Faz 8 §0 kural 4).
+
+**Bulgu 2 — varsayılan model en iyisi değil.** `ml/vs_gnubg.py` içindeki
+`DEFAULT_MODEL = ml/runs/stage_d_l2/onnx/model_v30.onnx` panelde **5 kat
+daha kötü** (0,0348 vs 0,0070). Yani bugüne kadarki tüm H2H/ppg ölçümleri
+en güçlü modelimizle değil, orta seviye bir TD modeliyle yapılmış. Faz 7'nin
+ppg sayıları bu yüzden **iyimser değil, kötümser**: daha güçlü bir modelle
+ölçüm tekrarlanırsa ppg iyileşir. Bu, Faz 8'in ilk somut kaldıracıdır.
+
+**Bulgu 3 — gnubg politikasından damıtma transfer olmadı.** `gnubg_distill/
+model_gnubg` panelin **en kötüsü** (0,0548). Faz 7'de "gnubg politika
+damıtması" iyi görünüyordu; panel bunu doğrulamıyor. Bu, Görev 3'ün (gnubg
+korpustan SL) neden gerekli olduğunun kanıtı: mevcut damıtma tarifi çalışmıyor.
+
+**Bulgu 4 — plan sıralaması bgsage ile aynı.** En iyi modelde plan kırılımı:
+`backgame 0,0029` < `anchoring 0,0042` < `priming 0,0049` < `purerace 0,0107`
+< `racing 0,0137` < `attacking 0,0148`. bgsage'de de `purerace` en iyi,
+`racing` en kötüler arasında. Sınıflandırıcının bgsage taksonomisini
+**davranışsal olarak** yakaladığının bağımsız kanıtı.
+
+**Bulgu 5 — `racing` gerçekten zayıf halka.** `k5_dist/model_kl05`'te
+`racing` 0,0653, `purerace` 0,0059 — **11 kat** fark. Yarış pozisyonları
+pip sayımına çok duyarlı; modelin pip muhasebesi zayıf. Faz 8'in sonraki
+adımları için hedef.
+
+**Testler.** `ml/tests/test_benchmarks.py` — **12 test (436–447)**, hepsi
+yeşil. Kapsam: sınıflandırıcı determinizmi + altı plan + antisimetri, geçersiz
+`turn` reddi, geometri yardımcıları, bayt-özdeş set üretimi, `shortfall`
+raporlama, hash sıra/içerik duyarlılığı, kurcalanmış etiket tespiti, eksik
+`afterStates` tespiti, sürüm/bilinmeyen set reddi, ekleme-yalnız günlük,
+markdown↔JSON uyumu, envanter sha256 + F kaydı + panel satırı + eksik model
+alarmı.
+
+**Artefaktlar.** `ml/artifacts/benchmark_sets.json`,
+`ml/artifacts/model_benchmarks.json` / `.md` (10 kayıt),
+`ml/artifacts/model_inventory.json` / `.md` (243 dosya, 55'i F kaydına bağlı,
+10'u panel satırına bağlı, **alarm yok**).

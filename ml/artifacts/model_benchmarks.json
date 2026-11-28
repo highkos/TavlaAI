@@ -1,0 +1,675 @@
+{
+ "benchVersion": 1,
+ "records": [
+  {
+   "recordId": "ml/runs/capacity100k_rd_sweep/xlarge/seed1/model.onnx|e7379074a9072cae|policy|2|2026-11-27T22:53:53Z",
+   "timestamp": "2026-11-27T22:53:53Z",
+   "model": {
+    "path": "ml/runs/capacity100k_rd_sweep/xlarge/seed1/model.onnx",
+    "sha256": "e7379074a9072cae24bfe78be6e365012c08cbc6f087f8a7cca59f2cb7b014c9",
+    "sizeBytes": 7233412,
+    "outputVersion": 2
+   },
+   "criterion": "policy",
+   "plies": 2,
+   "benchVersion": 1,
+   "sets": {
+    "contact": {
+     "setHash": "a3382435bb320802e6b117a72a817bdabacc724214a8047417c72ee0bd2e9a93",
+     "count": 149,
+     "mean": 0.00745,
+     "median": 0.0,
+     "max": 0.327,
+     "exactMatchRate": 0.805369,
+     "skipped": [],
+     "perPlan": {
+      "attacking": {
+       "count": 40,
+       "mean": 0.00865,
+       "max": 0.133
+      },
+      "priming": {
+       "count": 40,
+       "mean": 0.012425,
+       "max": 0.327
+      },
+      "anchoring": {
+       "count": 40,
+       "mean": 0.005925,
+       "max": 0.084
+      },
+      "backgame": {
+       "count": 29,
+       "mean": 0.001034,
+       "max": 0.013
+      }
+     }
+    },
+    "race": {
+     "setHash": "2cdc833a7e6838dc7314934a1ca375bf695adfdf616ecae28a682b25c8d1c674",
+     "count": 80,
+     "mean": 0.015075,
+     "median": 0.0,
+     "max": 0.245,
+     "exactMatchRate": 0.6,
+     "skipped": [],
+     "perPlan": {
+      "purerace": {
+       "count": 40,
+       "mean": 0.014375,
+       "max": 0.245
+      },
+      "racing": {
+       "count": 40,
+       "mean": 0.015775,
+       "max": 0.198
+      }
+     }
+    }
+   }
+  },
+  {
+   "recordId": "ml/runs/capacity100k_rd_sweep/xlarge/seed0/model.onnx|19091c5bf1a70eee|policy|2|2026-11-27T23:07:04Z",
+   "timestamp": "2026-11-27T23:07:04Z",
+   "model": {
+    "path": "ml/runs/capacity100k_rd_sweep/xlarge/seed0/model.onnx",
+    "sha256": "19091c5bf1a70eee66fb8719570efee9f2f4f3710288b86f1a71970f3971d615",
+    "sizeBytes": 7233412,
+    "outputVersion": 2
+   },
+   "criterion": "policy",
+   "plies": 2,
+   "benchVersion": 1,
+   "sets": {
+    "contact": {
+     "setHash": "a3382435bb320802e6b117a72a817bdabacc724214a8047417c72ee0bd2e9a93",
+     "count": 149,
+     "mean": 0.009819,
+     "median": 0.0,
+     "max": 0.327,
+     "exactMatchRate": 0.765101,
+     "skipped": [],
+     "perPlan": {
+      "attacking": {
+       "count": 40,
+       "mean": 0.0143,
+       "max": 0.194
+      },
+      "priming": {
+       "count": 40,
+       "mean": 0.013925,
+       "max": 0.327
+      },
+      "anchoring": {
+       "count": 40,
+       "mean": 0.005675,
+       "max": 0.084
+      },
+      "backgame": {
+       "count": 29,
+       "mean": 0.00369,
+       "max": 0.05
+      }
+     }
+    },
+    "race": {
+     "setHash": "2cdc833a7e6838dc7314934a1ca375bf695adfdf616ecae28a682b25c8d1c674",
+     "count": 80,
+     "mean": 0.022563,
+     "median": 0.0,
+     "max": 0.332,
+     "exactMatchRate": 0.5625,
+     "skipped": [],
+     "perPlan": {
+      "purerace": {
+       "count": 40,
+       "mean": 0.01355,
+       "max": 0.245
+      },
+      "racing": {
+       "count": 40,
+       "mean": 0.031575,
+       "max": 0.332
+      }
+     }
+    }
+   }
+  },
+  {
+   "recordId": "ml/runs/capacity100k_rd_sweep/large/seed1/model.onnx|2a2c48ed949975c6|policy|2|2026-11-27T23:16:21Z",
+   "timestamp": "2026-11-27T23:16:21Z",
+   "model": {
+    "path": "ml/runs/capacity100k_rd_sweep/large/seed1/model.onnx",
+    "sha256": "2a2c48ed949975c6e4700ffbda4ff3a4ad054fa02bf35682749e9ab174a79c1c",
+    "sizeBytes": 2582398,
+    "outputVersion": 2
+   },
+   "criterion": "policy",
+   "plies": 2,
+   "benchVersion": 1,
+   "sets": {
+    "contact": {
+     "setHash": "a3382435bb320802e6b117a72a817bdabacc724214a8047417c72ee0bd2e9a93",
+     "count": 149,
+     "mean": 0.010503,
+     "median": 0.0,
+     "max": 0.327,
+     "exactMatchRate": 0.771812,
+     "skipped": [],
+     "perPlan": {
+      "attacking": {
+       "count": 40,
+       "mean": 0.01455,
+       "max": 0.194
+      },
+      "priming": {
+       "count": 40,
+       "mean": 0.014025,
+       "max": 0.327
+      },
+      "anchoring": {
+       "count": 40,
+       "mean": 0.0098,
+       "max": 0.127
+      },
+      "backgame": {
+       "count": 29,
+       "mean": 0.001034,
+       "max": 0.013
+      }
+     }
+    },
+    "race": {
+     "setHash": "2cdc833a7e6838dc7314934a1ca375bf695adfdf616ecae28a682b25c8d1c674",
+     "count": 80,
+     "mean": 0.016237,
+     "median": 0.0,
+     "max": 0.245,
+     "exactMatchRate": 0.5875,
+     "skipped": [],
+     "perPlan": {
+      "purerace": {
+       "count": 40,
+       "mean": 0.013975,
+       "max": 0.245
+      },
+      "racing": {
+       "count": 40,
+       "mean": 0.0185,
+       "max": 0.198
+      }
+     }
+    }
+   }
+  },
+  {
+   "recordId": "ml/runs/capacity100k_rd_sweep/medium/seed1/model.onnx|299e2e619e52ce47|policy|2|2026-11-27T23:25:38Z",
+   "timestamp": "2026-11-27T23:25:38Z",
+   "model": {
+    "path": "ml/runs/capacity100k_rd_sweep/medium/seed1/model.onnx",
+    "sha256": "299e2e619e52ce471d4a9dacadbc515940906e3182e305f04aa797e10000a8c8",
+    "sizeBytes": 637821,
+    "outputVersion": 2
+   },
+   "criterion": "policy",
+   "plies": 2,
+   "benchVersion": 1,
+   "sets": {
+    "contact": {
+     "setHash": "a3382435bb320802e6b117a72a817bdabacc724214a8047417c72ee0bd2e9a93",
+     "count": 149,
+     "mean": 0.008114,
+     "median": 0.0,
+     "max": 0.327,
+     "exactMatchRate": 0.771812,
+     "skipped": [],
+     "perPlan": {
+      "attacking": {
+       "count": 40,
+       "mean": 0.01,
+       "max": 0.133
+      },
+      "priming": {
+       "count": 40,
+       "mean": 0.0137,
+       "max": 0.327
+      },
+      "anchoring": {
+       "count": 40,
+       "mean": 0.005775,
+       "max": 0.084
+      },
+      "backgame": {
+       "count": 29,
+       "mean": 0.001034,
+       "max": 0.013
+      }
+     }
+    },
+    "race": {
+     "setHash": "2cdc833a7e6838dc7314934a1ca375bf695adfdf616ecae28a682b25c8d1c674",
+     "count": 80,
+     "mean": 0.01405,
+     "median": 0.0,
+     "max": 0.245,
+     "exactMatchRate": 0.625,
+     "skipped": [],
+     "perPlan": {
+      "purerace": {
+       "count": 40,
+       "mean": 0.012975,
+       "max": 0.245
+      },
+      "racing": {
+       "count": 40,
+       "mean": 0.015125,
+       "max": 0.198
+      }
+     }
+    }
+   }
+  },
+  {
+   "recordId": "ml/runs/capacity_rd/large/seed0/model.onnx|788ec39ce4ab9e8a|policy|2|2026-11-27T23:35:04Z",
+   "timestamp": "2026-11-27T23:35:04Z",
+   "model": {
+    "path": "ml/runs/capacity_rd/large/seed0/model.onnx",
+    "sha256": "788ec39ce4ab9e8a1f2ef26efc7aee8d51b7f27603e7ab09733e577e96b9e4f6",
+    "sizeBytes": 2574863,
+    "outputVersion": 2
+   },
+   "criterion": "policy",
+   "plies": 2,
+   "benchVersion": 1,
+   "sets": {
+    "contact": {
+     "setHash": "a3382435bb320802e6b117a72a817bdabacc724214a8047417c72ee0bd2e9a93",
+     "count": 149,
+     "mean": 0.00698,
+     "median": 0.0,
+     "max": 0.203,
+     "exactMatchRate": 0.771812,
+     "skipped": [],
+     "perPlan": {
+      "attacking": {
+       "count": 40,
+       "mean": 0.014775,
+       "max": 0.203
+      },
+      "priming": {
+       "count": 40,
+       "mean": 0.004925,
+       "max": 0.071
+      },
+      "anchoring": {
+       "count": 40,
+       "mean": 0.004175,
+       "max": 0.077
+      },
+      "backgame": {
+       "count": 29,
+       "mean": 0.002931,
+       "max": 0.053
+      }
+     }
+    },
+    "race": {
+     "setHash": "2cdc833a7e6838dc7314934a1ca375bf695adfdf616ecae28a682b25c8d1c674",
+     "count": 80,
+     "mean": 0.012188,
+     "median": 0.0,
+     "max": 0.237,
+     "exactMatchRate": 0.65,
+     "skipped": [],
+     "perPlan": {
+      "purerace": {
+       "count": 40,
+       "mean": 0.010725,
+       "max": 0.152
+      },
+      "racing": {
+       "count": 40,
+       "mean": 0.01365,
+       "max": 0.237
+      }
+     }
+    }
+   }
+  },
+  {
+   "recordId": "ml/runs/capacity30k_rd_sweep/xlarge/seed1/model.onnx|0aade041a38ec3b4|policy|2|2026-11-27T23:44:34Z",
+   "timestamp": "2026-11-27T23:44:34Z",
+   "model": {
+    "path": "ml/runs/capacity30k_rd_sweep/xlarge/seed1/model.onnx",
+    "sha256": "0aade041a38ec3b4c27729f4a5ce1fce350e034a889ab292428a0acdb9c6e6bc",
+    "sizeBytes": 7225877,
+    "outputVersion": 2
+   },
+   "criterion": "policy",
+   "plies": 2,
+   "benchVersion": 1,
+   "sets": {
+    "contact": {
+     "setHash": "a3382435bb320802e6b117a72a817bdabacc724214a8047417c72ee0bd2e9a93",
+     "count": 149,
+     "mean": 0.00849,
+     "median": 0.0,
+     "max": 0.194,
+     "exactMatchRate": 0.758389,
+     "skipped": [],
+     "perPlan": {
+      "attacking": {
+       "count": 40,
+       "mean": 0.01665,
+       "max": 0.194
+      },
+      "priming": {
+       "count": 40,
+       "mean": 0.00865,
+       "max": 0.117
+      },
+      "anchoring": {
+       "count": 40,
+       "mean": 0.00425,
+       "max": 0.077
+      },
+      "backgame": {
+       "count": 29,
+       "mean": 0.002862,
+       "max": 0.053
+      }
+     }
+    },
+    "race": {
+     "setHash": "2cdc833a7e6838dc7314934a1ca375bf695adfdf616ecae28a682b25c8d1c674",
+     "count": 80,
+     "mean": 0.012912,
+     "median": 0.0,
+     "max": 0.237,
+     "exactMatchRate": 0.6375,
+     "skipped": [],
+     "perPlan": {
+      "purerace": {
+       "count": 40,
+       "mean": 0.01185,
+       "max": 0.188
+      },
+      "racing": {
+       "count": 40,
+       "mean": 0.013975,
+       "max": 0.237
+      }
+     }
+    }
+   }
+  },
+  {
+   "recordId": "ml/runs/stage_d_l2/onnx/model_v30.onnx|13c7092eacbfc016|policy|2|2026-11-27T23:53:56Z",
+   "timestamp": "2026-11-27T23:53:56Z",
+   "model": {
+    "path": "ml/runs/stage_d_l2/onnx/model_v30.onnx",
+    "sha256": "13c7092eacbfc0168bcc10f1c9ed31c1c05fe43110168ab1770452fd1ade16dd",
+    "sizeBytes": 630287,
+    "outputVersion": 2
+   },
+   "criterion": "policy",
+   "plies": 2,
+   "benchVersion": 1,
+   "sets": {
+    "contact": {
+     "setHash": "a3382435bb320802e6b117a72a817bdabacc724214a8047417c72ee0bd2e9a93",
+     "count": 149,
+     "mean": 0.034839,
+     "median": 0.0,
+     "max": 0.666,
+     "exactMatchRate": 0.604027,
+     "skipped": [],
+     "perPlan": {
+      "attacking": {
+       "count": 40,
+       "mean": 0.031525,
+       "max": 0.336
+      },
+      "priming": {
+       "count": 40,
+       "mean": 0.0255,
+       "max": 0.33
+      },
+      "anchoring": {
+       "count": 40,
+       "mean": 0.05215,
+       "max": 0.666
+      },
+      "backgame": {
+       "count": 29,
+       "mean": 0.028414,
+       "max": 0.315
+      }
+     }
+    },
+    "race": {
+     "setHash": "2cdc833a7e6838dc7314934a1ca375bf695adfdf616ecae28a682b25c8d1c674",
+     "count": 80,
+     "mean": 0.038787,
+     "median": 0.0,
+     "max": 0.461,
+     "exactMatchRate": 0.575,
+     "skipped": [],
+     "perPlan": {
+      "purerace": {
+       "count": 40,
+       "mean": 0.006575,
+       "max": 0.144
+      },
+      "racing": {
+       "count": 40,
+       "mean": 0.071,
+       "max": 0.461
+      }
+     }
+    }
+   }
+  },
+  {
+   "recordId": "ml/runs/stage_d_l2/onnx/model_v1.onnx|5d2603b4a0715806|policy|2|2026-11-28T00:03:33Z",
+   "timestamp": "2026-11-28T00:03:33Z",
+   "model": {
+    "path": "ml/runs/stage_d_l2/onnx/model_v1.onnx",
+    "sha256": "5d2603b4a0715806388d38052ba6dcb97dade07c7c1c457212a58bd162bf67e3",
+    "sizeBytes": 630286,
+    "outputVersion": 2
+   },
+   "criterion": "policy",
+   "plies": 2,
+   "benchVersion": 1,
+   "sets": {
+    "contact": {
+     "setHash": "a3382435bb320802e6b117a72a817bdabacc724214a8047417c72ee0bd2e9a93",
+     "count": 149,
+     "mean": 0.051235,
+     "median": 0.0,
+     "max": 0.624,
+     "exactMatchRate": 0.52349,
+     "skipped": [],
+     "perPlan": {
+      "attacking": {
+       "count": 40,
+       "mean": 0.05055,
+       "max": 0.609
+      },
+      "priming": {
+       "count": 40,
+       "mean": 0.040275,
+       "max": 0.33
+      },
+      "anchoring": {
+       "count": 40,
+       "mean": 0.02905,
+       "max": 0.192
+      },
+      "backgame": {
+       "count": 29,
+       "mean": 0.097897,
+       "max": 0.624
+      }
+     }
+    },
+    "race": {
+     "setHash": "2cdc833a7e6838dc7314934a1ca375bf695adfdf616ecae28a682b25c8d1c674",
+     "count": 80,
+     "mean": 0.045338,
+     "median": 0.0,
+     "max": 0.461,
+     "exactMatchRate": 0.525,
+     "skipped": [],
+     "perPlan": {
+      "purerace": {
+       "count": 40,
+       "mean": 0.00855,
+       "max": 0.222
+      },
+      "racing": {
+       "count": 40,
+       "mean": 0.082125,
+       "max": 0.461
+      }
+     }
+    }
+   }
+  },
+  {
+   "recordId": "ml/runs/gnubg_distill/model_gnubg.onnx|5933669e313a441e|policy|2|2026-11-28T00:13:12Z",
+   "timestamp": "2026-11-28T00:13:12Z",
+   "model": {
+    "path": "ml/runs/gnubg_distill/model_gnubg.onnx",
+    "sha256": "5933669e313a441e6fc8828b88d8d939a6654f82cf441bf989400da826405f60",
+    "sizeBytes": 630290,
+    "outputVersion": 2
+   },
+   "criterion": "policy",
+   "plies": 2,
+   "benchVersion": 1,
+   "sets": {
+    "contact": {
+     "setHash": "a3382435bb320802e6b117a72a817bdabacc724214a8047417c72ee0bd2e9a93",
+     "count": 149,
+     "mean": 0.054799,
+     "median": 0.0,
+     "max": 0.879,
+     "exactMatchRate": 0.530201,
+     "skipped": [],
+     "perPlan": {
+      "attacking": {
+       "count": 40,
+       "mean": 0.074725,
+       "max": 0.879
+      },
+      "priming": {
+       "count": 40,
+       "mean": 0.051725,
+       "max": 0.368
+      },
+      "anchoring": {
+       "count": 40,
+       "mean": 0.03715,
+       "max": 0.242
+      },
+      "backgame": {
+       "count": 29,
+       "mean": 0.055897,
+       "max": 0.282
+      }
+     }
+    },
+    "race": {
+     "setHash": "2cdc833a7e6838dc7314934a1ca375bf695adfdf616ecae28a682b25c8d1c674",
+     "count": 80,
+     "mean": 0.047925,
+     "median": 0.0,
+     "max": 0.461,
+     "exactMatchRate": 0.5125,
+     "skipped": [],
+     "perPlan": {
+      "purerace": {
+       "count": 40,
+       "mean": 0.007975,
+       "max": 0.144
+      },
+      "racing": {
+       "count": 40,
+       "mean": 0.087875,
+       "max": 0.461
+      }
+     }
+    }
+   }
+  },
+  {
+   "recordId": "ml/runs/k5_dist/model_kl05.onnx|9eaa08c0958e6593|policy|2|2026-11-28T00:22:50Z",
+   "timestamp": "2026-11-28T00:22:50Z",
+   "model": {
+    "path": "ml/runs/k5_dist/model_kl05.onnx",
+    "sha256": "9eaa08c0958e65939b9646979baff191c0e26b7782e3d03d947029a3a1a2caad",
+    "sizeBytes": 630289,
+    "outputVersion": 2
+   },
+   "criterion": "policy",
+   "plies": 2,
+   "benchVersion": 1,
+   "sets": {
+    "contact": {
+     "setHash": "a3382435bb320802e6b117a72a817bdabacc724214a8047417c72ee0bd2e9a93",
+     "count": 149,
+     "mean": 0.018859,
+     "median": 0.0,
+     "max": 0.366,
+     "exactMatchRate": 0.697987,
+     "skipped": [],
+     "perPlan": {
+      "attacking": {
+       "count": 40,
+       "mean": 0.01825,
+       "max": 0.366
+      },
+      "priming": {
+       "count": 40,
+       "mean": 0.03195,
+       "max": 0.33
+      },
+      "anchoring": {
+       "count": 40,
+       "mean": 0.008375,
+       "max": 0.132
+      },
+      "backgame": {
+       "count": 29,
+       "mean": 0.016103,
+       "max": 0.282
+      }
+     }
+    },
+    "race": {
+     "setHash": "2cdc833a7e6838dc7314934a1ca375bf695adfdf616ecae28a682b25c8d1c674",
+     "count": 80,
+     "mean": 0.03555,
+     "median": 0.0,
+     "max": 0.564,
+     "exactMatchRate": 0.55,
+     "skipped": [],
+     "perPlan": {
+      "purerace": {
+       "count": 40,
+       "mean": 0.00585,
+       "max": 0.144
+      },
+      "racing": {
+       "count": 40,
+       "mean": 0.06525,
+       "max": 0.564
+      }
+     }
+    }
+   }
+  }
+ ]
+}

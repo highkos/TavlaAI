@@ -3282,13 +3282,13 @@ aynı şey değildir.
 ### 51.5 Doğrulama
 
 ```
-ml/tests                     1592/1592  (3 yavaş/koşullu test atlanır)
+ml/tests                     1631/1631  (3 yavaş/koşullu test atlanır)
 Backgammon.Tests             297/297
 Backgammon.Inference.Tests   100/100
 Backgammon.UI.Tests           88/88
 ```
 
-Toplam **2077**.
+Toplam **2116**.
 `test_capacity_bench.py` 48, `test_export_ckpt.py` 12) ve `StageBDataQualityTests` (9)
 ekledi. B3 kararı dört dosya daha ekledi: `test_distill.py` (34), `test_calibrate.py` (32),
 `test_critical.py` içindeki 20 marj testi ve `ProductionDepthTests` (10).
@@ -3691,3 +3691,71 @@ koşar ve JSON'a `modelScenarios` / `modelCorrect` yazar.
 
 `crawford` 5/6: `normal-double-pass` senaryosu yanlış cevap veriyor ve bu
 **HEAD'de de aynı**. Önceden var olan kusur; ayrı iş (F7-35).
+
+## 59. Faz 8 — ölçüm dürüstlüğü: şans-düzeltmesi ve plan etiketli panel
+
+Faz 7'nin iki yapısal ölçüm kusuru vardı: ppg güven aralıkları `m = 0,1115`
+eşiğine göre çok genişti ve güç iddiaları **plan körü** tek bir ER sayısına
+dayanıyordu. Faz 8 iki modülle bunu kapatır.
+
+### 59.1 `ml/luck_adjust.py` — şans-düzeltmeli H2H
+
+Her zarda, o zarı oynadıktan sonraki `afterState`'ler üzerinde bir **referans**
+değerlendirici çalıştırılır; zardan önceki değerle farkı "şans" olarak
+biriktirilir:
+
+```
+luck = Σ_rolls [ V_ref(after roll) − V_ref(before roll) ]
+```
+
+Düzeltilmiş skor `score − β·(luck_me − luck_opp)`; β = 1 teorik, `β*`
+regresyonla kestirilir. Çift bazında kümeleme ve bootstrap GA birlikte
+raporlanır. `ml/vs_gnubg.py`'ye eklenen `on_roll` kancası şans muhasebesini
+oyun döngüsünün **dışında** tutar; mevcut davranış değişmez.
+
+| Referans | GA faktörü | ρ | s/çift |
+|---|---|---|---|
+| `value` (kendi değer kafası) | **2,10×** | 0,8801 | 49,8 |
+| `policy` (kendi politika kafası) | 0,85× | — | ~50 |
+| `self` (kendine karşı) | dejenere (0,0000) | — | ~50 |
+| `search1` (1-ply arama) | ölçülemedi | — | 1868 |
+
+Kabul ölçütü 4×; elde edilen 2,10×. Fark referans gücünden gelir: 4× için
+ρ ≈ 0,97 gerekir. Politika kafası referans olarak **zararlı**, kendine karşı
+oyun **dejenere** (doğruluk testi olarak değerli), `search1` 37× maliyetle
+pratikte koşulamıyor. A1 yine de faydalı: sonraki ppg ölçümleri **yarı GA**
+ile yapılabilir.
+
+### 59.2 `ml/benchmarks.py` — plan etiketli sabit panel
+
+Dört parça:
+
+1. **`classify_plan`** — bgsage taksonomisi pip/punto kurallarıyla yeniden
+   kuruldu (kod kopyalanmadı, MPL-2.0 dosya alınmadı). Öncelik: `purerace` →
+   `backgame` → `priming` → `attacking` → `anchoring` → `racing` → `attacking`.
+2. **`build_sets`** — plan başına 40 pozisyon, tohum 20261127, seçim
+   `_case_key` (board+turn+zar+off sha256) ile sıralanır ⇒ **bayt-özdeş**
+   çıktı. Plan dolmazsa `shortfall` alanına yazılır, sessizce küçültülmez.
+3. **`append_benchmark`** — yalnızca ekleme; aynı `recordId` ikinci kez
+   yazılamaz. Kayıt model sha256'sı + set hash'i + ölçüm parametrelerini taşır.
+4. **`build_inventory`** — her ONNX için yol, sha256, boyut, çıktı sözleşmesi,
+   üreten `F7-xx`/`F8-xx` kaydı ve panel satırı. Panelde ölçülmüş ama diskte
+   olmayan model **alarm** üretir (kırmızı çizgi G9).
+
+**Sapma.** bgsage `contact.bm` / `race.bm` kullanıyor; bu dosyalar yerel
+kurulumda yok ve üç GitHub ham URL'si 404 verdi. Panel depodaki iki korpustan
+üretildi ⇒ **229 vaka**, `shortfall {"backgame": 11}`. Set hash'leri
+`contact a3382435…`, `race 2cdc833a…`, `all 3bfbbae4…`.
+
+**Panel sonucu (10 model, gnubg 2-ply).** En iyi: `capacity_rd/large/seed0`
+(contact 0,0070 / race 0,0122). `vs_gnubg.py`'nin `DEFAULT_MODEL`'i
+(`stage_d_l2/model_v30`) **5 kat daha kötü** (0,0348) ⇒ Faz 7 ppg sayıları
+kötümser. `gnubg_distill/model_gnubg` panelin en kötüsü (0,0548) ⇒ gnubg
+politikasından damıtma transfer olmuyor. Plan sıralaması bgsage ile aynı
+(`purerace` iyi, `racing` kötü) ⇒ sınıflandırıcı taksonomiyi davranışsal
+olarak yakalıyor.
+
+**Doğrulama.** `ml/tests/test_luck_adjust.py` 27 test (409–435),
+`ml/tests/test_benchmarks.py` 12 test (436–447), hepsi yeşil. Envanter:
+243 dosya, 55'i `F` kaydına, 10'u panel satırına bağlı, alarm yok.
+Gerekçe: `ASSUMPTIONS.md` F8-01 / F8-02, `PHASES.md` §51 / §52.

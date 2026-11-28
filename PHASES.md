@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1592** | ~10 dk | ✅ 1592/1592 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **2077** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1631** | ~10 dk | ✅ 1631/1631 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **2116** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
@@ -5728,3 +5728,117 @@ Tam süit: **1588 geçti, 1 bilinen hata**
 3 atlandı; toplam 1592 belgelenen sayıyla uyumlu. Artefaktlar:
 `ml/artifacts/ppg_xlarge_100k.json`, `ppg_xlarge_100k_s1_2ply.json` / `.md`,
 `stage_100k_report.md`. Karar gerekçesi: `ASSUMPTIONS.md` F7-129.
+## 51. Faz 8 Adım A1 — şans-düzeltmeli H2H: 2,10× GA indirimi
+
+### 51.1 Ne yapıldı
+
+Faz 7'nin ppg ölçümleri 2000–4400 oyunla ±0,03–0,04 GA veriyordu; `m = 0,1115`
+eşiği için bu, eşiğin üçte biri. bgsage aynı sorunu **şans-düzeltmesi** ile
+çözüyor. `ml/luck_adjust.py` bu mekanizmayı kuruyor: her zarda o zarı
+oynadıktan sonraki `afterState`'ler üzerinde bir **referans** değerlendirici
+çalıştırılıp zardan önceki değerle farkı "şans" olarak biriktiriliyor,
+düzeltilmiş skor `score − β·(luck_me − luck_opp)` oluyor. Çift bazında
+kümeleme ve bootstrap GA birlikte raporlanıyor.
+
+`ml/vs_gnubg.py`'ye `on_roll` geri-çağrısı eklendi (8 satır) — şans muhasebesi
+oyun döngüsüne girmeden dışarıdan gözlemci olarak bağlanıyor.
+
+### 51.2 Referans gücü merdiveni
+
+100 oyun = 50 çift, xlarge tohum 1, gnubg 2-ply:
+
+| Referans | ppg | ham GA | düzeltilmiş GA | GA faktörü | ρ | s/çift |
+|---|---|---|---|---|---|---|
+| `value` (kendi değer kafası) | −0,4300 | 0,13016 | 0,06200 | **2,10×** | 0,8801 | 49,8 |
+| `policy` (kendi politika kafası) | — | — | — | **0,85×** | — | ~50 |
+| `self` (kendine karşı) | 0,0000 | — | — | dejenere | — | ~50 |
+| `search1` (1-ply arama) | — | — | — | ölçülemedi | — | 1868 |
+
+`value` referansıyla β* = 1,0447 (teorik β = 1'i doğruluyor), varyans oranı
+4,41, **GA %52,4 azaldı → 2,10×**. Ham ppg −0,4300 [−0,685; −0,175],
+düzeltilmiş −0,2721 [−0,394; −0,151].
+
+### 51.3 Sonuç — mekanizma doğru, 4× çubuğu karşılanmadı
+
+Kabul ölçütü **GA en az 4× küçülmeli**; elde edilen **2,10×**. bgsage 6–8×
+bildiriyor. Fark referans gücünden geliyor: ρ = 0,88 zaten yüksek, 4× için
+ρ ≈ 0,97 gerekir. Politika kafası referans olarak **zararlı** (0,85×), kendine
+karşı oyun **dejenere** (tam 0,0000 — doğruluk testi olarak değerli), `search1`
+pratikte koşulamıyor (37× maliyet, 1,5 saatte 0 çift).
+
+A1 yine de faydalı: bundan sonraki ppg ölçümleri **yarı GA** ile yapılabilir.
+Karar kuralı (`m = 0,1115`, üç dal) değişmedi.
+
+### 51.4 Yan bulgular
+
+- `build_markdown` içinde `"%95"` Python biçim belirteci sanılıp `ValueError`
+  atıyordu → `"%%95"`. Test 424 totolojikti, gerçek kontrole çevrildi.
+- `REFERENCE_PATHS = ("value", "policy", "search1")`, `OPPONENTS = ("gnubg", "self")`.
+
+### 51.5 Doğrulama
+
+`ml/tests/test_luck_adjust.py` — **27 test (409–435)**, hepsi yeşil.
+Artefaktlar: `ml/artifacts/luck_adjust_pilot.json` / `.md`,
+`luck_adjust_pilot_pol.json`, `luck_adjust_pilot_self.json`.
+Gerekçe: `ASSUMPTIONS.md` F8-01.
+## 52. Faz 8 Görev 2 — plan etiketli kıyaslama paneli ve model envanteri
+
+### 52.1 Ne yapıldı
+
+`ml/benchmarks.py` dört parçadan oluşuyor: **plan sınıflandırıcısı** (bgsage
+taksonomisi pip/punto kurallarıyla yeniden kuruldu), **deterministik set
+üretimi** (plan başına 40 pozisyon, tohum 20261127, `_case_key` ile sıralı ⇒
+bayt-özdeş çıktı), **yalnızca ekleme ölçüm günlüğü** (aynı `recordId` ikinci
+kez yazılamaz) ve **model envanteri** (her ONNX için sha256 + üreten `F` kaydı
++ panel satırı; panelde ölçülmüş ama diskte olmayan model **alarm**).
+
+Plan önceliği: `purerace` → `backgame` → `priming` → `attacking` → `anchoring`
+→ `racing` → `attacking`.
+
+### 52.2 Sapma — gnubg `.bm` dosyaları yok
+
+bgsage `contact.bm` / `race.bm` kullanıyor; bu dosyalar yerel kurulumda yok ve
+üç GitHub ham URL'si 404 verdi. Panel depodaki iki korpustan üretildi
+(`corpus2_records.json` 3075 + `reference_corpus_v1.json` 200) ⇒ **229 vaka**,
+`shortfall {"backgame": 11}`. Set hash'leri `contact a3382435…`,
+`race 2cdc833a…`, `all 3bfbbae4…`; ikinci üretim bayt-özdeş.
+
+### 52.3 Ölçüm — 10 model, gnubg 2-ply
+
+| Model | contact ER | contact eşleşme | race ER | race eşleşme |
+|---|---|---|---|---|
+| `capacity_rd/large/seed0` (Faz 7 tabanı) | **0,0070** | 77,2% | **0,0122** | 65,0% |
+| `capacity100k_rd_sweep/xlarge/seed1` | 0,0075 | **80,5%** | 0,0151 | 60,0% |
+| `capacity100k_rd_sweep/medium/seed1` | 0,0081 | 77,2% | 0,0140 | 62,5% |
+| `capacity30k_rd_sweep/xlarge/seed1` | 0,0085 | 75,8% | 0,0129 | 63,7% |
+| `capacity100k_rd_sweep/xlarge/seed0` | 0,0098 | 76,5% | 0,0226 | 56,2% |
+| `capacity100k_rd_sweep/large/seed1` | 0,0105 | 77,2% | 0,0162 | 58,8% |
+| `k5_dist/model_kl05` | 0,0189 | 69,8% | 0,0355 | 55,0% |
+| `stage_d_l2/model_v30` (**varsayılan**) | 0,0348 | 60,4% | 0,0388 | 57,5% |
+| `stage_d_l2/model_v1` | 0,0512 | 52,3% | 0,0453 | 52,5% |
+| `gnubg_distill/model_gnubg` | 0,0548 | 53,0% | 0,0479 | 51,2% |
+
+### 52.4 Bulgular
+
+1. **Panel ile search1 ER çelişiyor.** F7-129'da 100k xlarge search1 ER'de ve
+   ppg'de tabandan iyiydi; panelde **taban modeli en iyi**. İkisi aynı şeyi
+   ölçmüyor — panel gnubg 2-ply'ye göre hamle kaybını ölçer.
+2. **Varsayılan model en iyisi değil.** `vs_gnubg.py` içindeki `DEFAULT_MODEL`
+   (`stage_d_l2/model_v30`) panelde **5 kat daha kötü**. Bugüne kadarki ppg
+   ölçümleri en güçlü modelle değil orta seviye bir TD modeliyle yapılmış ⇒
+   Faz 7 ppg sayıları **kötümser**.
+3. **gnubg politikasından damıtma transfer olmadı.** `gnubg_distill/model_gnubg`
+   panelin en kötüsü (0,0548) ⇒ Görev 3 (gnubg korpustan SL) gerekli.
+4. **Plan sıralaması bgsage ile aynı.** En iyi modelde `backgame 0,0029` <
+   `anchoring 0,0042` < `priming 0,0049` < `purerace 0,0107` < `racing 0,0137`
+   < `attacking 0,0148`. Sınıflandırıcının taksonomiyi davranışsal olarak
+   yakaladığının bağımsız kanıtı.
+5. **`racing` zayıf halka.** `k5_dist/model_kl05`'te `racing` 0,0653 vs
+   `purerace` 0,0059 — 11 kat. Pip muhasebesi zayıf.
+
+### 52.5 Doğrulama
+
+`ml/tests/test_benchmarks.py` — **12 test (436–447)**, hepsi yeşil.
+Envanter: 243 dosya, 55'i `F` kaydına, 10'u panel satırına bağlı, **alarm yok**.
+Artefaktlar: `ml/artifacts/benchmark_sets.json`, `model_benchmarks.json` / `.md`,
+`model_inventory.json` / `.md`. Gerekçe: `ASSUMPTIONS.md` F8-02.
