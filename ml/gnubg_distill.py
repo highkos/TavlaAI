@@ -570,6 +570,8 @@ def label_policy_positions(
     dists: bool = False,
     plies: int = DEFAULT_PLIES,
     progress: Callable[[int, int, PolicyPosition | None], None] | None = None,
+    dist_plies: int | None = None,
+    dist_session=None,
 ) -> tuple[list[PolicyPosition], list[dict[str, Any]]]:
     """Pozisyonlari gnubg ``hint`` ile **politika** hedefi olarak etiketler.
 
@@ -578,6 +580,12 @@ def label_policy_positions(
 
     ``dists=True`` ise en iyi adayin 6 sinifli gnubg dagilimi da (``best_dist``)
     etiketlenir; bu, ``train_policy_head``'in KL terimi icin gereklidir (K5).
+
+    ``dist_plies`` (F8-04) dagilim etiketinin derinligini politika derinliginden
+    **ayirir**. gnubg ``eval`` en fazla 2-ply oldugu icin ``plies >= 3`` ile
+    dagilim alinamaz; ayirmazsak 3-ply korpusta ``best_dist`` tum satirlarda
+    ``nan`` olur ve KL terimi sessizce egitimden duser. ``dist_session``
+    verilirse dagilim onun uzerinden okunur (tipik: 2-ply ``GnubgSession``).
     """
     import gnubg_er  # noqa: PLC0415
     import gnubg_hint  # noqa: PLC0415
@@ -629,7 +637,8 @@ def label_policy_positions(
             best_after = case["afterStates"][int(best_index)]
             # ``HintReferee`` oturumu ``.session`` altinda tutar; dogrudan
             # ``GnubgSession`` verilmis olabilecegi icin ikisi de kabul edilir.
-            session = getattr(referee, "session", referee)
+            session = dist_session or getattr(referee, "session", referee)
+            dplies = plies if dist_plies is None else int(dist_plies)
             try:
                 tables = session.eval_afterstates(
                     [best_after["board"]], int(turn), dists=True
@@ -640,7 +649,7 @@ def label_policy_positions(
                 )
                 tables = []
             if tables:
-                key = "static" if plies == 0 else str(plies)
+                key = "static" if dplies == 0 else str(dplies)
                 best_dist = tables[0].get(key)
         item = PolicyPosition(
             vectors=vectors,
@@ -2070,6 +2079,15 @@ def build_parser() -> argparse.ArgumentParser:
     lp.add_argument("--out", type=Path, required=True, help="cikti .npz")
     lp.add_argument("--positions", type=int, default=DEFAULT_POSITIONS)
     lp.add_argument("--plies", type=int, default=DEFAULT_PLIES)
+    lp.add_argument(
+        "--dist-plies",
+        type=int,
+        default=None,
+        help=(
+            "dagilim etiketinin derinligi (varsayilan: --plies). gnubg eval en "
+            "fazla 2-ply oldugu icin --plies >= 3 ile 2 vermek gerekir (F8-04)"
+        ),
+    )
     lp.add_argument("--seed", type=int, default=7)
     lp.add_argument("--max-plies", type=int, default=DEFAULT_MAX_PLIES)
     lp.add_argument("--gnubg", type=Path, default=None)
@@ -2489,6 +2507,15 @@ def _cmd_label_policy(args: argparse.Namespace) -> int:
         return 2
 
     referee = gnubg_hint.HintReferee(exe, plies=args.plies, timeout=args.timeout)
+    dist_plies = getattr(args, "dist_plies", None)
+    dist_session = None
+    if args.dists and dist_plies is not None and int(dist_plies) != int(args.plies):
+        # F8-04: politika hedefi 3-ply ``hint``'ten, dagilim hedefi 2-ply
+        # ``eval``'den gelir. Ayri oturum sart: ``HintReferee`` oturumu
+        # ``--plies`` derinligine ayarli ve ``eval`` o derinligi veremez.
+        dist_session = gnubg_er.GnubgSession(
+            exe, plies=int(dist_plies), timeout=args.timeout
+        )
     started = time.time()
 
     def progress(i: int, total: int, item: PolicyPosition | None) -> None:
@@ -2498,11 +2525,18 @@ def _cmd_label_policy(args: argparse.Namespace) -> int:
             print("[%d/%d] %.1f s" % (i, total, time.time() - started), file=sys.stderr)
 
     labeled, skipped = label_policy_positions(
-        referee, positions, dists=args.dists, plies=args.plies, progress=progress
+        referee,
+        positions,
+        dists=args.dists,
+        plies=args.plies,
+        progress=progress,
+        dist_plies=dist_plies,
+        dist_session=dist_session,
     )
     meta = {
         "kind": "policy",
         "plies": int(args.plies),
+        "distPlies": int(args.plies if dist_plies is None else dist_plies),
         "seed": seed,
         "maxPlies": int(args.max_plies),
         "requested": int(count),

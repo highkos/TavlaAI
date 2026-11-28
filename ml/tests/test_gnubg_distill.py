@@ -1907,3 +1907,114 @@ def test_f803_cli_corpus_sl_rejects_profile_mismatch(tmp_path: Path) -> None:
         ]
     )
     assert rc == 2
+
+
+# ----------------------------------------------------------------------
+# F8-04: 3-ply politika hedefi + 2-ply dagilim hedefi (--dist-plies)
+# ----------------------------------------------------------------------
+
+
+class _FakeDistSession:
+    """``eval_afterstates`` cagrisini taklit eden sahte oturum (F8-04)."""
+
+    def __init__(self, keys=("static", "0", "1", "2")) -> None:
+        self.keys = tuple(keys)
+        self.calls = 0
+        self.boards: list[list[list[int]]] = []
+
+    def eval_afterstates(self, boards, turn, *, dists=False):
+        self.calls += 1
+        self.boards.append([list(b) for b in boards])
+        row = [0.4, 0.1, 0.01, 0.4, 0.08, 0.01]
+        return [{k: list(row) for k in self.keys} for _ in boards]
+
+
+def _start_position():
+    import tools.reference_gen as refgen
+
+    return (list(refgen.START_BOARD), 1, [3, 4], 0, 0)
+
+
+def test_f804_dist_plies_selects_requested_depth() -> None:
+    """``dist_plies=2`` iken dagilim ``"2"`` anahtarindan okunur, ``"3"``ten degil."""
+    session = _FakeDistSession(keys=("static", "0", "1", "2"))
+    labeled, skipped = gd.label_policy_positions(
+        _PolicyReferee(),
+        [_start_position()],
+        dists=True,
+        plies=3,
+        dist_plies=2,
+        dist_session=session,
+    )
+    assert skipped == []
+    assert session.calls == 1
+    assert labeled[0].best_dist == pytest.approx([0.4, 0.1, 0.01, 0.4, 0.08, 0.01])
+
+
+def test_f804_dist_plies_defaults_to_policy_plies() -> None:
+    """``dist_plies`` verilmezse eski davranis korunur: anahtar ``str(plies)``."""
+    session = _FakeDistSession(keys=("static", "0", "1", "2"))
+    labeled, _ = gd.label_policy_positions(
+        _PolicyReferee(), [_start_position()], dists=True, plies=2, dist_session=session
+    )
+    assert labeled[0].best_dist is not None
+
+
+def test_f804_dist_plies_missing_key_yields_none() -> None:
+    """Istenen derinlik tabloda yoksa dagilim ``None`` olur (sessiz yanlis anahtar yok)."""
+    session = _FakeDistSession(keys=("static", "0", "1", "2"))
+    labeled, _ = gd.label_policy_positions(
+        _PolicyReferee(),
+        [_start_position()],
+        dists=True,
+        plies=3,
+        dist_plies=3,
+        dist_session=session,
+    )
+    assert labeled[0].best_dist is None
+
+
+def test_f804_dist_session_overrides_referee_session() -> None:
+    """``dist_session`` verilirse hakemin kendi oturumu **kullanilmaz**."""
+
+    class _ExplodingSession:
+        def eval_afterstates(self, boards, turn, *, dists=False):
+            raise AssertionError("hakem oturumu kullanilmamali")
+
+    referee = _PolicyReferee()
+    referee.session = _ExplodingSession()
+    session = _FakeDistSession()
+    labeled, skipped = gd.label_policy_positions(
+        referee,
+        [_start_position()],
+        dists=True,
+        plies=3,
+        dist_plies=2,
+        dist_session=session,
+    )
+    assert skipped == []
+    assert labeled[0].best_dist is not None
+
+
+def test_f804_dist_plies_zero_uses_static_key() -> None:
+    """``dist_plies=0`` -> ``"static"`` anahtari."""
+    session = _FakeDistSession(keys=("static", "0", "1", "2"))
+    labeled, _ = gd.label_policy_positions(
+        _PolicyReferee(),
+        [_start_position()],
+        dists=True,
+        plies=3,
+        dist_plies=0,
+        dist_session=session,
+    )
+    assert labeled[0].best_dist is not None
+
+
+def test_f804_parser_label_policy_dist_plies() -> None:
+    args = gd.build_parser().parse_args(["label-policy", "--out", "x.npz"])
+    assert args.dist_plies is None
+    args = gd.build_parser().parse_args(
+        ["label-policy", "--out", "x.npz", "--plies", "3", "--dist-plies", "2"]
+    )
+    assert args.plies == 3
+    assert args.dist_plies == 2

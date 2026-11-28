@@ -7382,3 +7382,58 @@ rc 2. Damıtma paketi toplamı **241 test** yeşil.
 **Artefaktlar.** `ml/artifacts/stage_sl_report.md`,
 `ml/artifacts/model_benchmarks.json` / `.md` (6 yeni SL kaydı + 2 teşhis
 kaydı). Koşu dizini `ml/runs/corpus_sl_100k/` (gitignore'da).
+
+
+## F8-04 — 3-ply politika hedefi, 2-ply dağılım hedefi ve korpus v2 (Görev 3 devamı)
+
+**Belirti.** F8-03 negatif çıktı: serpiştirilmiş SL contact ER 0,009378 vs temel
+0,0070. Teşhis iki kaldıraç bıraktı — (a) korpus çeşitliliği, (b) etiket
+derinliği. 100k korpusun **%98,2'si temas**, yalnız 1.831 yarış pozisyonu;
+`random_positions(max_plies=40)` neredeyse hiç yarış üretmiyor. Ayrıca tüm
+etiketler 2-ply `eval`'den geliyor, yani değer hedefi gnubg'nin 2-ply
+gürültüsünü taşıyor.
+
+**Kök neden 1 — yarış kıtlığı.** `max_plies` ölçüldü (2.000 pozisyon, tohum
+2000): 40 → %2,4, 60 → %7,0, 80 → %9,9, **100 → %11,8**, 120 → %11,4. Yani
+`max_plies=100` yarış oranını 6,5× artırıyor ve 100k korpusta ~11.800 yarış
+pozisyonu veriyor. 120'de düşüş var (oyunlar bitiyor), bu yüzden 100 seçildi.
+
+**Kök neden 2 — 3-ply etiket dağılımı sessizce düşürüyordu.** `label-policy
+--plies 3` çalışıyor (`HintReferee` 3-ply `hint` kullanır) ama `best_dist`
+**tüm satırlarda `None`** oluyordu: dağılım `session.eval_afterstates(...)` ile
+alınıyor ve gnubg `eval` en fazla 2-ply. Ölçüldü: `plies=3` ile 6/6 pozisyonda
+`best_dist=None`. Sonuç: `build_policy_dataset` tüm dağılım satırlarını `nan`
+yazar, `dist_arr` tamamen sonlu olmadığı için `None`'a düşer ve
+`--dist-weight 0,5` KL terimi **sessizce eğitimden çıkar**. Bu, F7-126
+maskesiyle çelişen sessiz bir bozulmadır.
+
+**Düzeltme.** `label_policy_positions` iki yeni parametre aldı: `dist_plies`
+(varsayılan `plies`) ve `dist_session` (varsayılan hakemin oturumu). CLI'ye
+`--dist-plies` eklendi; `--plies`'ten farklıysa `_cmd_label_policy` ayrı bir
+`GnubgSession(plies=dist_plies)` açar. Böylece **politika hedefi 3-ply
+`hint`'ten, dağılım hedefi 2-ply `eval`'den** gelir ve KL terimi korunur.
+`meta["distPlies"]` kayda geçer. Doğrulandı: `--plies 3 --dist-plies 2` ile
+6/6 satır sonlu dağılım taşıyor.
+
+**Korpus v2 tasarımı (üç koşu, tek sürücü).** `ml/runs/corpus_sl_v2/run_label.ps1`:
+
+| etiket | pozisyon | politika | dağılım | `max_plies` | tohum | amaç |
+|---|---|---|---|---|---|---|
+| `mp100_2ply` | 100.020 | 2-ply | 2-ply | 100 | 2000 | yarış kıtlığını çöz |
+| `d12k_3ply` | 12.000 | **3-ply** | 2-ply | 100 | 3000 | etiket derinliği |
+| `d12k_2ply` | 12.000 | 2-ply | 2-ply | 100 | 3000 | derinlik **kontrolü** |
+
+`d12k_3ply` ve `d12k_2ply` **aynı pozisyonları** kullanır (aynı tohum, aynı
+`max_plies`); tek fark etiket derinliğidir. Böylece derinlik etkisi korpus
+farkıyla karışmaz. Ölçülen maliyet: 2-ply 0,82 s/poz, 3-ply 5,15 s/poz
+(tek süreç); 6 fiziksel çekirdekte 12 paralel süreç ~2,3× hızlanma veriyor
+(F8-03'ün 100k koşusu: 50.016 pozisyon / 4 sa 57 dk).
+
+**Karar kuralı (koşudan önce sabit).** Her korpus için 3 tohum, `--mix`
+müfredatı, F8-03 tarifi (warm-start `capacity_rd/large/seed0`, `distWeight 0,5`,
+`policyTemperature 0,1`, `weightDecay 1e-4`, 2 epoch, α [1e-3, 3e-4] temas /
+[2e-3, 5e-4] yarış). Ölçüm A2 paneli (229 vaka, gnubg 2-ply). Kabul: ortalama
+contact ER **< 0,0070** (temel) **ve** yarış ER **< 0,0122** (temel). Aksi
+hâlde Adım B kapalı kalır ve `DEFAULT_MODEL` değişmez.
+
+**Durum.** Etiketleme 2026-11-28'de başladı; sonuçlar bu başlığa eklenecek.
