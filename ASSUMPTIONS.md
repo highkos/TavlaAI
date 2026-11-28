@@ -7437,3 +7437,11 @@ contact ER **< 0,0070** (temel) **ve** yarış ER **< 0,0122** (temel). Aksi
 hâlde Adım B kapalı kalır ve `DEFAULT_MODEL` değişmez.
 
 **Durum.** Etiketleme 2026-11-28'de başladı; sonuçlar bu başlığa eklenecek.
+
+**Karar betiği (izlenen konum).** Kuralı uygulayan betik `ml/stage_sl_v2.py`
+(`ml/stage_100k.py` ile aynı desen: `ml/runs/` gitignore'da olduğu için
+sürücüler orada, karar betiği burada). Girdi
+`ml/artifacts/model_benchmarks.json` (append-only; her model için **son** kayıt
+geçerli), çıktı `ml/artifacts/stage_sl_v2_report.md`. Ölçüm yoksa betik
+rapor **yazmaz** ve 1 döner (yanıltıcı artefakt önlenir); temel model
+kaydı yoksa 2 döner. 8 test: `ml/tests/test_stage_sl_v2.py`.

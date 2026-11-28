@@ -755,8 +755,8 @@ kısıtsız pratik değildir (> 600 s/oyun); kısıtlı depth 2 bile oyun başı
 | C# motor | `Backgammon.Tests` (Release) | **297** | ~29 dk 56 s | ✅ 297/297 |
 | C# çıkarım | `Backgammon.Inference.Tests` (Release) | **100** | ~18 s | ✅ 100/100 (Test 61 CUDA yoksa `Inconclusive`) |
 | C# UI | `Backgammon.UI.Tests` (Release) | **88** | ~5 s | ✅ 88/88 |
-| Python | `ml/tests` | **1665** | ~10 dk | ✅ 1665/1665 (3 yavaş/koşullu test atlanır) |
-| **Toplam** | | **2150** | | **✅ 0 başarısız** |
+| Python | `ml/tests` | **1673** | ~10 dk | ✅ 1673/1673 (3 yavaş/koşullu test atlanır) |
+| **Toplam** | | **2158** | | **✅ 0 başarısız** |
 
 **Unity testleri (ayrı, Unity gerektirir):**
 
